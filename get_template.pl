@@ -38,7 +38,7 @@ $outdir||="./";
 $outdir=AbsolutePath("dir",$outdir);
 
 my $Max_Group_Len = $Max_Dis;
-my $Min_Dis_Detect = 1;
+my $Min_Dis_Detect = 0;
 
 my %target_start;
 my %target_end;
@@ -303,14 +303,18 @@ Program:
 Version: $version
 Contact:zeng huaping<huaping.zeng\@genetalks.com> 
 
-	v2: add func: UD devide output template file 
-	v3: 1)chr ID not to add "chr", format input file:
+	###input file format:
+	 format 1:
 		chr7       107350577       107350577       A       G       ID=SLC26A4_2168A_G;GENE=SLC26A4;STRAND=+;CDS=c.2168A>G;AA=p.H723R;NM=NM_000441.1
 		chr7       107323898       107323898       A       G       ID=SLC26A4_919-2A_G;GENE=SLC26A4;STRAND=+;CDS=c.919-2A>G;AA=;NM=NM_000441.1
 		chr13      20763691        20763691        -       C       ID=GJB2_35dupG;GENE=GJB2;STRAND=-;CDS=c.35dupG;AA=p.V13fs;NM=NM_004004.5
 		chr13      20763421        20763422        AT      -       ID=GJB2_299delAT;GENE=GJB2;STRAND=-;CDS=c.299_300del;AA=p.H100fs;NM=NM_004004.5
-		2)add func: ref base check
-	v4: template id change to target ID
+	 format 2: like first 5 columns of vcf
+		chr1    10247   rs796996180     T       C
+		chr1    10248   rs148908337     A       T
+		chr1    10249   rs774211241     AAC     A
+		chr1    10250   rs199706086     A       C
+
 
 Usage:
   Options:
@@ -319,7 +323,7 @@ Usage:
   -k  <str>     Key of output file, forced
 
   --dieC		die when ref base check failed
-  --vcf         input file is vcf
+  --vcf         input file is vcf, only requir first 5 columns
   --UD_devide   output U and D template file separately
   -md <int>    	max distance, [$Max_Dis]
   -et <int>     extend length, [$Extend]

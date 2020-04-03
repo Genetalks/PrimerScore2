@@ -18,7 +18,7 @@ my $min_len = 20;
 my $max_len = 35;
 #my $min_dis = 3;
 #my $max_dis = 40;
-my $range_dis = "5,60";
+my $range_dis = "5,60,1";
 my $min_tm = 65;
 my $max_tm = 75;
 my $min_gc = 0;
@@ -46,7 +46,6 @@ GetOptions(
 				"minl:s"=>\$min_len,
 				"maxl:s"=>\$max_len,
 				"scalel:s"=>\$scale_len,
-				"scaled:s"=>\$scale_dis,
 				"rdis:s"=>\$range_dis,
 #				"mind:s"=>\$min_dis,
 #				"maxd:s"=>\$max_dis,
@@ -88,13 +87,13 @@ if ($step == 1){
 	my @rdis = split /,/, $range_dis;
 	##check range_dis
 	my $nrdis = scalar @rdis;
-	if($nrdis%2!=0){
-		print "Wrong: -rdis num of dis must be even number!\n";
+	if($nrdis%3!=0){
+		print "Wrong: -rdis number of dis must be times of 3!\n";
 		die;
 	}
-	for(my $i=1; $i<@rdis; $i++){
-		if($rdis[$i]-$rdis[$i-1] < 0){
-			print "Wrong: -rdis must be ascending ordered, eg:3,40,100,150\n";
+	for(my $i=0; $i<@rdis; $i+=3){
+		if($rdis[$i+1]-$rdis[$i] < 0){
+			print "Wrong: -rdis region must be ascending ordered, eg:3,40,1,100,150,5\n";
 			die;
 		}
 	}
@@ -121,7 +120,7 @@ if ($step == 1){
 		my $plen = length($seq);
 		for(my $l=$min_len; $l<=$max_len; $l+=$scale_len){
 			my $rs=1;
-			for(my $r=0; $r<@rdis; $r+=2){
+			for(my $r=0; $r<@rdis; $r+=3){
 				my ($min_dis, $max_dis) = ($rdis[$r], $rdis[$r+1]);
 				my $min_p = $min_dis-$dstart; ## dstart=1
 				my $max_p = $max_dis-$dend<$plen-$l? $max_dis-$dend: $plen-$l;
@@ -129,13 +128,10 @@ if ($step == 1){
 					print "Wrong: max position < min position! maybe dend (XE:i:$dend) is too large, or -rdis range $range_dis is too narrow!\n";
 					die;
 				}
-				my $sdis = $scale_dis;
-				if($r==2){
-					my $scale_dis_new = int(($max_dis-$min_dis)/15);
-					$sdis = $scale_dis_new<$scale_dis? $scale_dis: $scale_dis_new;
-				}
+				my $sdis = $rdis[$r+2];
 				for(my $p=$min_p; $p<=$max_p; $p+=$sdis){
-					my ($id_new, $primer)=&get_primer($id, $p, $l, $seq);
+					my $primer=&get_primer($id, $p, $l, $seq);
+					my $id_new = $id."-".$l."-".$p;
 					if(defined $FiterRepeat){
 						my @match = ($primer=~/[atcg]/g);
 						next if(scalar @match > length($primer)*0.4);
@@ -158,6 +154,7 @@ if ($step == 1){
 	}
 	close(I);
 }
+
 # evalue
 if($step ==2){
 	my $odir = "$outdir/split";
@@ -185,11 +182,61 @@ if($step ==2){
 		my @dirs = glob("$odir/dir_*");
 		foreach my $dir (@dirs){
 			Run("cat $dir/*.evaluation.out > $dir/evaluation.out", 1);
+			Run("cat $dir/*.filtered_by_Tm_GC.list > $dir/filtered_by_Tm_GC.list", 1);
 		}
 		Run("cat $odir/*/evaluation.out >$outdir/$fkey.primer.evaluation.out", 1);
+		Run("cat $odir/*/filtered_by_Tm_GC.list >$outdir/$fkey.primer.filtered_by_Tm_GC.list", 1);
 	}else{
 		Run("cat $odir/*evaluation.out > $outdir/$fkey.primer.evaluation.out", 1);
+		Run("cat $odir/*filtered_by_Tm_GC.list > $outdir/$fkey.primer.filtered_by_Tm_GC.list", 1);
 	}
+
+	##get bwa fail list
+	my %suc;
+	my %filter;
+	open(E, "$outdir/$fkey.primer.evaluation.out") or die $!;
+	$/="\n";
+	while(<E>){
+		chomp;
+		my ($id)=split;
+		$suc{$id}=1;
+	}
+	close(E);
+	open(F, "$outdir/$fkey.primer.filtered_by_Tm_GC.list") or die $!;
+	while(<F>){
+		chomp;
+		my ($id)=split;
+		$filter{$id}=1;
+	}
+	close(F);
+	my %tid;
+	open(FB, ">$outdir/$fkey.primer.filtered_by_timeout.list") or die $!;
+	foreach my $id(keys %seq){
+		my ($tid, $len, $dis)=$id=~/(\S+)-(\d+)-(\d+)$/;
+		$tid{$tid}{"Total"}++;
+		if(exists $suc{$id}){
+			$tid{$tid}{"Suc"}++;
+		}elsif(!exists $filter{$id}){
+			print FB join("\t", $id, $seq{$id}),"\n";
+		}
+	}
+	close(FB);
+	open(FO, ">$outdir/$fkey.primer_design.summary") or die $!;
+	print FO "TemplateID\tTotalCandidate\tEvaluatedSuccess\tPrimerDesignedSuccessOrNot\n";
+	foreach my $tid(keys %tid){
+		if(!exists $tid{$tid}{"Suc"}){
+			$tid{$tid}{"Suc"} = 0;
+		}
+		my $type = "Success";
+		if($tid{$tid}{"Suc"}<=2){
+			$type = "Failure";
+		}elsif($tid{$tid}{"Suc"}<10){
+			$type = "Warning";
+		}
+		print FO join("\t", $tid, $tid{$tid}{"Total"}, $tid{$tid}{"Suc"}, $type), "\n";
+	}
+	close(FO);
+
 	$step++;
 }
 
@@ -451,8 +498,7 @@ sub get_primer{
 		$id.="rev";
 #		$pos = $total_len-$pos-$len;
 	}
-	my $id_new = $id."-".$len."-".$pos;
-	return ($id_new, $primer);
+	return ($primer);
 }
 
 sub Run{
@@ -523,18 +569,21 @@ Usage:
   --recov           recov primer seq
   --NoSpecificity   not evalue specificity
   --FilterRepeat	filter primers with repeat region(lowercase in fref) more than 40%
-  -stm  <int>		min tm to be High_tm in specifity, [$stm]
-  -maxn	<int> 		max primers num output in score file,[$max_num]
   -minl	<int> 		min primer len, [$min_len]
   -maxl	<int>  		max primer len, [$max_len]
-  -scalel <int>     scale len, [$scale_len]
-  -scaled <int>     scale dis, [$scale_dis]
-  -rdis <str>		distance ranges, separated by ",", must be ascending order,[$range_dis]
   -mintm <int>		min tm, [$min_tm]
   -maxtm <int>		max tm, [$max_tm]
-  -mingc <float>		min gc, [$min_gc]
-  -maxgc <float>		max gc, [$max_gc]
+  -mingc <float>	min gc, [$min_gc]
+  -maxgc <float>	max gc, [$max_gc]
+  -scalel <int>     scale len, [$scale_len]
+  -rdis <str>		region ranges(start,end,scale), start <= end, count from right to left and count from 0, separated by ",", [$range_dis]
+  		            Example: 
+			            sanger sequence primer: 100,150,2,400,500,5
+			            ARMS PCR primer: 1,1,1,80,180,2
+
   -lnum  <int>      line num in one separated file, [$line_num]
+  -stm  <int>		min tm to be High_tm in specifity, [$stm]
+  -maxn	<int> 		max primers num output in score file,[$max_num]
   -para  <int>		parallel num, [$para_num]
   -step	<int>		step, [$step]
   	1: get primer seq
