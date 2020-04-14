@@ -21,6 +21,7 @@ my $range_pos="10,10,15,1,40"; ## pos score, pos range(best_min, best_max, min, 
 my $dtype = "Single";
 my $onum = 3;
 my $face_to_face;
+my $back_to_back;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
@@ -28,6 +29,7 @@ GetOptions(
 				"it:s"=>\$ftm,
 				"k:s"=>\$fkey,
 				"face-to-face:s"=>\$face_to_face,
+				"back-to-back:s"=>\$back_to_back,
 				"on:s"=>\$onum,
 				"rd:s"=>\$range_dis,
 				"rp:s"=>\$range_pos,
@@ -44,11 +46,13 @@ $outdir=AbsolutePath("dir",$outdir);
 
 my ($sdis, @range_dis) = split /,/, $range_dis;
 my ($spos, @range_pos) = $dtype eq "Single"? split /,/, $range_pos: ();
+my ($sdtm, @range_dtm) = (10,0,2,0,8);
 
 my %score;
 my %pos;
 my %plen;
 my %info;
+my %tm;
 my (@explain, @title_info);
 open(I, $fIn) or die $!;
 while(<I>){
@@ -63,9 +67,10 @@ while(<I>){
 	}
 
 	my @unit = split /\t/, $_;
-	my ($id, $tid, $len, $pos, $score)=@unit[0,1,2,3,5];
+	my ($id, $tid, $len, $pos, $tm, $score)=@unit[0,1,2,3,7,5];
 	$score{$id}=$score;
 	$plen{$id}=$len;
+	$tm{$id}=$tm;
 	$pos{$tid}{$id}=$pos;
 	@{$info{$id}}=@unit[1..$#unit];
 }
@@ -125,25 +130,24 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 		($dstart, $dend)=@{$XP{$tid}}[4..5];
 	}
 	
-	if(defined $face_to_face){
-		if($dtype eq "Single"){ ## target
-			my $tid2 = $tid;
-			if($tid=~/\-U$/){$tid2=~s/\-U/\-D/;}elsif($tid=~/\-D$/){$tid2=~s/\-D/\-U/;}
-			if(!exists $pos{$tid2}){
-				print "Wrong: No corresponding temlate ID $tid2 for face_to_face primer, please Check!\n";
-				next;
-			}
-
-			@id2_sort = sort{$pos{$tid2}{$a} <=> $pos{$tid2}{$b}} keys %{$pos{$tid2}};
-			@pos2_sort = sort{$a<=>$b} values %{$pos{$tid2}};
-		}else{ ## region
-			if(!defined $frev){
-				print STDERR "Wrong: no rev primer file!\n";
-				die;
-			}
-			@id2_sort = sort{$pos_rev{$tid}{$a} <=> $pos_rev{$tid}{$b}} keys %{$pos_rev{$tid}};
-			@pos2_sort = sort{$a<=>$b} values %{$pos_rev{$tid}};
+	if(defined $face_to_face && $dtype eq "Single"){ ## target
+		my $tid2 = $tid;
+		if($tid=~/\-U$/){$tid2=~s/\-U/\-D/;}elsif($tid=~/\-D$/){$tid2=~s/\-D/\-U/;}
+		if(!exists $pos{$tid2}){
+			print "Wrong: No corresponding temlate ID $tid2 for face_to_face primer, please Check!\n";
+			next;
 		}
+
+		@id2_sort = sort{$pos{$tid2}{$a} <=> $pos{$tid2}{$b}} keys %{$pos{$tid2}};
+		@pos2_sort = sort{$a<=>$b} values %{$pos{$tid2}};
+	}
+	if((defined $face_to_face && $dtype eq "Region") || defined $back_to_back){
+		if(!defined $frev){
+			print STDERR "Wrong: no rev primer file!\n";
+			die;
+		}
+		@id2_sort = sort{$pos_rev{$tid}{$a} <=> $pos_rev{$tid}{$b}} keys %{$pos_rev{$tid}};
+		@pos2_sort = sort{$a<=>$b} values %{$pos_rev{$tid}};
 	}
 	
 	my %score_pair;
@@ -179,9 +183,11 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 			my $dis = (defined $face_to_face && $dtype eq "Single")? $pos2_sort[$j]+$pos+($dend-$dstart+1): $pos2_sort[$j]-$pos; ## face-to-face Single primer, -> (p1) |dend| (p2) <- 
 #			my $dis = (defined $face_to_face && $dtype eq "Single")? $pos2_sort[$j]+$pos: $pos2_sort[$j]-$pos; ## face-to-face Single primer, -> (p1) |dend| (p2) <- 
 			my $score_dis = &score_single($dis, $sdis, @range_dis);
-			my $score = $score1+$score_pos+$score{$id2}+$score_dis;
+			my $dtm = abs($tm{$id1}-$tm{$id2});
+			my $score_tm = &score_single($dtm, $sdtm, @range_dtm);
+			my $score = $score1+$score_pos+$score_tm+$score{$id2}+$score_dis;
 			$score_pair{$id1.",".$id2}=$score;
-			@{$score_pair_info{$id1.",".$id2}}=($score_pos, $score_dis);
+			@{$score_pair_info{$id1.",".$id2}}=($score_pos, $score_dis, $score_tm);
 			$pos_pair{$id1.",".$id2}=$pos;
 		}
 	}
@@ -360,6 +366,8 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 	  face-to-face: --->| P1         dis_range(P1+P2):180,220,150,250
 	   (Single)              x  P2 |<--- 
 
+      back-to-back:   <---| P2           dis_range(P2-P1):20,30,10,50
+                      P1 --->| x
 Usage:
   Options:
   -i   <file>   Input primer score file, forced
@@ -370,6 +378,7 @@ Usage:
   -rp  <str>	position range(distance to the detected site) when -dt is Single, ["10,10,15,1,40"]
   
   --face-to-face    design face-to-face primer
+  --back-to-back    design back-to-back primer
   --dt    <str>	    primer design type, "Single" or "Region", ["Single"]
   	 -ds  <int>		distance when -dt Region, [500]
 	 -rf  <float>	distance float ratio when -dt Region, [0.2]
