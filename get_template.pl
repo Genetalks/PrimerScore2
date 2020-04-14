@@ -25,7 +25,6 @@ GetOptions(
 				"r:s"=>\$fref,
 				"k:s"=>\$fkey,
 				"dieCk:s"=>\$die_check,
-				"vcf:s"=>\$vcf,
 				"UD_devide:s"=>\$UD_devide,
 				"md:s"=>\$Max_Dis,
 				"et:s"=>\$Extend,
@@ -43,13 +42,24 @@ my $Min_Dis_Detect = 0;
 my %target_start;
 my %target_end;
 my $check_success=1;
+my $ftype;
+{
+	my $head = `head -1 $ftarget`;
+	chomp $head;
+	my @unit = split /\s+/, $head;
+	if($unit[5]=~/ID=/){
+		$ftype = "Target";
+	}else{
+		$ftype ="VCF";
+	}
+}
 open(T, $ftarget) or die $!;
 while (<T>){
 	chomp;
 	next if(/^$/);
 	my ($chr, $s, $e, $ref, $alt, $info);
 	my ($id, $gene, $gstrand, $cpos);
-	if(defined $vcf){
+	if($ftype eq "VCF"){
 		#13      19685715        rs564281463     G       GA      100     PASS    AC=2263;AF=0.451877;AN=5008;
 		($chr, $s, $id, $ref, $alt)=split;
 		$e = $s+length($ref)-1;
@@ -323,7 +333,6 @@ Usage:
   -k  <str>     Key of output file, forced
 
   --dieC		die when ref base check failed
-  --vcf         input file is vcf, only requir first 5 columns
   --UD_devide   output U and D template file separately
   -md <int>    	max distance, [$Max_Dis]
   -et <int>     extend length, [$Extend]

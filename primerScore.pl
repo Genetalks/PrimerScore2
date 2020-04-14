@@ -13,7 +13,6 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 my ($ftarget, $fref,$fkey,$outdir);
-my $max_num = 1000;
 my $min_len = 20;
 my $max_len = 35;
 my $range_dis = "5,60,1";
@@ -36,12 +35,14 @@ my $score_pos_range="10,10,15,1,40"; ## pos score, pos range(best_min, best_max,
 my $dtype = "Single";
 my $onum = 3;
 my $face_to_face;
+my $back_to_back;
 my $dimer_check;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
 				"ir:s"=>\$fref,
 				"k:s"=>\$fkey,
+				"recov:s"=>\$recov,
 				"dimer_check:s"=>\$dimer_check,
 				## primer design
 				"mintm:s"=>\$min_tm,
@@ -57,6 +58,7 @@ GetOptions(
 
 				## double select
 				"face-to-face:s"=>\$face_to_face,
+				"back-to-back:s"=>\$back_to_back,
 				"rd:s"=>\$score_dis_range,
 				"rp:s"=>\$score_pos_range,
 				"dt:s"=>\$dtype,
@@ -93,12 +95,22 @@ if($type eq "SNP"){
 }
 
 ### primer design
-&Run("perl $Bin/primer_design.pl -i $ftemplate -r $fref -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -rdis $range_dis -lnum $line_num -stm $stm -maxn $max_num -para $para_num -k $fkey -od $outdir/design > $outdir/design.log 2>&1", $sh);
+&Run("perl $Bin/primer_design.pl -i $ftemplate -r $fref -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -rdis $range_dis -lnum $line_num -stm $stm -para $para_num -k $fkey -od $outdir/design > $outdir/design.log 2>&1", $sh);
+if(defined $recov){
+	&Run("perl $Bin/primer_design.pl -i $ftemplate -r $fref --recov -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -rdis $range_dis -lnum $line_num -stm $stm -para $para_num -k $fkey\_rev -od $outdir/design_rev > $outdir/design_rev.log 2>&1", $sh);
+}
+
 
 ### select primer pair
-my $cmd = "perl $Bin/double_primer_select.pl -i $outdir/design/$fkey.primer.score -it $outdir/$fkey.template.fa -k $fkey -rd $score_dis_range -rp $score_pos_range  -od $outdir --dt $dtype";
+my $cmd = "perl $Bin/double_primer_select.pl -i $outdir/design/$fkey.primer.score -it $ftemplate -k $fkey -rd $score_dis_range -rp $score_pos_range  -od $outdir --dt $dtype";
+if(defined $recov){
+	$cmd .= " -ir $outdir/design_rev/$fkey\_rev.primer.score";
+}
 if(defined $face_to_face){
 	$cmd .= " --face-to-face";
+}
+if(defined $back_to_back){
+	$cmd .= " --back-to-back";
 }
 if($dtype eq "Region"){
 	$cmd .= " -ds $dis_aver -rf $rfloat";
@@ -173,7 +185,7 @@ Program:
 Version: $version
 Contact:zeng huaping<huaping.zeng\@genetalks.com> 
 
-    #### PrimerScore pipeline
+    ############## PrimerScore pipeline  ################
 
     ###input file(target spot file) format:
      format 1(note: "ID=xxx;" must be given):
@@ -207,6 +219,7 @@ Usage:
   -it  <file>   Input target file(target spot file or template fasta file), forced
   -ir  <file>   Input ref file, forced
   -k   <str>    Key of output file, forced
+  --recov          recov to creat reverse primer of template when back-to-back and face-to-face(Region), optional
   --dimer_check    dimer check among final designed primers, optional
 
   ### design parameters
@@ -216,19 +229,19 @@ Usage:
   -maxl    <int>      max primer len, [$max_len]
   -mingc   <float>    min gc, [$min_gc]
   -maxgc   <float>    max gc, [$max_gc]
-  -scalel  <int>      scale len, [$scale_len]
-  -rdis    <str>      candidate primer regions(start,end,scale) on template sequence, start <= end, count from right to left and count from 0, separated by ",", [$range_dis]
+  -scalel  <int>      scale len(step size) [$scale_len]
+  -rdis    <str>      template regions and scale(step size) to generate candidate primer(start,end,scale), start <= end, count from right to left and count from 0, separated by ",", [$range_dis]
                       Example:
                            sanger sequence primer: 100,150,2,400,500,5
                            ARMS PCR primer: 1,1,1,80,180,2
   -lnum    <int>      line num in one separated file, [$line_num]
   -stm     <int>      min tm to be High_tm in specifity, [$stm]
-  -maxn    <int>      max primers num output in score file,[$max_num]
 
   ### select parameters
   -rd     <str>     distance range of pair primers, (dis_score, best_min, best_max, min, max) separted by ",", [$score_dis_range]
   -rp     <str>     position range(distance to the detected site) when -dt is Single, [$score_pos_range]
   --face-to-face    design face-to-face primer
+  --back-to-back    design back-to-back primer
   --dt    <str>     primer design type, "Single" or "Region", ["Single"]
      -ds  <int>     distance when -dt Region, [500]
      -rf  <float>   distance float ratio when -dt Region, [0.2]

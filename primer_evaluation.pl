@@ -31,7 +31,7 @@ my $eff_times = 10;
 my $min_eff = 0.1;
 my $nohead;
 my $face_to_face;
-my $thread = 4;
+my $thread = 3;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$fprimer,
@@ -96,7 +96,7 @@ while (<P>){
 		chomp $Tm;
 		$Tm = sprintf "%0.2f", $Tm;
 		my @GC_info = &GC_info_stat($primer_seq);
-		if($Tm<$min_tm || $Tm>$max_tm || $GC_info[0]<$min_gc || $GC_info[0]>$max_gc){
+		if($Tm<$min_tm || $Tm>$max_tm){
 			print F join("\t", $id, $primer_seq, $Tm, $GC_info[0]),"\n";
 			next;
 		}
@@ -656,7 +656,7 @@ Usage:
   Options:
   -p  <file>   Input primer list file, forced
   -d  <file>   Input database file, [/data/bioit/biodata/duyp/bin/hg19/hg19.fasta]
-  -n  <int>    primer num of one target fragment, forced
+  -n  <int>    combined primer num, single primer: 1, primer pair: 2, forced
   -k  <str>	Key of output file, forced
   
   --NoSpecificity   not evalue specificity

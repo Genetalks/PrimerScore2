@@ -13,7 +13,6 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 my ($NoSpecificity, $FiterRepeat);
-my $max_num = 1000;
 my $min_len = 20;
 my $max_len = 35;
 #my $min_dis = 3;
@@ -50,7 +49,6 @@ GetOptions(
 #				"mind:s"=>\$min_dis,
 #				"maxd:s"=>\$max_dis,
 				"stm:s"=>\$stm,
-				"maxn:s"=>\$max_num,
 				"lnum:s"=>\$line_num,
 				"para:s"=>\$para_num,
 				"step:s"=>\$step,
@@ -167,9 +165,9 @@ if($step ==2){
 		my $fname = basename($f);
 		my $dir_new = dirname($f);
 		if(defined $NoSpecificity){
-			print SH "perl $Bin/primer_evaluation.pl --nohead --NoSpecificity -p $f -d $fref -n 1 -stm $stm -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -k $fname -od $dir_new >$dir_new/$fname.log 2>&1\n";
+			print SH "perl $Bin/primer_evaluation.pl --nohead --NoSpecificity -p $f -d $fref -n 1 -thread $line_num -stm $stm -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -k $fname -od $dir_new >$dir_new/$fname.log 2>&1\n";
 		}else{
-			print SH "perl $Bin/primer_evaluation.pl --nohead -p $f -d $fref -n 1 -stm $stm -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -k $fname -od $dir_new >$dir_new/$fname.log 2>&1\n";
+			print SH "perl $Bin/primer_evaluation.pl --nohead -p $f -d $fref -n 1 -thread $line_num -stm $stm -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -k $fname -od $dir_new >$dir_new/$fname.log 2>&1\n";
 		}
 	}
 	close (SH);
@@ -245,11 +243,11 @@ my %score;
 # score and output
 if($step==3){
 	open(S,">$outdir/$fkey.primer.score") or die $!;
-	print S "##Score_info: sendA, spoly, slen, stm, sgc, sdgc, smdgc, snalign\n";
+	print S "##Score_info: sendA, spoly, slen, stm, sgc, sdgc, smdgc, shairpin, snalign\n";
 	print S "##High_Info(n=1): TM        : Flag/DatabaseID/Pos/Cigar/MD/End_match_num/Efficiency\n";
 	print S "##High_Info(n>1): Efficiency: Flag/DatabaseID/Pos/Cigar/MD/End_match_num/TM\n";
 	open(O,">$outdir/$fkey.single.final.primer") or die $!;
-	print O "##Score_info: sendA, spoly, slen, stm, sgc, sdgc, smdgc, snalign\n";
+	print O "##Score_info: sendA, spoly, slen, stm, sgc, sdgc, smdgc, shairpin, snalign\n";
 	print O "##High_Info(n=1): TM        : Flag/DatabaseID/Pos/Cigar/MD/End_match_num/Efficiency\n";
 	print O "##High_Info(n>1): Efficiency: Flag/DatabaseID/Pos/Cigar/MD/End_match_num/TM\n";
 	open (I, "$outdir/$fkey.primer.evaluation.out") or die $!;
@@ -287,9 +285,9 @@ if($step==3){
 				}
 				$n++;
 			}
-			if($n>$max_num){
-				last;
-			}
+#			if($n>$max_num){
+#				last;
+#			}
 		}
 	}
 	close(O);
@@ -583,7 +581,6 @@ Usage:
 
   -lnum  <int>      line num in one separated file, [$line_num]
   -stm  <int>		min tm to be High_tm in specifity, [$stm]
-  -maxn	<int> 		max primers num output in score file,[$max_num]
   -para  <int>		parallel num, [$para_num]
   -step	<int>		step, [$step]
   	1: get primer seq
