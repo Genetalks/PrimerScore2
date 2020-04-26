@@ -37,6 +37,7 @@ my $onum = 3;
 my $face_to_face;
 my $back_to_back;
 my $dimer_check;
+my $max_dis_SNPcluster = 20;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
@@ -53,6 +54,7 @@ GetOptions(
 				"maxl:s"=>\$max_len,
 				"scalel:s"=>\$scale_len,
 				"rdis:s"=>\$range_dis,
+				"mdc:s"=>\$max_dis_SNPcluster,
 				"stm:s"=>\$stm,
 				"lnum:s"=>\$line_num,
 
@@ -90,7 +92,10 @@ if($head=~/^>/){
 	$type = "SNP";
 }
 if($type eq "SNP"){
-	&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -od $outdir/ > $outdir/$fkey.get_template.log 2>&1", $sh);
+	my $extend_len;
+	my @rdiss = split /,/, $range_dis;
+	$extend_len = $rdiss[-2]+$max_len+10;
+	&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $max_dis_SNPcluster -od $outdir/ > $outdir/$fkey.get_template.log 2>&1", $sh);
 	$ftemplate = "$outdir/$fkey.template.fa";
 }
 
@@ -234,6 +239,7 @@ Usage:
                       Example:
                            sanger sequence primer: 100,150,2,400,500,5
                            ARMS PCR primer: 1,1,1,80,180,2
+  -mdc     <int>      max distance permissible in one target spots cluster between two target spots, [$max_dis_SNPcluster]
   -lnum    <int>      line num in one separated file, [$line_num]
   -stm     <int>      min tm to be High_tm in specifity, [$stm]
 

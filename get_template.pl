@@ -334,8 +334,8 @@ Usage:
 
   --dieC		die when ref base check failed
   --UD_devide   output U and D template file separately
-  -md <int>    	max distance, [$Max_Dis]
-  -et <int>     extend length, [$Extend]
+  -md <int>    	max distance permissible in one target spots cluster between two adjacent target spots , [$Max_Dis]
+  -et <int>     extend length of UD flank of one target spot or target spots cluster , [$Extend]
   -od <dir>		Dir of output file, default ./
   -h		 	Help
 
