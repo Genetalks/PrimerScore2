@@ -5,6 +5,9 @@ use Getopt::Long;
 use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
+require "$Bin/path.pm";
+require "$Bin/self_lib.pm";
+
 my $BEGIN_TIME=time();
 my $version="1.0.0";
 #######################################################################################
@@ -15,14 +18,12 @@ my $version="1.0.0";
 my ($NoSpecificity, $FiterRepeat);
 my $min_len = 20;
 my $max_len = 35;
-#my $min_dis = 3;
-#my $max_dis = 40;
-my $range_dis = "5,60,1";
+my $range_dis;
 my $min_tm = 65;
 my $max_tm = 75;
 my $min_gc = 0;
 my $max_gc = 0.8;
-my ($fIn,$fref,$fkey,$outdir);
+my ($fIn,$fkey,$outdir);
 my $step = 1;
 my $recov;
 my $para_num = 10;
@@ -30,6 +31,10 @@ my $stm = 45;
 my $scale_len = 2;
 my $scale_dis = 2;
 my $line_num = 3;
+our $PATH_PRIMER3;
+our $REF_HG19;
+my $fref = $REF_HG19;
+my $format_dis = 3;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
@@ -45,9 +50,8 @@ GetOptions(
 				"minl:s"=>\$min_len,
 				"maxl:s"=>\$max_len,
 				"scalel:s"=>\$scale_len,
+				"fdis:s"=>\$format_dis,
 				"rdis:s"=>\$range_dis,
-#				"mind:s"=>\$min_dis,
-#				"maxd:s"=>\$max_dis,
 				"stm:s"=>\$stm,
 				"lnum:s"=>\$line_num,
 				"para:s"=>\$para_num,
@@ -59,43 +63,32 @@ GetOptions(
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
-my $oligotm = "/data/bioit/biodata/zenghp/software/primer3-2.4.0/src/oligotm";
-$fref = defined $fref? $fref:"/data/bioit/biodata/duyp/bin/hg19/hg19.fasta";
+my $oligotm = "$PATH_PRIMER3/src/oligotm";
 
 ## score value: min_best, max_best, min, max
 my @endA = (0, 0, 0, 2);
-#my @len = (20,25,$min_len, $max_len);
 my @len = ($min_len,$min_len+5,$min_len, $max_len);
 my @tm = ($min_tm+int(($max_tm-$min_tm)/2), $max_tm-int(($max_tm-$min_tm)/2), $min_tm, $max_tm);
 my @gc = (0.5, 0.65, 0.3, 0.8);
 my @dgc = (-0.50, -0.25, -1, 0.75);
 my @mdgc = (0, 0.5, 0, 0.75);
 my @tmh = (-50, 40, -50, 55);
-#my @dis = (-200,200, -200,200);
-#my @dis = (10, 15, $min_dis, $max_dis);
 my @nalign = (0,40,0,55); #sec tm
 my @poly = (0,5,0,20);
 
 my $GC5_num = 8; #stat GC of primer start $GC5_num bp
 my $GC3_num = 8;
 my $min_tm_diff = 5;
+my $plen = int(($max_len+$min_len)/2);
+
 
 my %seq;
-if ($step == 1){
-	my @rdis = split /,/, $range_dis;
-	##check range_dis
-	my $nrdis = scalar @rdis;
-	if($nrdis%3!=0){
-		print "Wrong: -rdis number of dis must be times of 3!\n";
-		die;
-	}
-	for(my $i=0; $i<@rdis; $i+=3){
-		if($rdis[$i+1]-$rdis[$i] < 0){
-			print "Wrong: -rdis region must be ascending ordered, eg:3,40,1,100,150,5\n";
-			die;
-		}
-	}
 
+if ($step == 1){
+	my @rdis;
+	if(defined $range_dis){
+		@rdis = &check_merge_rdis($range_dis);
+	}
 	open(P,">$outdir/$fkey.primer.list") or die $!;
 	open(I, $fIn) or die $!;
 	$/=">";
@@ -104,7 +97,7 @@ if ($step == 1){
 		next if(/^$/);
 		my ($id_info, @line)=split /\n/, $_;
 		my $seq = join("", @line);
-		my ($id)=split /\t/, $id_info;
+		my ($id)=split /\s+/, $id_info;
 		my ($dstart)=$id_info=~/XS:i:(\d+)/;
 		my ($dend)=$id_info=~/XE:i:(\d+)/;
 		if(!defined $dstart){
@@ -115,13 +108,24 @@ if ($step == 1){
 		}
 		
 		## 
-		my $plen = length($seq);
+		my $tlen = length($seq);
+		if(!defined $range_dis){
+			@rdis = (1, $tlen, int(($tlen/50)+1));
+		}
+		if($format_dis == 5){ ## convert to format '3'
+			for(my $i=0; $i<@rdis; $i+=3){
+				my $e =$tlen-$rdis[$i]-$plen;
+				my $s =$tlen-$rdis[$i+1]-$plen;
+				$rdis[$i]=$s;
+				$rdis[$i+1]=$e;
+			}
+		}
 		for(my $l=$min_len; $l<=$max_len; $l+=$scale_len){
 			my $rs=1;
 			for(my $r=0; $r<@rdis; $r+=3){
 				my ($min_dis, $max_dis) = ($rdis[$r], $rdis[$r+1]);
 				my $min_p = $min_dis-$dstart; ## dstart=1
-				my $max_p = $max_dis-$dend<$plen-$l? $max_dis-$dend: $plen-$l;
+				my $max_p = $max_dis-$dend<$tlen-$l? $max_dis-$dend: $tlen-$l;
 				if($max_p < $min_p){
 					print "Wrong: max position < min position! maybe dend (XE:i:$dend) is too large, or -rdis range $range_dis is too narrow!\n";
 					die;
@@ -246,10 +250,10 @@ if($step==3){
 	print S "##Score_info: sendA, spoly, slen, stm, sgc, sdgc, smdgc, shairpin, snalign\n";
 	print S "##High_Info(n=1): TM        : Flag/DatabaseID/Pos/Cigar/MD/End_match_num/Efficiency\n";
 	print S "##High_Info(n>1): Efficiency: Flag/DatabaseID/Pos/Cigar/MD/End_match_num/TM\n";
-	open(O,">$outdir/$fkey.single.final.primer") or die $!;
-	print O "##Score_info: sendA, spoly, slen, stm, sgc, sdgc, smdgc, shairpin, snalign\n";
-	print O "##High_Info(n=1): TM        : Flag/DatabaseID/Pos/Cigar/MD/End_match_num/Efficiency\n";
-	print O "##High_Info(n>1): Efficiency: Flag/DatabaseID/Pos/Cigar/MD/End_match_num/TM\n";
+#	open(O,">$outdir/$fkey.single.final.primer") or die $!;
+#	print O "##Score_info: sendA, spoly, slen, stm, sgc, sdgc, smdgc, shairpin, snalign\n";
+#	print O "##High_Info(n=1): TM        : Flag/DatabaseID/Pos/Cigar/MD/End_match_num/Efficiency\n";
+#	print O "##High_Info(n>1): Efficiency: Flag/DatabaseID/Pos/Cigar/MD/End_match_num/TM\n";
 	open (I, "$outdir/$fkey.primer.evaluation.out") or die $!;
 	$/="\n";
 	my @title_info=split /\t/, "Tm\tGC\tGC5\tGC3\tdGC\tdG_Hairpin\tTm_Hairpin\tdG_Dimer\tTm_Dimer\tAlign_Num\tHigh_Tm_Num\tHigh_Efficiency_Num\tHigh_Info";
@@ -271,7 +275,7 @@ if($step==3){
 	$step++;
 	
 	print S "#ID\tTarget\tLen\tDis\tSeq\tScore\tScore_info\t",join("\t", @title_info),"\n";
-	print O "#ID\tTarget\tLen\tDis\tSeq\tScore\tScore_info\t",join("\t", @title_info),"\n";
+#	print O "#ID\tTarget\tLen\tDis\tSeq\tScore\tScore_info\t",join("\t", @title_info),"\n";
 	foreach my $id_sub(sort {$a cmp $b} keys %score){
 		my $n=0;
 		my $flag = 0;
@@ -280,7 +284,7 @@ if($step==3){
 			foreach my $id(@id){
 				print S $id,"\t",join("\t",@{$info{$id}}),"\n";
 				if($flag == 0){
-					print O $id,"\t",join("\t",@{$info{$id}}),"\n";
+					#print O $id,"\t",join("\t",@{$info{$id}}),"\n";
 					$flag = 1;
 				}
 				$n++;
@@ -290,7 +294,7 @@ if($step==3){
 #			}
 		}
 	}
-	close(O);
+#	close(O);
 	close(S);
 }
 #######################################################################################
@@ -499,6 +503,53 @@ sub get_primer{
 	return ($primer);
 }
 
+sub check_merge_rdis{
+	my ($rdis)=$_;
+	##check range_dis
+	my @rdis = split /,/, $range_dis;
+	my $nrdis = scalar @rdis;
+	if($nrdis!=3 && $nrdis!=6){
+		print "Wrong: number of -rdis must be 3 or 6!\n";
+		die;
+	}
+	for(my $i=0; $i<@rdis; $i+=3){
+		if($rdis[$i+1]-$rdis[$i] < 0){
+			print "Wrong: -rdis region must be ascending ordered, eg:3,40,1,100,150,5\n";
+			die;
+		}
+	}
+
+	if($nrdis==3){
+		return(@rdis);
+	}else{ ##merge when overlap
+		my ($s1, $e1, $b1, $s2, $e2, $b2) = @rdis;
+		## sort two regions
+		if($s1 > $s2){
+			($s2, $e2, $b2) = @rdis[0..2];
+			($s1, $e1, $b1) = @rdis[3..5];
+		}
+		if($e1>$s2){ ## overlap
+			if($e1>$e2){ ## r1 include r2
+				if($b1<$b2){ ## prefer min bin
+					return($s1, $e1, $b1);
+				}else{
+					return ($s1, $s2, $b1, $s2, $e2, $b2, $e2, $e1, $b1);
+				}
+			}else{## intersect 
+				if($b1<$b2){
+					return ($s1, $e1, $b1, $e1, $e2, $b2);
+				}else{
+					return ($s1, $s2, $b1, $s2, $e2, $b2);
+				}
+			}
+		}else{## no overlap
+			return @rdis;
+		}
+
+	}
+}
+
+
 sub Run{
     my ($cmd, $nodie)=@_;
 
@@ -553,15 +604,10 @@ Program:
 Version: $version
 Contact:zeng huaping<huaping.zeng\@genetalks.com> 
 
-	 change score from list to automatic
-	 v2: evaluation(contain bwa) will be killed if time out
-	 v3: add scale_dis
-	190917: min/maxdis change to dis range string(can be more distance ranges)
-
 Usage:
   Options:
   -i  	<file>   	Input template fa file, forced
-  -r  	<file>   	Input ref fa file, ["/data/bioit/biodata/duyp/bin/hg19/hg19.fasta"]
+  -r  	<file>   	Input ref fa file, [$fref]
   -k  	<str>		Key of output file, forced
 
   --recov           recov primer seq
@@ -574,7 +620,8 @@ Usage:
   -mingc <float>	min gc, [$min_gc]
   -maxgc <float>	max gc, [$max_gc]
   -scalel <int>     scale len, [$scale_len]
-  -rdis <str>		region ranges(start,end,scale), start <= end, count from right to left and count from 0, separated by ",", [$range_dis]
+  -fdis <5,3>       distance caculation format, 3: from primer left end to template 3'end; 5: from primer right end to template 5'end, [$format_dis]
+  -rdis <str>		region ranges(start,end,scale), start <= end, count format see -fdis, separated by ",", optional
   		            Example: 
 			            sanger sequence primer: 100,150,2,400,500,5
 			            ARMS PCR primer: 1,1,1,80,180,2

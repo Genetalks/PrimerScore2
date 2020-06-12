@@ -5,6 +5,8 @@ use Getopt::Long;
 use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
+require "$Bin/path.pm";
+
 my $BEGIN_TIME=time();
 my $version="1.0.0";
 #######################################################################################
@@ -12,7 +14,7 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($fprimer, $fdatabase,$fkey,$detail,$outdir);
+my ($fprimer, $fkey,$detail,$outdir);
 my $NoSpecificity;
 my $pnum = 1;
 my $min_tm = 0;
@@ -32,6 +34,9 @@ my $min_eff = 0.1;
 my $nohead;
 my $face_to_face;
 my $thread = 3;
+our $PATH_PRIMER3;
+our $REF_HG19;
+my $fdatabase = $REF_HG19;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$fprimer,
@@ -52,7 +57,6 @@ GetOptions(
 				) or &USAGE;
 &USAGE unless ($fprimer and $fkey);
 
-$fdatabase = defined $fdatabase? $fdatabase:"/data/bioit/biodata/duyp/bin/hg19/hg19.fasta";
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
@@ -65,9 +69,9 @@ if(defined $face_to_face){
 	@eff_dis = (0.1, 0.3, 0.8, 1,  0.8, 0.3, 0.1);
 }
 
-my $oligotm = "/data/bioit/biodata/zenghp/software/primer3-2.4.0/src/oligotm";
-my $ntthal = "/data/bioit/biodata/zenghp/software/primer3-2.4.0/src/ntthal";
-my $primer3_config = "/data/bioit/biodata/zenghp/software/primer3-2.4.0/src/primer3_config/";
+my $oligotm = "$PATH_PRIMER3/src/oligotm";
+my $ntthal = "$PATH_PRIMER3/src/ntthal";
+my $primer3_config = "$PATH_PRIMER3/src/primer3_config/";
 
 ## creat primer.fa
 my @PN=();
@@ -87,7 +91,6 @@ while (<P>){
 	for (my $i=0; $i<$pnum; $i++){
 		my $primer_seq = $seq[$i];
 		## len Tm GC Hairpin, Dimer between itself
-		my $len = length($primer_seq);
 		if(!defined $primer_seq){
 			print $_,"\n";
 			die;
@@ -101,6 +104,7 @@ while (<P>){
 			next;
 		}
 
+		my $len = length($primer_seq);
 		my ($hairpin_dg, $hairpin_tm, $dimer_dg, $dimer_tm)=('','','','');
 		
 		my $hairpin_result = `$ntthal -path $primer3_config -a HAIRPIN -s1 $primer_seq`;
@@ -655,7 +659,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 Usage:
   Options:
   -p  <file>   Input primer list file, forced
-  -d  <file>   Input database file, [/data/bioit/biodata/duyp/bin/hg19/hg19.fasta]
+  -d  <file>   Input database file, [$fdatabase]
   -n  <int>    combined primer num, single primer: 1, primer pair: 2, forced
   -k  <str>	Key of output file, forced
   

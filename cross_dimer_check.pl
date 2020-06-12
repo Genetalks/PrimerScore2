@@ -5,6 +5,7 @@ use Getopt::Long;
 use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
+require "$Bin/path.pm";
 my $BEGIN_TIME=time();
 my $version="1.0.0";
 #######################################################################################
@@ -25,8 +26,9 @@ $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
 
-my $ntthal = "/data/bioit/biodata/zenghp/software/primer3-2.4.0/src/ntthal";
-my $primer3_config = "/data/bioit/biodata/zenghp/software/primer3-2.4.0/src/primer3_config/";
+our $PATH_PRIMER3;
+my $ntthal = "$PATH_PRIMER3/src/ntthal";
+my $primer3_config = "$PATH_PRIMER3/src/primer3_config/";
 
 my %seq;
 my @group;

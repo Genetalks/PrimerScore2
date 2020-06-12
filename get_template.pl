@@ -5,6 +5,7 @@ use Getopt::Long;
 use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
+require "$Bin/path.pm";
 my $BEGIN_TIME=time();
 my $version="2.0";
 #######################################################################################
@@ -12,10 +13,11 @@ my $version="2.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
+our $REF_HG19;
 my ($ftarget,$fkey,$outdir);
 my $Max_Dis = 20;
 my $vcf;
-my $fref = "/data/bioit/biodata/duyp/bin/hg19/hg19.fasta";
+my $fref = $REF_HG19;
 my $Extend = 200;
 my $UD_devide;
 my $die_check;
@@ -47,8 +49,12 @@ my $ftype;
 	my $head = `head -1 $ftarget`;
 	chomp $head;
 	my @unit = split /\s+/, $head;
-	if($unit[5]=~/ID=/){
-		$ftype = "Target";
+	if($unit[2]=~/^\d+$/ && $unit[2]-$unit[1]<1000 && $unit[2]-$unit[1]>0){
+		if($unit[5]=~/ID=/){
+			$ftype = "Target";
+		}else{
+			die "Wrong SNP file!\n";
+		}
 	}else{
 		$ftype ="VCF";
 	}
@@ -329,7 +335,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 Usage:
   Options:
   -i  <file>   	Input file, forced
-  -r  <file>   	Input ref file, [ "/data/bioit/biodata/duyp/bin/hg19/hg19.fasta"]
+  -r  <file>   	Input ref file, [$fref]
   -k  <str>     Key of output file, forced
 
   --dieC		die when ref base check failed
