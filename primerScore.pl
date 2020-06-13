@@ -37,7 +37,6 @@ my $type = "face-to-face:SNP";
 my $ctype = "Single";
 my $onum = 3;
 my ($dimer_check, $homology_check, $SNP_check);
-my $max_dis_SNPcluster = 20;
 my $averTLen;
 my $probe;
 GetOptions(
@@ -65,11 +64,10 @@ GetOptions(
 				"type:s"=>\$type,
 				"ctype:s"=>\$ctype,
 				"probe:s"=>\$probe,
-				"daver:s"=>\$dis_aver,
-				"rfloat:s"=>\$rfloat,
-				"onum:s"=>\$onum,
+				"ds:s"=>\$dis_aver,
+				"rf:s"=>\$rfloat,
+				"on:s"=>\$onum,
 
-				"mdc:s"=>\$max_dis_SNPcluster,
 				"stm:s"=>\$stm,
 				"lnum:s"=>\$line_num,
 				"para:s"=>\$para_num,
@@ -80,7 +78,8 @@ $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
 my ($score_dis, $score_pos)=(10,10);
-my $choose_num = 5; ## for a primer, $choose_num primers can be selected as its pair.
+my $choose_num = 5; ## for a primer, at least $choose_num primers can be selected as its pair.
+my $pnum = 50; ## position num for one primer, its candidate primers num is roughly: pnum*(maxl-minl)/scalel.
 my $sh;
 open($sh, ">$outdir/$fkey.sh") or die $!;
 
@@ -109,8 +108,14 @@ if($ftype eq "SNP"){
 	my $extend_len;
 	my @rdiss = split /,/, $dis_range;
 	$extend_len = (int(($rdiss[-1]+$max_len+10)/100)+1) * 100;
-	&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $max_dis_SNPcluster -od $outdir/ --dieC", $sh);
-	#&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $max_dis_SNPcluster -od $outdir/ > $outdir/$fkey.get_template.log 2>&1", $sh);
+	
+	if(!defined $pos_range){
+		die "Wrong: -rpos must be given when -it SNP file!\n";
+	}
+	my ($optmin, $optmax, $min, $max) = split /,/, $pos_range;
+	my $md = int (($max+$optmax)/2) - $optmin;
+	&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $md -od $outdir/ --dieC", $sh);
+	#&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $md -od $outdir/ > $outdir/$fkey.get_template.log 2>&1", $sh);
 	$ftemplate = "$outdir/$fkey.template.fa";
 }
 
@@ -119,8 +124,10 @@ if(defined $homology_check){
 	&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fref -k $fkey -od $outdir/homology_check", $sh);
 }
 ### primer design
-my ($rdis1, $rdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
-&Run("perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -rdis $rdis1 -lnum $line_num -stm $stm -para $para_num -k $fkey -od $outdir/design > $outdir/design.log 2>&1", $sh);
+my ($frdis1, $frdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
+print "region range to design primers: ", join("\t", $frdis1, $frdis2),"\n";
+my ($fdis1, $rdis1)=split /;/, $frdis1;
+&Run("perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis1 -rdis $rdis1 -lnum $line_num -stm $stm -para $para_num -k $fkey -od $outdir/design > $outdir/design.log 2>&1", $sh);
 if($type eq "face-to-face:Region" || $type eq "back-to-back"){
 	my $dir_rev = "$outdir/design_rev";
 	`mkdir $dir_rev` unless(-d $dir_rev);
@@ -142,7 +149,15 @@ if($type eq "face-to-face:Region" || $type eq "back-to-back"){
 	close(O);
 	close(I);
 	$/="\n";
-	&Run("perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -rdis $rdis2 -lnum $line_num -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev > $dir_rev.log 2>&1", $sh);
+	
+	my ($fdis2, $rdis2);
+	if($frdis2 eq ""){
+		die "No rdis2!\n";
+	}else{
+		($fdis2, $rdis2)=split /;/, $frdis2;
+	}
+
+	&Run("perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis2 -rdis $rdis2 -lnum $line_num -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev > $dir_rev.log 2>&1", $sh);
 }
 
 
@@ -164,19 +179,22 @@ if($ctype eq "Full-covered"){
 &Run($cmd, $sh);
 
 ### specificity re-evaluation
-my $dir_re = "$outdir/re_evalue";
-`mkdir $dir_re` unless(-e $dir_re);
-if($type eq "nested"){
-	&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/SP1/){\$TN=\$a[4];}  if(\$_=~/SP2/){ print join(\"\\t\", \$a[3],\$a[4],\$TN),\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
-}elsif($type ne "back-to-back"){ ## back-to-back can't re-evalue specificity
-	&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/SP1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/SP2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
+if($type ne "back-to-back"){
+	my $dir_re = "$outdir/re_evalue";
+	`mkdir $dir_re` unless(-e $dir_re);
+	if($type eq "nested"){
+		&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/SP1/){\$TN=\$a[4];}  if(\$_=~/SP2/){ print join(\"\\t\", \$a[3],\$a[4],\$TN),\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
+	}else{ ## back-to-back can't re-evalue specificity
+		&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/SP1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/SP2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
+	}
+	
+	$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -k $fkey\_pair";
+	if($type=~/face-to-face/){
+		$cmd .= " --face_to_face";
+	}
+	$cmd .= " -od $dir_re";
+	&Run($cmd, $sh);
 }
-$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -k $fkey\_pair";
-if($type=~/face-to-face/){
-	$cmd .= " --face_to_face";
-}
-$cmd .= " -od $dir_re";
-&Run($cmd, $sh);
 
 ### primers dimer check
 if(defined $dimer_check){
@@ -199,66 +217,70 @@ sub caculate_rdis{
 	my ($bmind, $bmaxd, $mind, $maxd)=split /,/, $dis_range;
 	my @region; ##  two-dimensional array, @{region[1]} is regions of revcom template sequence
 	my $alen = int(($minl+$maxl)/2);
-	my $pnum = 50;
-	my ($min, $max, $size, $index);
+	my ($min, $max, $size, $index, $fdis); #fdis: distance caculation format, 3: from primer right end to template 3'end; 5: from left right end to template 5'end
+	my $step0 = int(($bmaxd-$bmind)/$choose_num)+1; ## max step for distance range $dis_range
 	if(defined $pos_range){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
-		push @{$region[0]}, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1);
+		push @{$region[0]}, (3, $minp, $maxp, int(($maxp-$minp)/$pnum)+1);
 		if($type eq "face-to-face:SNP"){
 			$min = $mind-$maxp-2*$alen;
 			$max = $maxd-$minp-2*$alen;
-			$step = int(($max-$min)/$pnum)+1;
+			$fdis = 3;
 			$index = 0;
 		}elsif($type eq "back-to-back"){
 			$min = $minp+$alen-$maxd;
 			$max = $maxp+$alen-$mind;
-			$step = int(($max-$min)/$pnum)+1;
+			$fdis = 5; # from left right end to template 5'end
 			$index = 1;
 		}elsif($type eq "Nested"){
-			$min = $minp+$mind;
+			$min = $maxp+$mind;
 			$max = $maxp+$maxd;
-			$step = int(($max-$min)/$pnum)+1;
+			$fdis = 3;
 			$index = 0;
 		}else{
 			die "Wrong type when defined -srpos, must be one of (face-to-face:SNP, back-to-back, Nested)!\n";
 		}
-		if($step > ($bmaxd-$bmind)/$choose_num){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
-			die "Step size $step in region $min-$max is too big for position range $dis_range!";
+		my $posnum = int(($max-$min+1)/$step0);
+		if($posnum > $pnum*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
+			die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! Please narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
 		}
-		push @{$region[$index]}, ($min, $max, $step);
+		push @{$region[$index]}, ($fdis, $min, $max, $step0);
 	}else{
+		if(!defined $averTLen){
+			die "-tlen must be given when not defined -rpos!\n";
+		}
 		if($type eq "face-to-face:Region"){## usually is generic:Region
-			if(!defined $averTLen){
-				die "-tlen must be given when -type is face-to-face:Region!\n";
-			}
-
 			$min = $mind - $alen;
 			$max = $averTLen - $alen;
-			$step = int(($max-$min)/$pnum)+1;
-			if($step > ($bmaxd-$bmind)/$choose_num){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
-				print "Step size $step in region $min-$max is too big for position range $dis_range, then cutdown region to ";
-				my $s0 = int (($bmaxd-$bmind)/$choose_num);
-				my $d0 = ($s0-1)*$pnum;
+			my $posnum = int(($max-$min+1)/$step0);
+			if($ctype eq "Single" && $posnum > $pnum*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
+				print "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! then narrow region to ";
+				my $d0 = ($step0-1)*$pnum;
 				my $x = ($max-$min-$d0)/2; ## size of range(min-max) to cutdown
 				$max = $max - $x;
 				$min = $min + $x;
-				$step = int(($max-$min)/$pnum)+1;
-				print "$min-$max, step is $step\n";
+				print "$min-$max.\n";
 			}
-			push @{$region[0]}, ($min, $max, $step);
-			push @{$region[1]}, ($min, $max, $step);
-		}else{
+			if($ctype eq "Full-covered"){
+				my $npair = int (($averTLen-$mind)/$dis_aver);
+				if($posnum > ($pnum/2)*$npair*2){ ## check 
+					die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design!Please magnify -rdis $dis_range!\n";
+				}
+			}
+			push @{$region[0]}, (3, $min, $max, $step0);
+			push @{$region[1]}, (3, $min, $max, $step0);
+		}else{ ## Full-covered only support "face-to-face:Region"
 			die "Wrong type when not defined -srpos, only can be (face-to-face:Region)!\n";
 		}
 	}
-	my $rdis1 = join(",", @{$region[0]});
-	my $rdis2 = scalar @region==2? join(",", @{$region[1]}): "";
+	my $rdis1 = $region[0][0].";".join(",", @{$region[0]}[1..3]);
+	my $rdis2 = scalar @region==2? $region[1][0].";".join(",", @{$region[1]}[1..3]): "";
 	return ($rdis1, $rdis2);
 }
 sub Run{
     my ($cmd, $sh, $nodie)=@_;
 	print $sh $cmd,"\n";
-	print $cmd,"\n";
+	print "###", $cmd,"\n";
     my $ret = system($cmd);
     if (!defined $nodie && $ret) {
         die "Run $cmd failed!\n";
@@ -367,8 +389,8 @@ Usage:
   -minl    <int>      min primer len, [$min_len]
   -maxl    <int>      max primer len, [$max_len]
   -scalel  <int>      scale len(step size) [$scale_len]
-  -rdis     <str>     distance range between pair primers, (best_min, best_max, min, max) separted by ",", [$dis_range]
-  -rpos     <str>     position range, distance of p1 to the detected site, (best_min, best_max, min, max) separted by ",", optional
+  -rdis     <str>     distance range between pair primers, (opt_min, opt_max, min, max) separted by ",", [$dis_range]
+  -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it SNP file
 
   ### 
   -type   <str>     primer type, "face-to-face:SNP", "face-to-face:Region", "back-to-back", "Nested", ["face-to-face:SNP"]
@@ -378,7 +400,6 @@ Usage:
      -rf  <float>   ratio of distance between adjacent primers can float when -ctype "Full-covered", [0.2]
      -on  <int>     output num when -ctype "Single",[$onum]
 
-  -mdc     <int>      max distance permissible in one target spots cluster between two target spots, [$max_dis_SNPcluster]
   -lnum    <int>      line num in one separated file, [$line_num]
   -stm     <int>      min tm to be High_tm in specifity, [$stm]
   -para  <int>      parallel num, [$para_num]

@@ -620,7 +620,7 @@ Usage:
   -mingc <float>	min gc, [$min_gc]
   -maxgc <float>	max gc, [$max_gc]
   -scalel <int>     scale len, [$scale_len]
-  -fdis <5,3>       distance caculation format, 3: from primer left end to template 3'end; 5: from primer right end to template 5'end, [$format_dis]
+  -fdis <5,3>       distance caculation format, 3: from primer right end to template 3'end; 5: from left right end to template 5'end, [$format_dis]
   -rdis <str>		region ranges(start,end,scale), start <= end, count format see -fdis, separated by ",", optional
   		            Example: 
 			            sanger sequence primer: 100,150,2,400,500,5

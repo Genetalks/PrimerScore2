@@ -301,7 +301,8 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 		my $strandp2 = defined $frev? "-": "+"; ## when rev from primer, is "-"; not used in primerScore pipeline 
 		if($chrp2=~/_rev$/){
 			$chrp2=~s/_rev//;
-			($chrm2, $sm2, $em2, $strandm2) = ($chrp2, 1, $tlength{$chrp2}, "-");
+			($chrm2, $sm2, $em2, $strandm2) = exists $XP{$chrp2}? @{$XP{$chrp2}}: ($chrp2, 1, $tlength{$chrp2}, "+");
+			$strandm2 = $strandm2 eq "+"? "-":"+";
 			$strandp2 = "+"; ## when rev from template, is "+"
 		}else{
 			($chrm2, $sm2, $em2, $strandm2)= exists $XP{$chrp2}? @{$XP{$chrp2}}: ($chrp2, 1, $tlength{$chrp2}, "+");
