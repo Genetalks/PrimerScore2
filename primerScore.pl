@@ -124,9 +124,8 @@ if(defined $homology_check){
 	&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fref -k $fkey -od $outdir/homology_check", $sh);
 }
 ### primer design
-my ($frdis1, $frdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
-print "region range to design primers: ", join("\t", $frdis1, $frdis2),"\n";
-my ($fdis1, $rdis1)=split /;/, $frdis1;
+my ($rdis1, $fdis1, $rdis2, $fdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
+print "region range to design primers: ", join("\t", $fdis1.";".$rdis1, defined $fdis2? $fdis2.";".$rdis2:""),"\n";
 &Run("perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis1 -rdis $rdis1 -lnum $line_num -stm $stm -para $para_num -k $fkey -od $outdir/design > $outdir/design.log 2>&1", $sh);
 if($type eq "face-to-face:Region" || $type eq "back-to-back"){
 	my $dir_rev = "$outdir/design_rev";
@@ -150,11 +149,8 @@ if($type eq "face-to-face:Region" || $type eq "back-to-back"){
 	close(I);
 	$/="\n";
 	
-	my ($fdis2, $rdis2);
-	if($frdis2 eq ""){
+	if($rdis2 eq ""){
 		die "No rdis2!\n";
-	}else{
-		($fdis2, $rdis2)=split /;/, $frdis2;
 	}
 
 	&Run("perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis2 -rdis $rdis2 -lnum $line_num -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev > $dir_rev.log 2>&1", $sh);
@@ -217,25 +213,25 @@ sub caculate_rdis{
 	my ($bmind, $bmaxd, $mind, $maxd)=split /,/, $dis_range;
 	my @region; ##  two-dimensional array, @{region[1]} is regions of revcom template sequence
 	my $alen = int(($minl+$maxl)/2);
-	my ($min, $max, $size, $index, $fdis); #fdis: distance caculation format, 3: from primer right end to template 3'end; 5: from left right end to template 5'end
+	my ($min, $max, $size, $index, $fdis1, $fdis2); #fdis: distance caculation format, 3: from primer right end to template 3'end; 5: from left right end to template 5'end
 	my $step0 = int(($bmaxd-$bmind)/$choose_num)+1; ## max step for distance range $dis_range
 	if(defined $pos_range){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
-		push @{$region[0]}, (3, $minp, $maxp, int(($maxp-$minp)/$pnum)+1);
+		push @{$region[0]}, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1);
 		if($type eq "face-to-face:SNP"){
 			$min = $mind-$maxp-2*$alen;
 			$max = $maxd-$minp-2*$alen;
-			$fdis = 3;
+			$fdis1 = 3;
 			$index = 0;
 		}elsif($type eq "back-to-back"){
 			$min = $minp+$alen-$maxd;
 			$max = $maxp+$alen-$mind;
-			$fdis = 5; # from left right end to template 5'end
+			$fdis2 = 5; # from left right end to template 5'end
 			$index = 1;
 		}elsif($type eq "Nested"){
 			$min = $maxp+$mind;
 			$max = $maxp+$maxd;
-			$fdis = 3;
+			$fdis1 = 3;
 			$index = 0;
 		}else{
 			die "Wrong type when defined -srpos, must be one of (face-to-face:SNP, back-to-back, Nested)!\n";
@@ -244,7 +240,7 @@ sub caculate_rdis{
 		if($posnum > $pnum*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
 			die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! Please narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
 		}
-		push @{$region[$index]}, ($fdis, $min, $max, $step0);
+		push @{$region[$index]}, ($min, $max, $step0);
 	}else{
 		if(!defined $averTLen){
 			die "-tlen must be given when not defined -rpos!\n";
@@ -267,15 +263,16 @@ sub caculate_rdis{
 					die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design!Please magnify -rdis $dis_range!\n";
 				}
 			}
-			push @{$region[0]}, (3, $min, $max, $step0);
-			push @{$region[1]}, (3, $min, $max, $step0);
+			($fdis1, $fdis2) = (3, 3);
+			push @{$region[0]}, ($min, $max, $step0);
+			push @{$region[1]}, ($min, $max, $step0);
 		}else{ ## Full-covered only support "face-to-face:Region"
 			die "Wrong type when not defined -srpos, only can be (face-to-face:Region)!\n";
 		}
 	}
-	my $rdis1 = $region[0][0].";".join(",", @{$region[0]}[1..3]);
-	my $rdis2 = scalar @region==2? $region[1][0].";".join(",", @{$region[1]}[1..3]): "";
-	return ($rdis1, $rdis2);
+	my $rdis1 = join(",", @{$region[0]});
+	my $rdis2 = scalar @region==2? join(",", @{$region[1]}): "";
+	return ($rdis1, $fdis1, $rdis2, $fdis2);
 }
 sub Run{
     my ($cmd, $sh, $nodie)=@_;
