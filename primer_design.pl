@@ -124,7 +124,7 @@ if ($step == 1){
 			my $rs=1;
 			for(my $r=0; $r<@rdis; $r+=3){
 				my ($min_dis, $max_dis) = ($rdis[$r], $rdis[$r+1]);
-				my $min_p = $min_dis-$dstart; ## dstart=1
+				my $min_p = $min_dis-$dstart>0? $min_dis-$dstart: 0; ## dstart=1
 				my $max_p = $max_dis-$dend<$tlen-$l? $max_dis-$dend: $tlen-$l;
 				if($max_p < $min_p){
 					print "Wrong: max position < min position! maybe dend (XE:i:$dend) is too large, or -rdis range $range_dis is too narrow!\n";

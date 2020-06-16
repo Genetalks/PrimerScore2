@@ -37,6 +37,7 @@ my $thread = 3;
 our $PATH_PRIMER3;
 our $REF_HG19;
 my $fdatabase = $REF_HG19;
+my $extend = 600;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$fprimer,
@@ -50,6 +51,7 @@ GetOptions(
 				"maxtm:s"=>\$max_tm,
 				"mingc:s"=>\$min_gc,
 				"maxgc:s"=>\$max_gc,
+				"extend:s"=>\$extend,
 				"stm:s"=>\$min_tm_spec,
 				"Detail:s"=>\$detail,
 				"thread:s"=>\$thread,
@@ -449,7 +451,6 @@ sub get_3end1_mismatch{
 
 sub get_database_seq{
 	my ($primer, $chr, $pos, $is_reverse, $cigar, $fref)=@_;
-	my $Extend = 600;
 	my $H5len;
 	my $plen = length $primer;
 	my ($s, $e, $p3);
@@ -457,13 +458,13 @@ sub get_database_seq{
 		($H5len)=$cigar=~/^(\d+)H/;
 		$H5len = defined $H5len? $H5len: 0;
 		$s = $pos+$plen-$H5len; # primer 3' postion
-		$e = $s+$Extend;
+		$e = $s+$extend;
 		$p3=$s;
 	}else{
 		($H5len)=$cigar=~/(\d+)H$/;
 		$H5len = defined $H5len? $H5len: 0;
 		$e = $pos-1;
-		$s = $e - $Extend;
+		$s = $e - $extend;
 		$p3 = $e;
 	}
 	$s=$s>1? $s: 1;
@@ -669,6 +670,7 @@ Usage:
   -maxtm <int>		max tm to evalue, [100]
   -mingc <float>		min gc to evalue, [0]
   -maxgc <float>		max gc to evalue, [1]
+  -extend <int>      extend length of PCR, [$extend]
   -stm  <int>   min tm to be High_TM when caculate specificity, [40]
   -thread  <int>   thread in bwa, [$thread]
   --Detail     Output Detail Info, optional

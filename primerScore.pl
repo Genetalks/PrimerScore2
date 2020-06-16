@@ -115,7 +115,6 @@ if($ftype eq "SNP"){
 	my ($optmin, $optmax, $min, $max) = split /,/, $pos_range;
 	my $md = int (($max+$optmax)/2) - $optmin;
 	&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $md -od $outdir/ --dieC", $sh);
-	#&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $md -od $outdir/ > $outdir/$fkey.get_template.log 2>&1", $sh);
 	$ftemplate = "$outdir/$fkey.template.fa";
 }
 
@@ -183,8 +182,9 @@ if($type ne "back-to-back"){
 	}else{ ## back-to-back can't re-evalue specificity
 		&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/-P1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/-P2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
 	}
-	
-	$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -k $fkey\_pair";
+	my @diss = split /,/, $dis_range;
+	my $extend = $diss[-1]*2;
+	$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -extend $extend -k $fkey\_pair";
 	if($type=~/face-to-face/){
 		$cmd .= " --face_to_face";
 	}
