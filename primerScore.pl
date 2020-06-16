@@ -194,7 +194,7 @@ if($type ne "back-to-back"){
 
 ### primers dimer check
 if(defined $dimer_check){
-	&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.primer -k $fkey -od $outdir", $sh);
+	&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.primer -k $fkey -od $outdir/dimer_check", $sh);
 }
 
 
