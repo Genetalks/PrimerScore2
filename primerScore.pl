@@ -179,9 +179,9 @@ if($type ne "back-to-back"){
 	my $dir_re = "$outdir/re_evalue";
 	`mkdir $dir_re` unless(-e $dir_re);
 	if($type eq "nested"){
-		&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/SP1/){\$TN=\$a[4];}  if(\$_=~/SP2/){ print join(\"\\t\", \$a[3],\$a[4],\$TN),\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
+		&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/-P1/){\$TN=\$a[4];}  if(\$_=~/-P2/){ print join(\"\\t\", \$a[3],\$a[4],\$TN),\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
 	}else{ ## back-to-back can't re-evalue specificity
-		&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/SP1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/SP2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
+		&Run("less $outdir/$fkey.final.primer |perl -ne '{chomp; \@a=split; if(\$_=~/-P1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/-P2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
 	}
 	
 	$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -k $fkey\_pair";

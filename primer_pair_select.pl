@@ -277,8 +277,8 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 		my ($id1_new, $id2_new);
 		if($ctype eq "Single"){
 			my $le = chr(65+$n); ## A is 65
-			$id1_new = $tid."-".$le."-SP1";
-			$id2_new = $tid."-".$le."-SP2";
+			$id1_new = $tid."-".$le."-P1";
+			$id2_new = $tid."-".$le."-P2";
 			$n++;
 		}else{
 			$id1_new = $tid."-$pos-P1";
