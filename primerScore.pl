@@ -217,6 +217,7 @@ sub caculate_rdis{
 	my $step0 = int(($bmaxd-$bmind)/$choose_num)+1; ## max step for distance range $dis_range
 	if(defined $pos_range){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
+		$fdis1 = 3;
 		push @{$region[0]}, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1);
 		if($type eq "face-to-face:SNP"){
 			$min = $mind-$maxp-2*$alen;
