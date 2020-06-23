@@ -49,7 +49,7 @@ my $ftype;
 	my $head = `head -1 $ftarget`;
 	chomp $head;
 	my @unit = split /\s+/, $head;
-	if($unit[2]=~/^\d+$/ && $unit[2]-$unit[1]<1000 && $unit[2]-$unit[1]>0){
+	if($unit[2]=~/^\d+$/ && $unit[2]-$unit[1]<1000 && $unit[2]-$unit[1]>=0){
 		if($unit[5]=~/ID=/){
 			$ftype = "Target";
 		}else{
