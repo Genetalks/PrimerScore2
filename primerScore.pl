@@ -125,7 +125,7 @@ if(defined $homology_check){
 ### primer design
 my ($rdis1, $fdis1, $rdis2, $fdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
 print "region range to design primers: ", join("\t", $fdis1.";".$rdis1, defined $fdis2? $fdis2.";".$rdis2:""),"\n";
-&Run("perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis1 -rdis $rdis1 -lnum $line_num -stm $stm -para $para_num -k $fkey -od $outdir/design > $outdir/design.log 2>&1", $sh);
+&Run("perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis1 -rdis $rdis1 -lnum $line_num -stm $stm -para $para_num -k $fkey -od $outdir/design", $sh);
 if($type eq "face-to-face:Region" || $type eq "back-to-back"){
 	my $dir_rev = "$outdir/design_rev";
 	`mkdir $dir_rev` unless(-d $dir_rev);
@@ -152,7 +152,7 @@ if($type eq "face-to-face:Region" || $type eq "back-to-back"){
 		die "No rdis2!\n";
 	}
 
-	&Run("perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis2 -rdis $rdis2 -lnum $line_num -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev > $dir_rev.log 2>&1", $sh);
+	&Run("perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -minl $min_len -maxl $max_len -mintm $min_tm -maxtm $max_tm -mingc $min_gc -maxgc $max_gc -scalel $scale_len -fdis $fdis2 -rdis $rdis2 -lnum $line_num -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev ", $sh);
 }
 
 
