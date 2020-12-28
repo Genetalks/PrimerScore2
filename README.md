@@ -11,7 +11,7 @@ The PrimerScore workflow includes several steps. First, PrimerScore reads in an 
 ## Requirements
 PrimerScore needs some dependencies which should be attached to file ./path.pm  
 perl  
-BWA 
+BWA  
 Samtools  
 Blat  
 Primer3  
