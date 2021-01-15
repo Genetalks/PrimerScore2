@@ -1,3 +1,167 @@
+#### return primer 5end position on the initial template, from postion on tid xxx-U/D
+## sm, em, strandm: the start, end, strand of template sequence(xxx-U/D), from "XP:Z:xxx"
+## strandp: usually "+", only when rev from primer(defined $frev, not used in primerScore pipeline) is "-", and when rev from template($tid=~/_rev/), is "+"
+## plen: primer length
+## epos: distance from primer 3end to target spot, "Dis" in xxx.primer.score
+sub get_chr_info{
+	my ($sm, $em, $strandm, $strandp, $plen, $epos)=@_;
+	my ($strand, $pos);
+	if($strandm eq "+"){
+		$strand = $strandp;       
+		if($strand eq "+"){ ## generic, SNP-U, template and primer are both "+"   ------->(-->) 
+			$pos = $em-$epos-$plen+1;
+			   ##                     <-|  |
+		}else{ ## rev from primer, -------->, not used in primerScore pipeline
+			$pos = $em-$epos;
+		}
+	}else{
+		$strand = $strandp eq "+"? "-": "+";
+		if($strand eq "-"){ ## generic, 1)SNP-D, 2)"face-to-face:Region" and "back-to-back"; template and primer are both "-". <------(<--)
+			$pos = $sm+$epos+$plen-1;
+			   ##                  |  |->
+		}else{ ## rev from primer, <--------, not used in primerScore pipeline
+			$pos = $sm+$epos;
+		}
+	}
+
+	return($pos, $strand);
+}
+
+sub get_poly_value{
+	my ($seq)=@_;
+	$seq = reverse $seq;
+	my @unit = split //, $seq;
+	
+	my $min_plen = 3; # min poly length
+	my @polys;
+	my $last = $unit[0];
+	my $poly = $unit[0];
+	my $dis = 0; #dis to the 3 end
+	for(my $i=1; $i<@unit; $i++){
+		if($unit[$i] eq $last){
+			$poly.=$unit[$i];
+		}else{
+			if(length($poly)>=$min_plen){
+				push @polys, [$poly, $dis];
+			}
+			$dis = $i;
+			$last = $unit[$i];
+			$poly=$last;
+		}
+	}
+	if(length($poly)>=$min_plen){
+		push @polys, [$poly, $dis];
+	}
+	
+	my $value1 = 0; ## end poly impact
+	my $pslen = 0;
+	my $psnum = 0;
+	for(my $i=0; $i<@polys; $i++){
+		my $l = length($polys[$i][0]);
+		my $d = $polys[$i][1];
+		$pslen+=$l;
+		$psnum++;
+		if($i==0){
+			#$value1+=($l-$min_plen+1)*(4-$d)*3; # end poly impact
+			$value1+=($l-$min_plen+1)*(6-$d)*2; # end poly impact
+		}
+	}
+	$value1 = $value1>=0? $value1: 0;
+
+	## other impact
+	my $value2 = 0.2*$pslen*(6-$psnum);
+	$value2 = $value2>=0? $value2: 0;
+	my $value = $value1 + $value2;
+	return $value;
+}
+
+sub GC_stat{
+        my ($p)=@_;
+        my @u = split //, $p;
+        my %stat;
+        $stat{"total"}{'G'}=0;
+        $stat{"total"}{'C'}=0;
+        $stat{5}{'G'}=0;
+        $stat{5}{'C'}=0;
+        $stat{3}{'G'}=0;
+        $stat{3}{'C'}=0;
+        my $total = scalar @u;
+        for(my $i=0; $i<$total; $i++){
+            if ($i<$GC5_num){
+                $stat{5}{$u[$i]}++;
+            }
+            if ($i>$total-$GC3_num-1){
+                $stat{3}{$u[$i]}++;
+            }
+            $stat{"total"}{$u[$i]}++;
+        }
+        my $GC = ($stat{"total"}{'G'}+$stat{"total"}{'C'})/$total;
+        my $GC5= ($stat{5}{'G'}+$stat{5}{'C'})/$GC5_num;
+        my $GC3 = ($stat{3}{'G'}+$stat{3}{'C'})/$GC3_num;
+        return ($GC, $GC5, $GC3);
+}
+
+sub GC{
+   	my @u=@_;
+	my $total = 0;
+	my $gc = 0;
+	foreach $b (@u){
+		$total++;
+		if($b eq 'G' || $b eq 'C' || $b eq "g" || $b eq "c"){
+			$gc++;
+		}
+	}
+	return($gc/$total);
+}
+
+sub GC_info_stat{
+    my ($p, $Wind_GC)=@_;
+    my @u = split //, $p;
+
+	my $GC = &GC(@u);
+	my ($GC5, $GC3);
+	my $min_GC=1;
+	my $max_GC=0;
+	for(my $i=0; $i<@u-$Wind_GC+1; $i++){
+		my @sub = @u[$i..$i+$Wind_GC-1];
+		my $sub_gc = &GC(@sub);
+		if($i==0){
+			$GC5 = $sub_gc;
+		}
+		if($i==@u-$Wind_GC){
+			$GC3 = $sub_gc;
+		}
+		if($sub_gc>$max_GC){
+			$max_GC = $sub_gc;
+		}
+		if($sub_gc<$min_GC){
+			$min_GC = $sub_gc;
+		}
+	}
+	$GC = sprintf "%0.2f", $GC;
+    return ($GC, $GC5, $GC3, $max_GC-$min_GC);
+}
+
+
+
+sub get_end_A{
+	my ($seq)=@_;
+	my @unit = split //, $seq;
+	my $Anum = 0;
+	my $rnum = 0;
+	my %class=(A=>"AT",T=>"AT",C=>"CG",G=>"CG",a=>"AT",t=>"AT",c=>"CG",g=>"CG");
+
+	my $endc = $class{$unit[-1]};;
+	for(my $i=@unit; $i>0; $i--){
+		last if($class{$unit[$i-1]} ne $endc);
+		$rnum++;
+	}
+	$Anum = $endc eq "AT"? $rnum: 0;
+	return ($Anum);
+}
+
+
+
 ## 打分
 ## score:满分
 sub score_single{
@@ -13,12 +177,12 @@ sub score_single{
 	my $s;
 	if($v<$minb){
 		$disl=$disl==0? 0.1: $disl;
-		$s = int($score * (1 - ($minb-$v)/$disl));
+		$s = $score * (1 - ($minb-$v)/$disl);
 	}elsif($v<=$maxb){
 		$s = $score;
 	}else{
 		$disr= $disr==0? 0.1: $disr;
-		$s = int($score * (1 - ($v-$maxb)/$disr));
+		$s = $score * (1 - ($v-$maxb)/$disr);
 	}
 	return $s;
 }

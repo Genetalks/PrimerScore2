@@ -47,7 +47,7 @@ my ($spos, @range_pos);
 if(defined $range_pos){
 	($spos, @range_pos) = split /,/, $range_pos;
 }
-my ($sdtm, @range_dtm) = (10,0,1,0,3);
+my ($sdtm, @range_dtm) = (10,0,0.5,0,2);
 
 my %score;
 my %pos;
@@ -121,12 +121,12 @@ if(defined $frev){
 	close(I);
 }
 
-open(O,">$outdir/$fkey.final.primer") or die $!;
+open(O,">$outdir/$fkey.final.result") or die $!;
 print O join("\n", @explain),"\n";
 if($type =~/face-to-face/){
-	print O "#Chr\tStart\tStrand\tID\tSeq\tLen\tDis\tProductSize\tScorePair\tScorePair_PosDisTm\tScore\t",join("\t", @title_info),"\n";
+	print O "#Chr\tStart\tStrand\tID\tSeq\tLen\tProductSize\tScorePair\tScorePair_PosDisTm\tScore\t",join("\t", @title_info),"\n";
 }else{
-	print O "#Chr\tStart\tStrand\tID\tSeq\tLen\tDis\tDisBetweenPair\tScorePair\tScorePair_PosDisTm\tScore\t",join("\t", @title_info),"\n";
+	print O "#Chr\tStart\tStrand\tID\tSeq\tLen\tDisBetweenPair\tScorePair\tScorePair_PosDisTm\tScore\t",join("\t", @title_info),"\n";
 }
 foreach my $tid(sort {$a cmp $b}keys %pos){
 	my @id1_sort = sort{$pos{$tid}{$a} <=> $pos{$tid}{$b}} keys %{$pos{$tid}};
@@ -172,8 +172,8 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 			next if($pos<$range_pos[2] || $pos>$range_pos[3]);
 			my $pos_end = $pos+$dend-$dstart; ## pos to the last target, maybe more targets, -->  |x x|
 			next if($pos_end > $range_pos[3]); ## pos out of the pos range
-			my $score_pos1 = &score_single($pos, $spos, @range_pos);
-			my $score_pos2 = &score_single($pos_end, $spos, @range_pos);
+			my $score_pos1 = int(&score_single($pos, $spos, @range_pos));
+			my $score_pos2 = int(&score_single($pos_end, $spos, @range_pos));
 			$score_pos = $score_pos1<$score_pos2? $score_pos1: $score_pos2;
 		}
 		
@@ -226,9 +226,9 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 			}elsif($type eq "face-to-face:Region" || $type eq "back-to-back"){
 				$dis = $pos2_sort[$j]+$plen{$id2}+$pos+$plen{$id1}-$tlength{$tid};
 			}
-			my $score_dis = &score_single($dis, $sdis, @range_dis);
+			my $score_dis = int(&score_single($dis, $sdis, @range_dis));
 			my $dtm = abs($tm{$id1}-$tm{$id2});
-			my $score_tm = &score_single($dtm, $sdtm, @range_dtm);
+			my $score_tm = int(&score_single($dtm, $sdtm, @range_dtm));
 			my $score = $score1+$score_pos+$score_tm+$score{$id2}+$score_dis;
 			$score_pair{$id1.",".$id2}=$score;
 			@{$score_pair_info{$id1.",".$id2}}=($score_pos, $score_dis, $score_tm);
@@ -308,9 +308,14 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 			($chrm2, $sm2, $em2, $strandm2)= exists $XP{$chrp2}? @{$XP{$chrp2}}: ($chrp2, 1, $tlength{$chrp2}, "+");
 		}
 		($pos2, $strand2)=&get_chr_info($sm2, $em2, $strandm2, $strandp2, $plen2, $epos2);
-
-		print O join("\t", $chr, $pos1, $strand1, $id1_new, $seq1, $plen1, $epos1, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info1[4..$#info1]),"\n";
-		print O join("\t", $chr, $pos2, $strand2, $id2_new, $seq2, $plen2, $epos2, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info2[4..$#info2]),"\n";
+		if($type eq "Nested"){ ## --> P1
+			                   ##  --> P2
+			print O join("\t", $chr, $pos2, $strand2, $id1_new, $seq2, $plen2, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info2[4..$#info2]),"\n";
+			print O join("\t", $chr, $pos1, $strand1, $id2_new, $seq1, $plen1, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info1[4..$#info1]),"\n";
+		}else{
+			print O join("\t", $chr, $pos1, $strand1, $id1_new, $seq1, $plen1, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info1[4..$#info1]),"\n";
+			print O join("\t", $chr, $pos2, $strand2, $id2_new, $seq2, $plen2, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info2[4..$#info2]),"\n";
+		}
 	}
 }
 close(O);
@@ -322,30 +327,6 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 # sub function
 # ------------------------------------------------------------------
-sub get_chr_info{
-	my ($sm, $em, $strandm, $strandp, $plen, $epos)=@_;
-	my ($strand, $pos);
-	if($strandm eq "+"){
-		$strand = $strandp;       
-		if($strand eq "+"){ ## generic, SNP-U, template and primer are both "+"   ------->(-->) 
-			$pos = $em-$epos-$plen+1;
-			   ##                     <-|  |
-		}else{ ## rev from primer, -------->, not used in primerScore pipeline
-			$pos = $em-$epos;
-		}
-	}else{
-		$strand = $strandp eq "+"? "-": "+";
-		if($strand eq "-"){ ## generic, 1)SNP-D, 2)"face-to-face:Region" and "back-to-back"; template and primer are both "-". <------(<--)
-			$pos = $sm+$epos+$plen-1;
-			   ##                  |  |->
-		}else{ ## rev from primer, <--------, not used in primerScore pipeline
-			$pos = $sm+$epos;
-		}
-	}
-
-	return($pos, $strand);
-}
-
 sub AbsolutePath
 {		#获取指定目录或文件的决定路径
 		my ($type,$input) = @_;
