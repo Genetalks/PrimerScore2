@@ -81,6 +81,7 @@ close(I);
 
 my %tlength;
 my %XP;
+my %target;
 open(F, $ftm) or die $!;
 $/=">";
 while(<F>){
@@ -92,11 +93,21 @@ while(<F>){
 	$tlength{$id}=length $seq;
 
 	if($head=~/XP:Z:/){
-		my (undef, $xs, $xe, $xp)=split /\t/, $head;
+		my (undef, $xs, $xe, $xp, $xi)=split /\t/, $head;
 		$xs=~s/XS:i://;
 		$xe=~s/XE:i://;
+		$xi=~s/XI:Z://;
 		my ($strand, $chr, $s, $e)=$xp=~/XP:Z:([+-])(\S+):(\d+)-(\d+)/; #>NF2-401-U      XS:i:1  XE:i:1  XP:Z:+chr22:30038027-30038227   XD:Z:NF2,+,401,COSM4414719;
 		@{$XP{$id}}=($chr, $s, $e, $strand, $xs, $xe);
+		my @targets=split /;/,$xi;
+		@{$target{"tem"}{$id}}=@targets;
+		foreach my $t(@targets){
+			$id=~s/-[UD]//;
+			$target{"id"}{$t}=$id;
+		}
+	}else{
+		@{$target{"tem"}{$id}}=($id);
+		$target{"id"}{$id}=$id;
 	}
 }
 $/="\n";
@@ -128,6 +139,7 @@ if($type =~/face-to-face/){
 }else{
 	print O "#Chr\tStart\tStrand\tID\tSeq\tLen\tDisBetweenPair\tScorePair\tScorePair_PosDisTm\tScore\t",join("\t", @title_info),"\n";
 }
+my %success;
 foreach my $tid(sort {$a cmp $b}keys %pos){
 	my @id1_sort = sort{$pos{$tid}{$a} <=> $pos{$tid}{$b}} keys %{$pos{$tid}};
 	my @pos1_sort = sort{$a<=>$b} values %{$pos{$tid}};
@@ -138,6 +150,9 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 	if(exists $XP{$tid}){ ## template by get_template.pl
 		($dstart, $dend)=@{$XP{$tid}}[4..5];
 		my ($tid_rmUD) = $tid=~/(\S+)-[UD]/;
+		if(!exists $XP{$tid_rmUD."-U"} || !exists $XP{$tid_rmUD."-D"}){
+			print "No template:", $tid_rmUD,"-U/D\n";
+		}
 		my ($chr1, $s1, $e1, $strand1) = @{$XP{$tid_rmUD."-U"}};
 		my ($chr2, $s2, $e2, $strand2) = @{$XP{$tid_rmUD."-D"}};
 		$dis_UD = $s2-$e1 -1;
@@ -146,8 +161,8 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 	if($type eq "face-to-face:SNP"){ ## target
 		my $tid2 = $tid;
 		if($tid=~/\-U$/){$tid2=~s/\-U/\-D/;}elsif($tid=~/\-D$/){$tid2=~s/\-D/\-U/;}
-		if(!exists $pos{$tid2}){
-			print "Wrong: No corresponding temlate ID $tid2 for face_to_face primer, please Check!\n";
+		if(!exists $pos{$tid2}){ ##
+			print "Warn: No evaluated successfully candidate primers for temlate ID $tid2, please Check!\n";
 			next;
 		}
 		@id2_sort = sort{$pos{$tid2}{$a} <=> $pos{$tid2}{$b}} keys %{$pos{$tid2}};
@@ -308,6 +323,9 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 			($chrm2, $sm2, $em2, $strandm2)= exists $XP{$chrp2}? @{$XP{$chrp2}}: ($chrp2, 1, $tlength{$chrp2}, "+");
 		}
 		($pos2, $strand2)=&get_chr_info($sm2, $em2, $strandm2, $strandp2, $plen2, $epos2);
+		foreach my $t(@{$target{"tem"}{$chrp1}}){
+			$success{$t}=1;
+		}
 		if($type eq "Nested"){ ## --> P1
 			                   ##  --> P2
 			print O join("\t", $chr, $pos2, $strand2, $id1_new, $seq2, $plen2, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info2[4..$#info2]),"\n";
@@ -319,6 +337,20 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 	}
 }
 close(O);
+
+## check failed target
+open(O, ">$outdir/$fkey.design.status") or die $!;
+print O "#TargetID\tPrimerID\tStatus\n";
+foreach my $t(sort {$a cmp $b} keys %{$target{"id"}}){
+	if(exists $success{$t}){
+		print O join("\t", $t, $target{"id"}{$t}, "Successful"),"\n";
+	}else{
+		print O join("\t", $t, $target{"id"}{$t}, "Failed"),"\n";
+		print "Warn: $t design failed!\n";
+	}
+}
+close(O);
+
 
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";

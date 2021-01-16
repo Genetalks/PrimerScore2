@@ -59,6 +59,7 @@ my $ftype;
 		$ftype ="VCF";
 	}
 }
+my %target;
 open(T, $ftarget) or die $!;
 while (<T>){
 	chomp;
@@ -88,6 +89,7 @@ while (<T>){
 
 	push @{$target_start{$chr}{$s}},[$id];
 	push @{$target_end{$chr}{$e}}, [$id];
+	@{$target{$id}}=($s, $e);
 }
 close (T);
 
@@ -103,6 +105,8 @@ if(defined $UD_devide){
 }else{
 	open ($out{"U"}, ">$outdir/$fkey.template.fa") or die $!;
 }
+my %tem_target;
+my %tseq;
 foreach my $chr(sort {$a cmp $b} keys %target_start){
 	my @merge_region;
 	my @merge_id = ();
@@ -116,10 +120,76 @@ foreach my $chr(sort {$a cmp $b} keys %target_start){
 	my @e_group = &grouping_by_pos($Max_Dis, $Max_Group_Len, \@e_sort);
 
 	## get template seq .fa
-	get_template_seq(\%out, \@s_group, $target_start{$chr}, $chr, "Start");
-	get_template_seq(\%out, \@e_group, $target_end{$chr}, $chr, "End");
+	get_template_seq(\%tem_target, \%tseq, \@s_group, $target_start{$chr}, $chr, "Start");
+	get_template_seq(\%tem_target, \%tseq, \@e_group, $target_end{$chr}, $chr, "End");
 }
 
+## check target template-U and template-D are consistant, maybe not when indel is too long
+foreach my $oid(sort{$a cmp $b}keys %target){
+	my $tidU = $tem_target{"tar"}{$oid}{"U"};
+	my $tidD = $tem_target{"tar"}{$oid}{"D"};
+	next if($tidU eq $tidD);
+	
+	my @idsU=split /\|/, $tidU;
+	my @idsD=split /\|/, $tidD;
+	my %idsU;
+	foreach my $id(@idsU){
+		$idsU{$id}=1;
+	}
+	my @gr;
+	my $tidnew=$oid;
+	foreach my $id(@idsD){
+		if(exists $idsU{$id}){
+			push @gr, $id;
+			$tem_target{"tar"}{$id}{"U"}=$tidnew;
+			$tem_target{"tar"}{$id}{"D"}=$tidnew;
+			delete $tem_target{"tem"}{$tidU}{"U"}{$id};
+			delete $tem_target{"tem"}{$tidD}{"D"}{$id};
+			$tem_target{"tem"}{$tidnew}{"U"}{$id}=1;
+			$tem_target{"tem"}{$tidnew}{"D"}{$id}=1;
+		}
+	}
+	@{$tseq{$tidnew}{"U"}}=@{$tseq{$tidU}{"U"}};
+	@{$tseq{$tidnew}{"D"}}=@{$tseq{$tidD}{"D"}};
+}
+
+foreach my $tid(sort {$a cmp $b} keys %{$tem_target{"tem"}}){
+	my @oidU=sort{$a cmp $b} keys %{$tem_target{"tem"}{$tid}{"U"}};
+	my @oidD=sort{$a cmp $b} keys %{$tem_target{"tem"}{$tid}{"D"}};
+	next if(scalar @oidU==0);
+	#my $tidU=join("|", @oidU);
+	#my $tidD=join("|", @oidD);
+	my $tidU=$oidU[0];
+	my $tidD=$oidD[0];
+	if($tidU ne $tidD){
+		die "U target ids $tidU are not consitant with D target ids $tidD!\n";
+	}
+
+	my @s;
+	my @e;
+	foreach my $id(@oidU){
+		push @s, $target{$id}->[0];
+		push @e, $target{$id}->[1];
+	}
+	my @ssort = sort{$a<=>$b}@s;
+	my @esort = sort{$a<=>$b}@e;
+	my ($Us, $Ue) = ($Min_Dis_Detect, $ssort[-1]-$ssort[0]+$Min_Dis_Detect);
+	my ($Ds, $De) = ($Min_Dis_Detect, $esort[-1]-$esort[0]+$Min_Dis_Detect);
+	my ($pos_infoU, $seqU)=@{$tseq{$tid}{"U"}};
+	my ($pos_infoD, $seqD)=@{$tseq{$tid}{"D"}};
+	my $id_str = join(";", @oidU);
+	if(!defined $UD_devide){
+		print {$out{"U"}} ">$tidU-U\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
+		print {$out{"U"}} $seqU,"\n";
+		print {$out{"U"}} ">$tidU-D\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
+		print {$out{"U"}} $seqD,"\n";
+	}else{
+		print {$out{"U"}} ">$tidU\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
+		print {$out{"U"}} $seqU,"\n";
+		print {$out{"D"}} ">$tidU\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
+		print {$out{"D"}} $seqD,"\n";
+	}
+}
 close($out{"U"});
 if(defined $UD_devide){
 	close($out{"D"});
@@ -133,12 +203,11 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 
 sub get_template_seq{
-	my ($aout, $agroups, $atarget, $chr, $mode)=@_;
+	my ($atemp_target, $aseq, $agroups, $atarget, $chr, $mode)=@_;
 	my @groups = @{$agroups};
 	
 	for(my $i=0; $i<@groups; $i++){
-		my $info;
-		my $id_str;
+		my @ids;
 		for(my $j=0; $j<@{$groups[$i]}; $j++){
 			if(!exists $atarget->{$groups[$i][$j]}){
 				print $groups[$i][$j],"\n";
@@ -146,16 +215,13 @@ sub get_template_seq{
 			}
 			my @target_info = @{$atarget->{$groups[$i][$j]}};
 			for (my $k=0; $k<@target_info; $k++){
-				$id_str.=$target_info[$k][0].";";
-				$info .= join(",",@{$target_info[$k]}).";";
+				push @ids, $target_info[$k][0];
 			}
 		}
 
-		## get id 
+		## get id
 		my $pos = $groups[$i][0];
 		my $pos_end = $groups[$i][-1];
-		my ($ds, $de) = ($Min_Dis_Detect, $pos_end-$pos+$Min_Dis_Detect);
-
 		my ($start, $end);
 		my $flank;
 		if ($mode eq "Start"){
@@ -186,15 +252,13 @@ sub get_template_seq{
 		my $pos_info = $strand."$chr:$start-$end";
 		
 		## output
-		my $id = $atarget->{$groups[$i][0]}->[0]->[0];
-		if(!defined $UD_devide){
-			$id.="-".$flank;
-			print {$aout->{"U"}} ">$id\tXS:i:$ds\tXE:i:$de\tXP:Z:$pos_info\tXI:Z:$id_str\tXD:Z:$info\n";
-			print {$aout->{"U"}} $seq,"\n";
-		}else{
-			print {$aout->{$flank}} ">$id\tXS:i:$ds\tXE:i:$de\tXP:Z:$pos_info\tXI:Z:$id_str\tXD:Z:$info\n";
-			print {$aout->{$flank}} $seq,"\n";
+		#push @{$target{$s}},[$id];
+		my $tid = join("|", @ids);
+		foreach my $id(@ids){
+			$atemp_target->{"tem"}{$tid}{$flank}{$id}=1;
+			$atemp_target->{"tar"}{$id}{$flank}=$tid;
 		}
+		@{$aseq->{$tid}{$flank}}=($pos_info, $seq);
 	}
 	
 }

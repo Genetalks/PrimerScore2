@@ -267,6 +267,7 @@ sub caculate_rdis{
 		if($posnum > $pnum*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
 			die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! Please narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
 		}
+		$min=$min<$maxp? $maxp: $min;
 		push @{$region[$index]}, ($min, $max, $step0);
 	}else{
 		if(!defined $averTLen){
@@ -291,6 +292,7 @@ sub caculate_rdis{
 				}
 			}
 			($fdis1, $fdis2) = (3, 3);
+			$min=$min<0? 0: $min;
 			push @{$region[0]}, ($min, $max, $step0);
 			push @{$region[1]}, ($min, $max, $step0);
 		}else{ ## Full-covered only support "face-to-face:Region"

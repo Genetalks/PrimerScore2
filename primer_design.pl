@@ -167,8 +167,9 @@ if($step ==2){
 		print SH $cmd,"\n";
 	}
 	close (SH);
-	my $timeout = 400;
-	Run("parallel -j $para_num --timeout $timeout < $outdir/$fkey.primer.evalue.sh", 1);
+#	my $timeout = 400;
+#	Run("parallel -j $para_num --timeout $timeout < $outdir/$fkey.primer.evalue.sh", 1);
+	Run("parallel -j $para_num  < $outdir/$fkey.primer.evalue.sh", 1);
 	
 	##cat
 	my @dirs = glob("$outdir/split_*");
@@ -198,17 +199,17 @@ if($step ==2){
 	}
 	close(F);
 	my %tid;
-	open(FB, ">$outdir/$fkey.primer.filtered_by_timeout.list") or die $!;
-	foreach my $id(keys %seq){
-		my ($tid, $len, $dis)=$id=~/(\S+)-(\d+)-(\d+)$/;
-		$tid{$tid}{"Total"}++;
-		if(exists $suc{$id}){
-			$tid{$tid}{"Suc"}++;
-		}elsif(!exists $filter{$id}){
-			print FB join("\t", $id, $seq{$id}),"\n";
-		}
-	}
-	close(FB);
+#	open(FB, ">$outdir/$fkey.primer.filtered_by_timeout.list") or die $!;
+#	foreach my $id(keys %seq){
+#		my ($tid, $len, $dis)=$id=~/(\S+)-(\d+)-(\d+)$/;
+#		$tid{$tid}{"Total"}++;
+#		if(exists $suc{$id}){
+#			$tid{$tid}{"Suc"}++;
+#		}elsif(!exists $filter{$id}){
+#			print FB join("\t", $id, $seq{$id}),"\n";
+#		}
+#	}
+#	close(FB);
 	open(FO, ">$outdir/$fkey.primer_design.summary") or die $!;
 	print FO "TemplateID\tTotalCandidate\tEvaluatedSuccess\tPrimerDesignedSuccessOrNot\n";
 	foreach my $tid(keys %tid){
