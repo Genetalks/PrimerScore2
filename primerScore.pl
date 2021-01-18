@@ -25,10 +25,10 @@ my $opt_tm_probe=75;
 
 my $rfloat = 0.2;
 my $dis_aver = 500;
-my $dis_range="100,150,70,200"; ## pair dis range(best_min, best_max, min, max)
+my $size_range="100,150,70,200"; ## product size range(best_min, best_max, min, max)
 my $pos_range; ## pos range(best_min, best_max, min, max)
 my $range_len="18,28,2";
-my $frag_range; ## fragment size range, required when design non face-to-face primer
+my $dis_range; ## distance between primers range, required when design non face-to-face primer
 my $type = "face-to-face:SNP";
 my $ctype = "Single";
 my $onum = 3;
@@ -52,7 +52,7 @@ GetOptions(
 				"opttmp:s"=>\$opt_tm_probe,
 				"rlen:s"=>\$range_len,
 				"rdis:s"=>\$dis_range,
-				"rfrg:s"=>\$frag_range,
+				"rsize:s"=>\$size_range,
 				"rpos:s"=>\$pos_range,
 
 				"type:s"=>\$type,
@@ -82,10 +82,10 @@ if(defined $probe && $max_len<35){
 }
 
 if($type=~/face-to-face/){
-	$frag_range = $dis_range;
+	$dis_range = $size_range;
 }else{
-	if(!defined $frag_range){
-		die "Wrong: -rfrg must be given when primer type is not face-to-face!\n";
+	if(!defined $dis_range){
+		die "Wrong: -rdis must be given when primer type is not face-to-face!\n";
 	}
 }
 
@@ -199,7 +199,7 @@ my $dir_re = "$outdir/re_evalue";
 &Run("less $outdir/$fkey.final.result |perl -ne '{chomp; \@a=split; if(\$_=~/-P1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/-P2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
 my @diss = split /,/, $dis_range;
 my $extend = $diss[-1]*2;
-$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -k $fkey\_pair --NoFilter -type $stype -rdis $frag_range -opttm $opt_tm -stm $stm -od $dir_re";
+$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -k $fkey\_pair --NoFilter -type $stype -rdis $size_range -opttm $opt_tm -stm $stm -od $dir_re";
 &Run($cmd, $sh);
 
 
@@ -413,9 +413,9 @@ Usage:
   -opttm    <int>     optimal tm of primer, [$opt_tm]
   -opttmp   <int>     optimal tm of probe, [$opt_tm_probe]
   -rlen     <str>     oligo len range and scale (start,end,scale), start <= end, [$range_len]
-  -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it SNP file
-  -rdis     <str>     distance range between pair primers, (opt_min, opt_max, min, max) separted by ",", [$dis_range]
-  -rfrg     <str>     fragment size range, required when -type is not "face-to-face", (opt_min, opt_max, min, max) separted by ",", optional
+  -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it is SNP file
+  -rsize    <str>     product size range (opt_min, opt_max, min, max), separted by ",", [$size_range]
+  -rdis     <str>     distance range between pair primers, required when -type is not "face-to-face", (opt_min, opt_max, min, max) separted by ",", optional
 
   ### 
   -type   <str>     primer type, "face-to-face:SNP", "face-to-face:Region", "back-to-back", "Nested", ["face-to-face:SNP"]
