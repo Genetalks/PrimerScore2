@@ -14,6 +14,7 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 our $REF_HG19;
+our $SAMTOOLS;
 my ($fIn,$fkey,$outdir);
 my ($ftemplate, $fpsl);
 my $fref = $REF_HG19;
@@ -85,7 +86,7 @@ while(<I>){
 	next if($ori eq $ori0 && $chr eq $chr0 && $s==$s0-1 && $e==$e0);
 	
 	$s++;
-	my $fa=`samtools faidx $fref $chr:$s-$e`;
+	my $fa=`$SAMTOOLS faidx $fref $chr:$s-$e`;
 	my ($head, @line) = split /\n/, $fa;
 	my $seq = join("", @line);
 	$seq = uc($seq);
@@ -93,7 +94,7 @@ while(<I>){
 		$seq=~tr/ATCG/TAGC/;
 		$seq=reverse $seq;
 	}
-	my $minfo = `perl /home/zenghp/bin/sw.pl $pseq{$pid} $seq -print_overall`;
+	my $minfo = `perl $Bin/sw.pl $pseq{$pid} $seq -print_overall`;
 	#print "perl /home/zenghp/bin/sw.pl -print_overall $pseq{$pid} $seq\n";
 	chomp $minfo;
 	my @minfo = split /\n/, $minfo;

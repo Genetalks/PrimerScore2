@@ -14,6 +14,7 @@ my $version="2.0";
 # GetOptions
 # ------------------------------------------------------------------
 our $REF_HG19;
+our $SAMTOOLS;
 my ($ftarget,$fkey,$outdir);
 my $Max_Dis = 20;
 my $vcf;
@@ -77,7 +78,7 @@ while (<T>){
 	}
 	## check ref base
 	if($ref ne "-"){
-		my $rinfo = `samtools faidx $fref $chr:$s-$e`;
+		my $rinfo = `$SAMTOOLS faidx $fref $chr:$s-$e`;
 		my ($id, @seq)=split /\n/, $rinfo;
 		my $seq = join("", @seq);
 		$seq = uc($seq);
@@ -238,7 +239,7 @@ sub get_template_seq{
 		}
 			
 		## get seq
-		my $seq_info = `samtools faidx $fref $chr:$start-$end`;
+		my $seq_info = `$SAMTOOLS faidx $fref $chr:$start-$end`;
 		my @line = split /\n/, $seq_info;
 		shift @line;
 		my $seq = join("", @line);

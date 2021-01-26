@@ -23,6 +23,8 @@ my $nohead;
 my $thread = 3;
 our $PATH_PRIMER3;
 our $REF_HG19;
+our $SAMTOOLS;
+our $BWA;
 my $fdatabase = $REF_HG19;
 my $NoFilter;
 my $len_map=20; ##bwa result is the most when 20bp
@@ -203,7 +205,7 @@ if(!defined $NoSpecificity){
 		### bwa
 		my $fa_primer = "$outdir/$fkey.primer_$pn.fa";
 		
-		Run("bwa mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
+		Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
 	#	Run("bwa mem -D 0 -k 9 -t 4 -c 5000000 -y 100000 -T 12 -B 1 -O 2,2 -L 1,1 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
 		
 		### read in sam
@@ -539,7 +541,7 @@ sub get_database_seq_back{
 	}
 	$s=$s>1? $s: 1;
 	# get seq
-	my $rout = `samtools faidx $fref $chr:$s-$e`;
+	my $rout = `$SAMTOOLS faidx $fref $chr:$s-$e`;
 	chomp $rout;
 	my ($id, @seq)=split /\n/, $rout;
 	my $seq = join("", @seq);
@@ -567,7 +569,7 @@ sub get_database_seq_back_old{
 #	$s=$s>1? $s: 1;
 #
 #	# get seq
-#	my $rout = `samtools faidx $fref $chr:$s-$e`;
+#	my $rout = `$SAMTOOLS faidx $fref $chr:$s-$e`;
 #	chomp $rout;
 #	my ($id, @seq)=split /\n/, $rout;
 #	my $seq = join("", @seq);
@@ -589,7 +591,7 @@ sub get_database_seq_back_old{
 		}
 		$bs=$bs>1? $bs: 1;
 		# get seq
-		my $rout = `samtools faidx $fref $chr:$bs-$be`;
+		my $rout = `$SAMTOOLS faidx $fref $chr:$bs-$be`;
 		chomp $rout;
 		my ($id, @seq)=split /\n/, $rout;
 		my $seq = join("", @seq);
@@ -623,7 +625,7 @@ sub get_database_seq{
 	$s=$s>1? $s: 1;
 
 	# get seq
-	my $rout = `samtools faidx $fref $chr:$s-$e`;
+	my $rout = `$SAMTOOLS faidx $fref $chr:$s-$e`;
 	chomp $rout;
 	my ($id, @seq)=split /\n/, $rout;
 	my $seq = join("", @seq);
@@ -666,7 +668,7 @@ sub ntthal_map{
 	}
 	#print join("\t", $pos, $is_reverse, $start, $end),"\n";
 	$start=$start>1? $start: 1;
-	my $seq_info = `samtools faidx $fdatabase $chr:$start-$end`;
+	my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
 	my @seq_info = split /\n/, $seq_info;
 	shift @seq_info;
 	my $seq = join("",@seq_info);
@@ -691,7 +693,7 @@ sub ntthal_map{
 	shift @line;	
 	if(!defined $line[1]){ ## just print and return
 		print join("\t",$primer_seq, $chr, $pos, $is_reverse, $fdatabase),"\n";
-		print "samtools faidx $fdatabase $chr:$start-$end\n";
+		print "$SAMTOOLS faidx $fdatabase $chr:$start-$end\n";
 		print "$ntthal -path $primer3_config -a END1 -s1 $primer_seq -s2 $seq\n";
 		return (-1,-1,-1,-1);
 	}
