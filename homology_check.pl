@@ -44,18 +44,23 @@ print $sh,"\n";
 
 open(I, $ftemplate) or die $!;
 my %pseq;
-my %pos;
+my %idout;
 $/=">";
 while(<I>){
 	chomp;
 	next if(/^$/);
 	my ($head, @seq)=split /\n/,$_;
 	my $seq=join("", @seq);
-	my ($id, undef, undef, $xp)=split /\s+/, $head;
-	my ($ori, $chr, $s, $e)=$xp=~/XP:Z:([+-])(\w+):(\d+)-(\d+)/;
+	my ($id)=split /\s+/, $head;
 	$seq=uc($seq);
 	$pseq{$id}=$seq;
-	@{$pos{$id}}=($ori, $chr, $s, $e);
+	$idout{$id}=$id;
+	if(/XP:Z:/){
+		my ($ori, $chr, $s, $e)=$head=~/XP:Z:([+-])(\w+):(\d+)-(\d+)/;
+		my $idn = $id."(".$ori.$chr.":".$s."-".$e.")";
+		$idout{$id}=$idn;
+	}
+
 }
 close(I);
 
@@ -82,8 +87,7 @@ while(<I>){
 #	my ($match, $mismatch, $gap1, $gap2, $ori, $pid, $len, $ps, $pe, $chr, $s, $e)=(split /\s+/, $_)[0,1,4,6,8,13,14,15,16,9,11,12]; #v2
 #	next if($match == $len && $mismatch==0 && $gap1==0 && $gap2==0); 
 	next if($match<$len*$min_ratio || $gap1>$max_gap_num || $gaplen1>$max_gap_len || $gap2>$max_gap_num || $gaplen2>$max_gap_len);
-	my ($ori0, $chr0, $s0, $e0)=@{$pos{$pid}};
-	next if($ori eq $ori0 && $chr eq $chr0 && $s==$s0-1 && $e==$e0);
+#	next if($ori eq $ori0 && $chr eq $chr0 && $s==$s0-1 && $e==$e0);
 	
 	$s++;
 	my $fa=`$SAMTOOLS faidx $fref $chr:$s-$e`;
@@ -99,8 +103,7 @@ while(<I>){
 	chomp $minfo;
 	my @minfo = split /\n/, $minfo;
 
-	my $pos0 = $ori0.$chr0.":".$s0."-".$e0;
-	print O ">",join("\t",$pid."(".$pos0.")",$ps,$pe, $chr.$ori, $s, $e, $match, $mismatch, $gap1, $gaplen1, $gap2, $gaplen2),"\n";
+	print O ">",join("\t",$idout{$pid},$ps,$pe, $chr.$ori, $s, $e, $match, $mismatch, $gap1, $gaplen1, $gap2, $gaplen2),"\n";
 	print O join("\n", @minfo[0..2]),"\n";
 }
 close(I);
