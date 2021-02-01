@@ -173,7 +173,7 @@ foreach my $id (sort{$a cmp $b} keys %primer){
 	foreach my $s(sort {$b<=>$a} keys %score){
 		foreach my $proid(@{$score{$s}}){
 			$n++;
-			last if($n>3);
+			last if($n>1);
 			my ($chr, $pos, $strand, $seq, $len, $tm, @info)=@{$probe_info{$proid}}; 
 			my $pidnew = $id."-Probe";
 			my ($dis, $score, $score_info)=@info[-3,-2,-1];

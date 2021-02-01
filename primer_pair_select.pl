@@ -63,7 +63,7 @@ while(<I>){
 		push @explain, $_;
 		next;
 	}elsif(/^#/){
-		(undef, undef, undef, undef, undef, undef, @title_info) = split;
+		(undef, undef, undef, undef, undef, undef, @title_info) = split /\t/, $_;
 		next;
 	}
 
@@ -118,8 +118,8 @@ if(defined $frev){
 	open(I, $frev) or die $!;
 	while(<I>){
 		chomp;
-		next if(/^$/);
-		my @unit = split;
+		next if(/^$/ || /^#/);
+		my @unit = split /\t/, $_;
 		my ($id, $tid, $len, $pos, $tm, $score)=@unit[0,1,2,3,7,5];
 		$score{$id}=$score;
 		$plen{$id}=$len;
