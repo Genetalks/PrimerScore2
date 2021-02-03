@@ -19,6 +19,7 @@ my ($fprimer, $fprobes, $ftemplate);
 my $opt_tm = 70;
 my $min_len = 18;
 my $max_len = 45;
+my $nprobe=1;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"ip:s"=>\$fprimer,
@@ -28,6 +29,7 @@ GetOptions(
 				"opttm:s"=>\$opt_tm,
 				"minl:s"=>\$min_len,
 				"maxl:s"=>\$max_len,
+				"num:s"=>\$nprobe,
 				"k:s"=>\$fkey,
 				"od:s"=>\$outdir,
 				) or &USAGE;
@@ -173,7 +175,7 @@ foreach my $id (sort{$a cmp $b} keys %primer){
 	foreach my $s(sort {$b<=>$a} keys %score){
 		foreach my $proid(@{$score{$s}}){
 			$n++;
-			last if($n>1);
+			last if($n>$nprobe);
 			my ($chr, $pos, $strand, $seq, $len, $tm, @info)=@{$probe_info{$proid}}; 
 			my $pidnew = $id."-Probe";
 			my ($dis, $score, $score_info)=@info[-3,-2,-1];
@@ -257,6 +259,7 @@ Usage:
   -k  <str>	   Key of output file, forced
 
   -opttm <int>  optimal tm of probe, [$opt_tm]
+  -num   <int>  designed probes number, [$nprobe]
   -minl  <int>  min length of probe, [$min_len]
   -maxl  <int>  max length of probe, [$max_len]
   -od <dir>	   Dir of output file, default ./

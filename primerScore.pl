@@ -35,6 +35,7 @@ my $onum = 3;
 my ($dimer_check, $homology_check, $SNP_check);
 my $averTLen;
 my $probe;
+my $regions;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
@@ -50,6 +51,7 @@ GetOptions(
 				## primer design
 				"opttm:s"=>\$opt_tm,
 				"opttmp:s"=>\$opt_tm_probe,
+				"regions:s"=>\$regions,
 				"rlen:s"=>\$range_len,
 				"rdis:s"=>\$dis_range,
 				"rsize:s"=>\$size_range,
@@ -128,7 +130,21 @@ if(defined $homology_check){
 	&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fref -k $fkey -od $outdir/homology_check", $sh);
 }
 ### primer design
-my ($rdis1, $fdis1, $rdis2, $fdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
+my ($rdis1, $fdis1, $rdis2, $fdis2);
+if(defined $regions){
+	my @reg=split /;/, $regions;
+	($fdis1, $rdis1)=$reg[0]=~/([3,5]):(\S+)/;
+	## check 
+	if($type eq "face-to-face:Region" || $type eq "back-to-back"){
+		if(scalar @reg==1){ 
+			die "Wrong: No rdis2! -regions $regions must with two region seperate by semicolon when type is face-to-face:Region and back-to-back!";
+		}else{
+			($fdis2, $rdis2)=$reg[1]=~/([3,5]):(\S+)/;
+		}
+	}
+}else{
+	($rdis1, $fdis1, $rdis2, $fdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
+}
 print "region range to design primers: ", join("\t", $fdis1.";".$rdis1, defined $fdis2? $fdis2.";".$rdis2:""),"\n";
 my ($stype)=split /:/, $type;
 my $dcmd = "perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -type $stype -opttm $opt_tm -rlen $range_len -fdis $fdis1 -rdis $rdis1 -stm $stm -para $para_num -k $fkey -od $outdir/design";
@@ -291,7 +307,8 @@ sub caculate_rdis{
 					die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design!Please magnify -rdis $dis_range!\n";
 				}
 			}
-			($fdis1, $fdis2) = (3, 3);
+			#($fdis1, $fdis2) = (3, 3);
+			($fdis1, $fdis2) = (5, 3); ## fdis1: count from left on forward template; fdis2: count from right on backward template.
 			$min=$min<0? 0: $min;
 			push @{$region[0]}, ($min, $max, $step0);
 			push @{$region[1]}, ($min, $max, $step0);
@@ -303,6 +320,7 @@ sub caculate_rdis{
 	my $rdis2 = scalar @region==2? join(",", @{$region[1]}): "";
 	return ($rdis1, $fdis1, $rdis2, $fdis2);
 }
+
 sub Run{
     my ($cmd, $sh, $nodie)=@_;
 	print $sh $cmd,"\n";
@@ -416,6 +434,7 @@ Usage:
   -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it is SNP file
   -rsize    <str>     product size range (opt_min, opt_max, min, max), separted by ",", [$size_range]
   -rdis     <str>     distance range between pair primers, required when -type is not "face-to-face", (opt_min, opt_max, min, max) separted by ",", optional
+  -regions  <str>     interested regions of candidate primers walking on, format is "3/5:start,end,scale,start2,end2,scale2...", 3:count from primer right to template 3end, 5:count from primer left to template 5end; two regions seperated by ";" when type is face-to-face:Region and back-to-back; if not given, will caculate automatically, optional
 
   ### 
   -type   <str>     primer type, "face-to-face:SNP", "face-to-face:Region", "back-to-back", "Nested", ["face-to-face:SNP"]

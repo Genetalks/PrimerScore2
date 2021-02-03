@@ -104,20 +104,21 @@ if ($step == 1){
 		if(!defined $range_dis){
 			@rdis = (1, $tlen, int(($tlen/50)+1));
 		}
+		my @rdisc=@rdis;
 		if($format_dis == 5){ ## convert to format '3'
 			for(my $i=0; $i<@rdis; $i+=3){
 				my $e =$tlen-$rdis[$i]-$plen;
 				my $s =$tlen-$rdis[$i+1]-$plen;
-				$rdis[$i]=$s;
-				$rdis[$i+1]=$e;
+				$rdisc[$i]=$s;
+				$rdisc[$i+1]=$e;
 			}
 		}
-		for(my $r=0; $r<@rdis; $r+=3){
-			my ($min_dis, $max_dis) = ($rdis[$r], $rdis[$r+1]);
+		for(my $r=0; $r<@rdisc; $r+=3){
+			my ($min_dis, $max_dis) = ($rdisc[$r], $rdisc[$r+1]);
 			my $min_p = $min_dis-$dstart>0? $min_dis-$dstart: 0; ## dstart=1
 			my $max_p = $max_dis-$dend<$tlen? $max_dis-$dend: $tlen;
 			if($max_p < $min_p){
-				print "Wrong: max position < min position! maybe dend (XE:i:$dend) is too large, or -rdis range $range_dis is too narrow!\n";
+				print "Wrong: max position $max_p < min position $min_p! ($min_dis, $max_dis, $dstart, $dend) Maybe dend (XE:i:$dend) is too large, or -rdis range $range_dis is too narrow!\n";
 				die;
 			}
 			my $sdis = $rdis[$r+2];
@@ -167,9 +168,9 @@ if($step ==2){
 		print SH $cmd,"\n";
 	}
 	close (SH);
-#	my $timeout = 400;
-#	Run("parallel -j $para_num --timeout $timeout < $outdir/$fkey.primer.evalue.sh", 1);
-	Run("parallel -j $para_num  < $outdir/$fkey.primer.evalue.sh", 1);
+	my $timeout = 400;
+	Run("parallel -j $para_num --timeout $timeout < $outdir/$fkey.primer.evalue.sh", 1);
+#	Run("parallel -j $para_num  < $outdir/$fkey.primer.evalue.sh", 1);
 	
 	##cat
 	my @dirs = glob("$outdir/split_*");
