@@ -77,8 +77,6 @@ while(<I>){
 }
 close(I);
 
-
-
 my %tlength;
 my %XP;
 my %target;
@@ -223,9 +221,13 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 			$min_pos = $range_dis[2]-$pos-2*$plen{$id1}-$dis_UD; ## P2=dis-P1-L1-L2-D; use L1 instead L2 because of L2 unkown
 			$max_pos = $range_dis[3]-$pos-2*$plen{$id1}-$dis_UD; 
 		}elsif($type eq "face-to-face:Region" || $type eq "back-to-back"){
-			$min_pos = $range_dis[2]+ $tlength{$tid} - $pos - 2*$plen{$id1};
+			$min_pos = $range_dis[2]+ $tlength{$tid} - $pos - 2*$plen{$id1}; #P2=dis+L-P1-L1-L2
 			$max_pos = $range_dis[3]+ $tlength{$tid} - $pos - 2*$plen{$id1};
 		}
+		$min_pos=$min_pos<0? 0: $min_pos;
+		$max_pos=$max_pos>$tlength{$tid}? $tlength{$tid}: $max_pos;
+		next if($max_pos<$min_pos);
+
 		my $indexs = &binarySearch($min_pos, \@pos2_sort, ">=", 0, $#pos2_sort);
 		my $indexe = &binarySearch($max_pos, \@pos2_sort, "<=", 0, $#pos2_sort);
 		next if($indexs==-1 || $indexe==-1);
@@ -359,41 +361,6 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 # sub function
 # ------------------------------------------------------------------
-sub AbsolutePath
-{		#获取指定目录或文件的决定路径
-		my ($type,$input) = @_;
-
-		my $return;
-		if ($type eq 'dir')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-				chdir($input);
-				$return = `pwd`;
-				chomp $return;
-				chdir($pwd);
-		}
-		elsif($type eq 'file')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-
-				my $dir=dirname($input);
-				my $file=basename($input);
-				chdir($dir);
-				$return = `pwd`;
-				chomp $return;
-				$return .="\/".$file;
-				chdir($pwd);
-		}
-		return $return;
-}
-
-sub GetTime {
-	my ($sec, $min, $hour, $day, $mon, $year, $wday, $yday, $isdst)=localtime(time());
-	return sprintf("%4d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $day, $hour, $min, $sec);
-}
-
 
 sub USAGE {#
 	my $usage=<<"USAGE";

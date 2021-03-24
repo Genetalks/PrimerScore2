@@ -214,36 +214,6 @@ sub G_content{
 	}
 	return($is_G5, ($nc-$ng)/$n);
 }
-sub AbsolutePath
-{		#获取指定目录或文件的决定路径
-		my ($type,$input) = @_;
-
-		my $return;
-		if ($type eq 'dir')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-				chdir($input);
-				$return = `pwd`;
-				chomp $return;
-				chdir($pwd);
-		}
-		elsif($type eq 'file')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-
-				my $dir=dirname($input);
-				my $file=basename($input);
-				chdir($dir);
-				$return = `pwd`;
-				chomp $return;
-				$return .="\/".$file;
-				chdir($pwd);
-		}
-		return $return;
-}
-
 
 sub USAGE {#
 	my $usage=<<"USAGE";

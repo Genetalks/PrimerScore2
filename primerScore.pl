@@ -13,8 +13,8 @@ require "$Bin/path.pm";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-our ($VCF_dbSNP, $REF_HG19);
-my ($ftarget, $fkey,$outdir, $NoFilter);
+our ($VCF_dbSNP, $REF_HG19, $BLAT);
+my ($ftarget, $fkey,$outdir, $NoFilter, $NoCoverN);
 my $fref = $REF_HG19;
 my $fdatabase = $REF_HG19;
 my $step = 1;
@@ -35,7 +35,7 @@ my $onum = 3;
 my ($dimer_check, $homology_check, $SNP_check);
 my $averTLen;
 my $probe;
-my $regions;
+my ($regions, $regions_rev);
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
@@ -47,11 +47,13 @@ GetOptions(
 				"homology_check:s"=>\$homology_check,
 				"SNP_check:s"=>\$SNP_check,
 				"NoFilter:s"=>\$NoFilter,
+				"NoCoverN:s"=>\$NoCoverN,
 
 				## primer design
 				"opttm:s"=>\$opt_tm,
 				"opttmp:s"=>\$opt_tm_probe,
 				"regions:s"=>\$regions,
+				"regions_rev:s"=>\$regions_rev,
 				"rlen:s"=>\$range_len,
 				"rdis:s"=>\$dis_range,
 				"rsize:s"=>\$size_range,
@@ -66,12 +68,17 @@ GetOptions(
 
 				"stm:s"=>\$stm,
 				"para:s"=>\$para_num,
+				"step:s"=>\$step,
 				"od:s"=>\$outdir,
 				) or &USAGE;
 &USAGE unless ($ftarget and $fdatabase and $fkey);
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
+$ftarget=AbsolutePath("file", $ftarget);
+$fref=AbsolutePath("file", $fref);
+$fdatabase=AbsolutePath("file", $fdatabase);
+
 my ($score_dis, $score_pos)=(10,10);
 my ($min_len, $max_len, $scale_len)=split /,/, $range_len;
 my $choose_num = 5; ## for a primer, at least $choose_num primers can be selected as its pair.
@@ -111,6 +118,13 @@ if($head=~/^>/){
 		die "Wrong input target file: $ftarget\n";
 	}
 }
+if($type=~/Region/ && $ftype ne "fasta"){
+	die "Wrong: The template file $ftarget must be fasta file when -type $type.\n";
+}
+if($type=~/SNP/ && $ftype ne "SNP"){
+	die "Wrong: The template file $ftarget must be SNP file when -type $type.\n";
+}
+
 if($ftype eq "SNP"){
 	my $extend_len;
 	my @rdiss = split /,/, $dis_range;
@@ -125,119 +139,146 @@ if($ftype eq "SNP"){
 	$ftemplate = "$outdir/$fkey.template.fa";
 }
 
+
 ### homology check
-if(defined $homology_check){
-	&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fref -k $fkey -od $outdir/homology_check", $sh);
+if($step==1){
+	if(defined $homology_check){
+		&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fdatabase -k $fkey -od $outdir/homology_check", $sh);
+	}
+	$step++;
 }
 ### primer design
-my ($rdis1, $fdis1, $rdis2, $fdis2);
-if(defined $regions){
-	my @reg=split /;/, $regions;
-	($fdis1, $rdis1)=$reg[0]=~/([3,5]):(\S+)/;
-	## check 
-	if($type eq "face-to-face:Region" || $type eq "back-to-back"){
-		if(scalar @reg==1){ 
-			die "Wrong: No rdis2! -regions $regions must with two region seperate by semicolon when type is face-to-face:Region and back-to-back!";
-		}else{
-			($fdis2, $rdis2)=$reg[1]=~/([3,5]):(\S+)/;
-		}
-	}
-}else{
-	($rdis1, $fdis1, $rdis2, $fdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
-}
-print "region range to design primers: ", join("\t", $fdis1.";".$rdis1, defined $fdis2? $fdis2.";".$rdis2:""),"\n";
 my ($stype)=split /:/, $type;
-my $dcmd = "perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -type $stype -opttm $opt_tm -rlen $range_len -fdis $fdis1 -rdis $rdis1 -stm $stm -para $para_num -k $fkey -od $outdir/design";
-if(defined $NoFilter){
-	$dcmd .= " --NoFilter";
-}
-if(defined $probe){
-	$dcmd.=" -opttmp $opt_tm_probe";
-}
-&Run($dcmd, $sh);
-
-if($type eq "face-to-face:Region" || $type eq "back-to-back"){
-	my $dir_rev = "$outdir/design_rev";
-	`mkdir $dir_rev` unless(-d $dir_rev);
-	my $fname = basename($ftemplate);
-	open(O, ">$dir_rev/$fname\_rev") or die $!;
-	open(I, $ftemplate) or die $!;
-	$/=">";
-	while(<I>){
-		chomp;
-		next if(/^$/);
-		my ($head, @seq)=split /\n/, $_;
-		my ($id)=split /\s+/, $head;
-		my $seq = join ("", @seq);
-		$seq =~tr/ATCGatcg/TAGCtagc/;
-		$seq = reverse $seq;
-		print O ">$id\_rev\n";
-		print O $seq,"\n";
+if($step==2){
+	my ($rdis1, $fdis1, $rdis2, $fdis2);
+	if(defined $regions){
+		$fdis1=5;
+		$rdis1=$regions;
+		## check 
+		if($type eq "face-to-face:Region" || $type eq "back-to-back"){
+			if(!defined $regions_rev){ 
+				die "Wrong: No -regions_rev! -regions_rev must be given when type is face-to-face:Region and back-to-back!";
+			}else{
+				($fdis2, $rdis2)=(5, $regions_rev);
+			}
+		}
+	}else{
+		($rdis1, $fdis1, $rdis2, $fdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
 	}
-	close(O);
-	close(I);
-	$/="\n";
-	
-	if($rdis2 eq ""){
-		die "No rdis2!\n";
-	}
-	my $dcmd = "perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -type $stype -opttm $opt_tm -rlen $range_len -fdis $fdis2 -rdis $rdis2 -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev";
+	print "region range to design primers: ", join("\t", $fdis1.";".$rdis1, defined $fdis2? $fdis2.";".$rdis2:""),"\n";
+	my $dcmd = "perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -type $stype -opttm $opt_tm -rlen $range_len -fdis $fdis1 -rdis $rdis1 -stm $stm -para $para_num -k $fkey -od $outdir/design";
 	if(defined $NoFilter){
 		$dcmd .= " --NoFilter";
+	}
+	if(defined $NoCoverN){
+		$dcmd .= " --NoCoverN";
 	}
 	if(defined $probe){
 		$dcmd.=" -opttmp $opt_tm_probe";
 	}
 	&Run($dcmd, $sh);
-}
-
-
-### select primer pair
-my $score_dis_range = $score_dis.",".$dis_range;
-my $cmd = "perl $Bin/primer_pair_select.pl -i $outdir/design/$fkey.primer.score -it $ftemplate -k $fkey -rd $score_dis_range  -od $outdir -tp $type -ct $ctype";
-if(defined $pos_range){
-	my $score_pos_range = $score_pos.",".$pos_range;
-	$cmd .= " -rp $score_pos_range";
-}
-if($type eq "face-to-face:Region" || $type eq "back-to-back"){
-	$cmd .= " -ir $outdir/design_rev/$fkey\_rev.primer.score";
-}
-if($ctype eq "Full-covered"){
-	$cmd .= " -ds $dis_aver -rf $rfloat";
-}else{
-	$cmd .= " -on $onum";
-}
-&Run($cmd, $sh);
-
-### specificity re-evaluation
-my $dir_re = "$outdir/re_evalue";
-`mkdir $dir_re` unless(-e $dir_re);
-&Run("less $outdir/$fkey.final.result |perl -ne '{chomp; \@a=split; if(\$_=~/-P1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/-P2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
-my @diss = split /,/, $dis_range;
-my $extend = $diss[-1]*2;
-$cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fref -n 2 -k $fkey\_pair --NoFilter -type $stype -rdis $size_range -opttm $opt_tm -stm $stm -od $dir_re";
-&Run($cmd, $sh);
-
-
-### primers dimer check
-if(defined $dimer_check){
-	&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey -od $outdir/dimer_check", $sh);
-}
-
-### select probe
-if(defined $probe){
-	my $fprobe;
-	if($type eq "face-to-face:Region"){
-		$fprobe="$outdir/design/$fkey.primer.score,$outdir/design_rev/$fkey\_rev.primer.score";
-	}elsif($type eq "face-to-face:SNP"){
-		$fprobe="$outdir/design/$fkey.primer.score";
-	}else{
-		die "Wrong: the type is not face-to-face, Can't design probe!\n";
+	
+	if($type eq "face-to-face:Region" || $type eq "back-to-back"){
+		my $dir_rev = "$outdir/design_rev";
+		`mkdir $dir_rev` unless(-d $dir_rev);
+		my $fname = basename($ftemplate);
+		open(O, ">$dir_rev/$fname\_rev") or die $!;
+		open(I, $ftemplate) or die $!;
+		$/=">";
+		while(<I>){
+			chomp;
+			next if(/^$/);
+			my ($head, @seq)=split /\n/, $_;
+			my ($id)=split /\s+/, $head;
+			my $seq = join ("", @seq);
+			$seq =~tr/ATCGatcg/TAGCtagc/;
+			$seq = reverse $seq;
+			print O ">$id\_rev\n";
+			print O $seq,"\n";
+		}
+		close(O);
+		close(I);
+		$/="\n";
+		
+		if($rdis2 eq ""){
+			die "No rdis2!\n";
+		}
+		my $dcmd = "perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -type $stype -opttm $opt_tm -rlen $range_len -fdis $fdis2 -rdis $rdis2 -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev";
+		if(defined $NoFilter){
+			$dcmd .= " --NoFilter";
+		}
+		if(defined $NoCoverN){
+			$dcmd .= " --NoCoverN";
+		}
+		if(defined $probe){
+			$dcmd.=" -opttmp $opt_tm_probe";
+		}
+		&Run($dcmd, $sh);
 	}
-	&Run("perl $Bin/probe_select.pl -ip $outdir/$fkey.final.result -it $ftemplate -io $fprobe -k $fkey.final.result -opttm $opt_tm_probe -minl $min_len -maxl $max_len -od $outdir", $sh);
-	`mv $outdir/$fkey.final.result.probe $outdir/$fkey.final.result`;
+	
+	
+	### select primer pair
+	my $score_dis_range = $score_dis.",".$dis_range;
+	my $cmd = "perl $Bin/primer_pair_select.pl -i $outdir/design/$fkey.primer.score -it $ftemplate -k $fkey -rd $score_dis_range  -od $outdir -tp $type -ct $ctype";
+	if(defined $pos_range){
+		my $score_pos_range = $score_pos.",".$pos_range;
+		$cmd .= " -rp $score_pos_range";
+	}
+	if($type eq "face-to-face:Region" || $type eq "back-to-back"){
+		$cmd .= " -ir $outdir/design_rev/$fkey\_rev.primer.score";
+	}
+	if($ctype eq "Full-covered"){
+		$cmd .= " -ds $dis_aver -rf $rfloat";
+	}else{
+		$cmd .= " -on $onum";
+	}
+	&Run($cmd, $sh);
+	$step++;
 }
 
+if($step==3){
+	### specificity re-evaluation
+	my $dir_re = "$outdir/re_evalue";
+	`mkdir $dir_re` unless(-e $dir_re);
+	&Run("less $outdir/$fkey.final.result |perl -ne '{chomp; \@a=split; if(\$_=~/-P1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/-P2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
+	my @diss = split /,/, $dis_range;
+	my $extend = $diss[-1]*2;
+	my $fcheck=$fdatabase;
+	#check templates come from database file or not
+	if($ftype eq "fasta" || $fref ne $fdatabase){
+		my $is_in=&template_database_check($ftemplate, $fdatabase, $outdir, $fkey);
+		print "Is_Template_in_Database: $is_in\n";
+		if(!$is_in){
+			$fcheck.=",".$ftemplate;
+		}
+	}
+	my $cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fcheck -n 2 -k $fkey\_pair --NoFilter -type $stype -rdis $size_range -opttm $opt_tm -stm $stm -od $dir_re";
+	&Run($cmd, $sh);
+	
+	
+	### primers dimer check
+	if(defined $dimer_check){
+		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey -od $outdir/dimer_check", $sh);
+	}
+
+	$step++;
+}
+
+if($step==4){
+	### select probe
+	if(defined $probe){
+		my $fprobe;
+		if($type eq "face-to-face:Region"){
+			$fprobe="$outdir/design/$fkey.primer.score,$outdir/design_rev/$fkey\_rev.primer.score";
+		}elsif($type eq "face-to-face:SNP"){
+			$fprobe="$outdir/design/$fkey.primer.score";
+		}else{
+			die "Wrong: the type is not face-to-face, Can't design probe!\n";
+		}
+		&Run("perl $Bin/probe_select.pl -ip $outdir/$fkey.final.result -it $ftemplate -io $fprobe -k $fkey.final.result -opttm $opt_tm_probe -minl $min_len -maxl $max_len -od $outdir", $sh);
+		`mv $outdir/$fkey.final.result.probe $outdir/$fkey.final.result`;
+	}
+}
 
 
 
@@ -248,6 +289,53 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 # sub function
 # ------------------------------------------------------------------
+sub template_database_check{
+	my ($ftemplate, $fdatabase, $outdir, $fkey)=@_;
+	my $fpsl = "$outdir/$fkey.psl";
+	if(!-e $fpsl){
+		&Run("$BLAT $fref $ftemplate $fpsl", $sh);
+	}
+
+	open(I, $ftemplate) or die $!;
+	$/=">";
+	my $tnum=0;
+	while(<I>){
+		chomp;
+		next if(/^$/);
+		$tnum++;
+	}
+	close(I);
+
+
+	open(I, "$outdir/$fkey.psl") or die $!;
+#psl v1:
+#149     14      0       0       1       28      1       29      +       PTS-0639-U      201     10      201     chrX    155270560       38777907        38778099        2       99,64,   10,137, 38777907,38778035,
+#176     13      0       0       0       0       1       1       +       PTS-0639-U      201     12      201     chr8    146364022       49220714        49220904        2       124,65,  12,136, 49220714,49220839,
+#172     19      0       0       0       0       0       0       +       PTS-0639-U      201     10      201     chr8    146364022       144837574       144837765       1       191,     10,     144837574,
+#173     18      0       0       0       0       0       0       +       PTS-0639-U      201     10      201     chr7    159138663       98139617        98139808        1       191,     10,     98139617,
+
+#psl v2:
+#501     0       0       0       0       0       0       0       +       chr11   135006516       1269880 1270381 chr11:1270382-U 501     0       501     1       501,    1269880,
+#499     2       0       0       0       0       0       0       +       chr11   135006516       1266109 1266610 chr11:1270382-U 501     0       501     1       501,    1266109,
+#490     11      0       0       0       0       0       0       +       chr11   135006516       1268209 1268710 chr11:1270382-U 501     0       501     1       501,    1268209,
+#487     14      0       0       0       0       0       0       +       chr11   135006516       1264438 1264939 chr11:1270382-U 501     0       501     1       501,    1264438,
+	my %is_in;
+	$/="\n";
+	while(<I>){
+		chomp;
+		next if($_!~/^\d/);
+		my ($match, $mismatch, $gap1,$gaplen1, $gap2, $gaplen2, $ori, $pid, $len, $ps, $pe, $chr, $s, $e)=(split /\s+/, $_)[0,1,4,5,6,7,8,9,10, 11,12,13,15,16]; #psl v1
+		if($match/$len>0.99){
+			$is_in{$pid}=1;
+		}
+	}
+	close(I);
+	my $is_in=0;
+	if(scalar keys %is_in==$tnum){
+		$is_in=1;
+	}
+	return $is_in;
+}
 
 sub caculate_rdis{
 	my ($dis_range, $pos_range, $type, $minl, $maxl)=@_;
@@ -323,8 +411,10 @@ sub caculate_rdis{
 
 sub Run{
     my ($cmd, $sh, $nodie)=@_;
-	print $sh $cmd,"\n";
-	print "###", $cmd,"\n";
+	if(defined $sh){
+		print $sh $cmd,"\n";
+		print "###", $cmd,"\n";
+	}
     my $ret = system($cmd);
     if (!defined $nodie && $ret) {
         die "Run $cmd failed!\n";
@@ -422,6 +512,7 @@ Usage:
   -p   <str>    prefix of output file, forced
   -tlen <int>   template average length, must be given when -type is face-to-face:Region
   --probe             design probe when -type "face-to-face", optional
+  --NoCoverN          candidate primer sequences can't contain N/n
   --NoFilter          Not filter any primers
   --homology_check    check homologous sequence of template sequence when design for NGS primers, optional
   --dimer_check       check cross dimers among selected primers, optional
@@ -434,7 +525,8 @@ Usage:
   -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it is SNP file
   -rsize    <str>     product size range (opt_min, opt_max, min, max), separted by ",", [$size_range]
   -rdis     <str>     distance range between pair primers, required when -type is not "face-to-face", (opt_min, opt_max, min, max) separted by ",", optional
-  -regions  <str>     interested regions of candidate primers walking on, format is "3/5:start,end,scale,start2,end2,scale2...", 3:count from primer right to template 3end, 5:count from primer left to template 5end; two regions seperated by ";" when type is face-to-face:Region and back-to-back; if not given, will caculate automatically, optional
+  -regions  <str>     interested regions of candidate primers walking on template, format is "start,end,scale,start2,end2,scale2...", if not given, will caculate automatically, optional
+  -regions_rev  <str>     interested regions of candidate primers walking on reverse template needed when type is face-to-face:Region and back-to-back, format is "start,end,scale,start2,end2,scale2...", if not given, will caculate automatically, optional
 
   ### 
   -type   <str>     primer type, "face-to-face:SNP", "face-to-face:Region", "back-to-back", "Nested", ["face-to-face:SNP"]
@@ -443,9 +535,14 @@ Usage:
      -rf  <float>   ratio of distance between adjacent primers can float when -ctype "Full-covered", [0.2]
      -on  <int>     output num when -ctype "Single",[$onum]
 
-  -stm     <int>      min tm to be High_tm in specifity, [$stm]
-  -para  <int>      parallel num, [$para_num]
-  -od    <dir>      Dir of output file, default ./
+  -stm    <int>      min tm to be High_tm in specifity, [$stm]
+  -para   <int>      parallel num, [$para_num]
+  -step   <int>      step, [$step]
+                     1: homology check
+					 2: primer pair design 
+					 3: primer pair specificity re-evalue, cross-dimer check
+					 4: probe design
+  -od     <dir>      Dir of output file, default ./
   -h                Help
 
 USAGE

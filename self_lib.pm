@@ -765,5 +765,43 @@ sub SSR {#返回序列的低复杂度
 	my ($first,$second)=sort {$b <=> $a} values %hash;
 	return ($first+$second)/scalar @arr;
 }
+sub AbsolutePath
+{		#获取指定目录或文件的决定路径
+		my ($type,$input) = @_;
+
+		my $return;
+	$/="\n";
+
+		if ($type eq 'dir')
+		{
+				my $pwd = `pwd`;
+				chomp $pwd;
+				chdir($input);
+				$return = `pwd`;
+				chomp $return;
+				chdir($pwd);
+		}
+		elsif($type eq 'file')
+		{
+				my $pwd = `pwd`;
+				chomp $pwd;
+
+				my $dir=dirname($input);
+				my $file=basename($input);
+				chdir($dir);
+				$return = `pwd`;
+				chomp $return;
+				$return .="\/".$file;
+				chdir($pwd);
+		}
+		return $return;
+}
+
+sub GetTime {
+	my ($sec, $min, $hour, $day, $mon, $year, $wday, $yday, $isdst)=localtime(time());
+	return sprintf("%4d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $day, $hour, $min, $sec);
+}
+
+
 
 1;

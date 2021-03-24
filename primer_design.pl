@@ -15,7 +15,7 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($NoSpecificity, $FiterRepeat, $NoFilter);
+my ($NoSpecificity, $FiterRepeat, $NoFilter, $NoCoverN);
 my ($fIn,$fkey,$outdir);
 my $step = 1;
 my $recov;
@@ -38,6 +38,7 @@ GetOptions(
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"FilterRepeat:s"=>\$FiterRepeat,
 				"NoFilter:s"=>\$NoFilter,
+				"NoCoverN:s"=>\$NoCoverN,
 				"recov:s"=>\$recov,
 				"type:s"=>\$type,
 				"rlen:s"=>\$range_len,
@@ -72,8 +73,6 @@ my @poly = (0,2,0,10);
 my $GC5_num = 8; #stat GC of primer start $GC5_num bp
 my $GC3_num = 8;
 my $min_tm_diff = 5;
-my $plen = int(($max_len+$min_len)/2);
-
 my %seq;
 
 if ($step == 1){
@@ -83,6 +82,7 @@ if ($step == 1){
 		@rdis = &check_merge_rdis($range_dis);
 	}
 	open(I, $fIn) or die $!;
+	open(PT, ">$outdir/$fkey.primer.list") or die $!;
 	$/=">";
 	while(<I>){
 		chomp;
@@ -102,13 +102,13 @@ if ($step == 1){
 		## 
 		my $tlen = length($seq);
 		if(!defined $range_dis){
-			@rdis = (1, $tlen, int(($tlen/50)+1));
+			@rdis = (1, $tlen, 1);
 		}
 		my @rdisc=@rdis;
 		if($format_dis == 5){ ## convert to format '3'
 			for(my $i=0; $i<@rdis; $i+=3){
-				my $e =$tlen-$rdis[$i]-$plen;
-				my $s =$tlen-$rdis[$i+1]-$plen;
+				my $e =$tlen-$rdis[$i]-$min_len;
+				my $s =$tlen-$rdis[$i+1]-$max_len;
 				$rdisc[$i]=$s;
 				$rdisc[$i+1]=$e;
 			}
@@ -130,21 +130,25 @@ if ($step == 1){
 				my $fn=$n%1000;
 				open(P, ">$dir/$fkey.primer.list_$fn") or die $!;
 				for(my $l=$min_len; $l<=$max_len; $l+=$scale_len){
+					next if($p+$l>$tlen);
 					my $primer=&get_primer($id, $p, $l, $seq);
-					my $id_new = $id."-".$l."-".$p;
+					next if(defined $NoCoverN && ($primer=~/N/ || $primer=~/n/));
+					my $id_new = $id."-".$p."-".$l;
 					if(defined $FiterRepeat){
 						my @match = ($primer=~/[atcg]/g);
 						next if(scalar @match > length($primer)*0.4);
 					}
 					
 					print P $id_new,"\t",$primer,"\n";
+					print PT $id_new,"\t",$primer,"\n";
 					$seq{$id_new}=$primer;
 				}
 				close(P);
 			}
 		}
 	}
-	$step ++;	
+	close(PT);
+	$step ++;
 }
 
 # evalue
@@ -248,7 +252,7 @@ if($step==3){
 		my ($tm, $gc, $gc5, $gc3, $dgc, $dg_h, $tm_h, $dg_d, $tm_d, $nalign, $nhtm, $neff, $htm_info)=@info;
 		#$nend=~s/\+//;
 		my ($score, $score_info) = &score($seq{$id}, $len, $tm, $gc, $gc5, $gc3, $dgc, $dg_h, $tm_h, $nhtm, $htm_info);	
-		my ($id_sub, $dis)=$id=~/(\S+)\-\d+\-(\d+)$/;
+		my ($id_sub, $dis)=$id=~/(\S+)\-(\d+)\-\d+$/;
 		if(defined $recov){
 			$id_sub=~s/rev//;
 		}
@@ -360,6 +364,10 @@ sub score{ #&score($seq{$id},$dis, $len, $tm, $gc, $gc5, $gc3, $dgc, $dg_h, $tm_
 sub get_primer{
 	my ($id, $pos, $len, $seq)=@_;
 	my $total_len = length $seq;
+	if($total_len-$pos-$len<0){
+		print "Extract primer failed! $seq, $pos, $len, $total_len-$pos-$len\n";
+		die;
+	}
 	my $primer = substr($seq, $total_len-$pos-$len, $len);
 	if(defined $recov){
 		$primer =~tr/ATGCatgc/TACGtacg/;
@@ -427,43 +435,6 @@ sub Run{
 }
 
 
-sub AbsolutePath
-{		#获取指定目录或文件的决定路径
-		my ($type,$input) = @_;
-
-		my $return;
-	$/="\n";
-
-		if ($type eq 'dir')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-				chdir($input);
-				$return = `pwd`;
-				chomp $return;
-				chdir($pwd);
-		}
-		elsif($type eq 'file')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-
-				my $dir=dirname($input);
-				my $file=basename($input);
-				chdir($dir);
-				$return = `pwd`;
-				chomp $return;
-				$return .="\/".$file;
-				chdir($pwd);
-		}
-		return $return;
-}
-
-sub GetTime {
-	my ($sec, $min, $hour, $day, $mon, $year, $wday, $yday, $isdst)=localtime(time());
-	return sprintf("%4d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $day, $hour, $min, $sec);
-}
-
 
 sub USAGE {#
 	my $usage=<<"USAGE";
@@ -481,12 +452,13 @@ Usage:
   --NoSpecificity   not evalue specificity
   --FilterRepeat	filter primers with repeat region(lowercase in fref) more than 40%
   --NoFilter             Not filter any primers
+  --NoCoverN             candidate primer sequences can't contain N/n
 
   -type     <str>       primer type, "face-to-face", "back-to-back", "Nested", [$type]
   -opttm    <int>       optimal tm, [$opt_tm]
   -opttmp    <int>     optimal tm of probe, not design probe when not set the parameter, optional
   -rlen     <str>       primer len ranges(start,end,scale), start <= end, [$range_len]
-  -rdis     <str>       region ranges(start,end,scale), start <= end, count format see -fdis, separated by ",", optional
+  -rdis     <str>       region ranges(start,end,scale), start <= end, count format see -fdis, separated by ",", (1,len,1) when not given, optional
   		                Example: 
 			               sanger sequence primer: 100,150,2,400,500,5
 			               ARMS PCR primer: 1,1,1,80,180,2
