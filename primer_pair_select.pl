@@ -257,11 +257,12 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 	my @final;
 	if($ctype eq "Single"){
 		my @pair_sort = sort{$score_pair{$b}<=>$score_pair{$a}} keys %score_pair;
+		print Dumper @pair_sort;
 		my %record;
 		my $num = 0;
 		#LBR-1096-D-28-12,LBR-1096-D-26-32
 		for(my $i=0; $i<@pair_sort; $i++){
-			my ($d1, $d2) = $pair_sort[$i]=~/\-(\d+),\S+\-(\d+)$/;
+			my ($d1, $d2) = $pair_sort[$i]=~/\-(\d+)-\d+,\S+\-(\d+)-\d+$/;
 			my $min_dis1=100;
 			my $min_dis2=100;
 			foreach my $ds(keys %record){
