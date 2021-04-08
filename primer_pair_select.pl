@@ -132,11 +132,16 @@ if(defined $frev){
 
 open(O,">$outdir/$fkey.final.result") or die $!;
 print O join("\n", @explain),"\n";
-if($type =~/face-to-face/){
-	print O "#Chr\tStart\tStrand\tID\tSeq\tLen\tProductSize\tScorePair\tScorePair_PosDisTm\tScore\t",join("\t", @title_info),"\n";
-}else{
-	print O "#Chr\tStart\tStrand\tID\tSeq\tLen\tDisBetweenPair\tScorePair\tScorePair_PosDisTm\tScore\t",join("\t", @title_info),"\n";
+my @title=("#Chr\tStart\tStrand\tID\tSeq\tLen");
+if(defined $range_pos){
+	push @title, "Dis2Target";
 }
+if($type=~/face-to-face/){
+	push @title, "ProductSize";
+}
+push @title, ("ScorePair\tScorePair_PosDisTm\tScore", @title_info);
+print O join("\t", @title),"\n";
+
 my %success;
 foreach my $tid(sort {$a cmp $b}keys %pos){
 	my @id1_sort = sort{$pos{$tid}{$a} <=> $pos{$tid}{$b}} keys %{$pos{$tid}};
@@ -257,7 +262,6 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 	my @final;
 	if($ctype eq "Single"){
 		my @pair_sort = sort{$score_pair{$b}<=>$score_pair{$a}} keys %score_pair;
-		print Dumper @pair_sort;
 		my %record;
 		my $num = 0;
 		#LBR-1096-D-28-12,LBR-1096-D-26-32
@@ -329,14 +333,20 @@ foreach my $tid(sort {$a cmp $b}keys %pos){
 		foreach my $t(@{$target{"tem"}{$chrp1}}){
 			$success{$t}=1;
 		}
-		if($type eq "Nested"){ ## --> P1
-			                   ##  --> P2
-			print O join("\t", $chr, $pos2, $strand2, $id1_new, $seq2, $plen2, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info2[4..$#info2]),"\n";
-			print O join("\t", $chr, $pos1, $strand1, $id2_new, $seq1, $plen1, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info1[4..$#info1]),"\n";
-		}else{
-			print O join("\t", $chr, $pos1, $strand1, $id1_new, $seq1, $plen1, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info1[4..$#info1]),"\n";
-			print O join("\t", $chr, $pos2, $strand2, $id2_new, $seq2, $plen2, $size, $score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info2[4..$#info2]),"\n";
+		my @out1=($chr, $pos1, $strand1, $id1_new, $seq1, $plen1);
+		my @out2=($chr, $pos2, $strand2, $id2_new, $seq2, $plen2);
+		if(defined $range_pos){
+			push @out1, $pos;
+			push @out2, "NA";
 		}
+		if($type=~/face-to-face/){
+			push @out1, $size;
+			push @out2, $size;
+		}
+		push @out1, ($score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info1[4..$#info1]);
+		push @out2, ($score_pair{$pair}, join(",",@{$score_pair_info{$pair}}), @info2[4..$#info2]);
+		print O join("\t", @out1),"\n";
+		print O join("\t", @out2),"\n";
 	}
 }
 close(O);
