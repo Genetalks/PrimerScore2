@@ -6,6 +6,7 @@ use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
 require "$Bin/path.pm";
+require "$Bin/self_lib.pm";
 my $BEGIN_TIME=time();
 my $version="2.0";
 #######################################################################################
@@ -14,11 +15,13 @@ my $version="2.0";
 # GetOptions
 # ------------------------------------------------------------------
 our $REF_HG19;
+our $REF_HG19_SNP;
 our $SAMTOOLS;
 my ($ftarget,$fkey,$outdir);
 my $Max_Dis = 20;
 my $vcf;
 my $fref = $REF_HG19;
+my $fref_snp = $REF_HG19_SNP;
 my $Extend = 200;
 my $UD_devide;
 my $die_check;
@@ -26,6 +29,7 @@ GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$ftarget,
 				"r:s"=>\$fref,
+				"s:s"=>\$fref_snp,
 				"k:s"=>\$fkey,
 				"dieCk:s"=>\$die_check,
 				"UD_devide:s"=>\$UD_devide,
@@ -90,7 +94,7 @@ while (<T>){
 
 	push @{$target_start{$chr}{$s}},[$id];
 	push @{$target_end{$chr}{$e}}, [$id];
-	@{$target{$id}}=($s, $e);
+	@{$target{$id}}=($s, $e, $chr, $ref, $alt);
 }
 close (T);
 
@@ -103,8 +107,11 @@ my %out;
 if(defined $UD_devide){
 	open ($out{"U"}, ">$outdir/$fkey.template_U.fa") or die $!;
 	open ($out{"D"}, ">$outdir/$fkey.template_D.fa") or die $!;
+	open ($out{"Us"}, ">$outdir/$fkey.template_U_snp.fa") or die $!;
+	open ($out{"Ds"}, ">$outdir/$fkey.template_D_snp.fa") or die $!;
 }else{
 	open ($out{"U"}, ">$outdir/$fkey.template.fa") or die $!;
+	open ($out{"Us"}, ">$outdir/$fkey.template_snp.fa") or die $!;
 }
 my %tem_target;
 my %tseq;
@@ -123,6 +130,7 @@ foreach my $chr(sort {$a cmp $b} keys %target_start){
 	## get template seq .fa
 	get_template_seq(\%tem_target, \%tseq, \@s_group, $target_start{$chr}, $chr, "Start");
 	get_template_seq(\%tem_target, \%tseq, \@e_group, $target_end{$chr}, $chr, "End");
+	
 }
 
 ## check target template-U and template-D are consistant, maybe not when indel is too long
@@ -176,24 +184,38 @@ foreach my $tid(sort {$a cmp $b} keys %{$tem_target{"tem"}}){
 	my @esort = sort{$a<=>$b}@e;
 	my ($Us, $Ue) = ($Min_Dis_Detect, $ssort[-1]-$ssort[0]+$Min_Dis_Detect);
 	my ($Ds, $De) = ($Min_Dis_Detect, $esort[-1]-$esort[0]+$Min_Dis_Detect);
-	my ($pos_infoU, $seqU)=@{$tseq{$tid}{"U"}};
-	my ($pos_infoD, $seqD)=@{$tseq{$tid}{"D"}};
+	my ($pos_infoU, $seqU, $seqUs)=@{$tseq{$tid}{"U"}};
+	my ($pos_infoD, $seqD, $seqDs)=@{$tseq{$tid}{"D"}};
 	my $id_str = join(";", @oidU);
 	if(!defined $UD_devide){
 		print {$out{"U"}} ">$tidU-U\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
 		print {$out{"U"}} $seqU,"\n";
 		print {$out{"U"}} ">$tidU-D\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
 		print {$out{"U"}} $seqD,"\n";
+
+		print {$out{"Us"}} ">$tidU-U\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
+		print {$out{"Us"}} $seqUs,"\n";
+		print {$out{"Us"}} ">$tidU-D\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
+		print {$out{"Us"}} $seqDs,"\n";
+
 	}else{
 		print {$out{"U"}} ">$tidU\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
 		print {$out{"U"}} $seqU,"\n";
 		print {$out{"D"}} ">$tidU\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
 		print {$out{"D"}} $seqD,"\n";
+
+		print {$out{"Us"}} ">$tidU\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
+		print {$out{"Us"}} $seqUs,"\n";
+		print {$out{"Ds"}} ">$tidU\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
+		print {$out{"Ds"}} $seqDs,"\n";
+
 	}
 }
 close($out{"U"});
+close($out{"Us"});
 if(defined $UD_devide){
 	close($out{"D"});
+	close($out{"Ds"});
 }
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
@@ -239,29 +261,49 @@ sub get_template_seq{
 		}
 			
 		## get seq
-		my $seq_info = `$SAMTOOLS faidx $fref $chr:$start-$end`;
-		my @line = split /\n/, $seq_info;
-		shift @line;
-		my $seq = join("", @line);
+		my $seq=&faidx_seq($fref, $chr, $start, $end);
+		my $seq_snp=&faidx_seq($fref_snp, $chr, $start, $end);
+		$seq_snp=&seq_snp_add_target($seq_snp, $atarget, $chr, $start, $end);
 		my $strand = "+";
 		if($flank eq "D"){
-			$seq =~tr/atcg/tagc/;
-			$seq =~tr/ATCG/TAGC/;
-			$seq = reverse $seq;
+			$seq = &revcom($seq);
+			$seq_snp = &revcom($seq_snp);
 			$strand = "-";
 		}
 		my $pos_info = $strand."$chr:$start-$end";
-		
-		## output
-		#push @{$target{$s}},[$id];
+	
+		## store
 		my $tid = join("|", @ids);
 		foreach my $id(@ids){
 			$atemp_target->{"tem"}{$tid}{$flank}{$id}=1;
 			$atemp_target->{"tar"}{$id}{$flank}=$tid;
 		}
-		@{$aseq->{$tid}{$flank}}=($pos_info, $seq);
+		@{$aseq->{$tid}{$flank}}=($pos_info, $seq, $seq_snp);
 	}
-	
+}
+
+
+sub seq_snp_add_target{
+	my ($seq_snp, $atarget, $chr, $start, $end)=@_;
+	my @unit = split //, $seq_snp;
+	my @pos;
+	foreach my $id(keys %target){
+		my ($s, $e, $c, $r, $a)=@{$target{$id}};
+		if($c eq $chr && $s<=$end && $e>=$start){
+			&sequence_convert_poly(\@unit, $s-$start+1, $r, $a); ## convert @unit directly
+		}
+	}
+	my $seq_new = join("", @unit);
+	return $seq_new;
+}
+
+sub faidx_seq{
+	my ($fref, $chr, $start, $end, $flank)=@_;
+	my $seq_info = `$SAMTOOLS faidx $fref $chr:$start-$end`;
+	my @line = split /\n/, $seq_info;
+	shift @line;
+	my $seq = join("", @line);
+	return ($seq);
 }
 
 sub grouping_by_pos{
@@ -340,44 +382,6 @@ sub break_group{
 	return @final_group;
 }
 
-sub AbsolutePath
-{		#获取指定目录或文件的决定路径
-		my ($type,$input) = @_;
-
-		my $return;
-	$/="\n";
-
-		if ($type eq 'dir')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-				chdir($input);
-				$return = `pwd`;
-				chomp $return;
-				chdir($pwd);
-		}
-		elsif($type eq 'file')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-
-				my $dir=dirname($input);
-				my $file=basename($input);
-				chdir($dir);
-				$return = `pwd`;
-				chomp $return;
-				$return .="\/".$file;
-				chdir($pwd);
-		}
-		return $return;
-}
-
-sub GetTime {
-	my ($sec, $min, $hour, $day, $mon, $year, $wday, $yday, $isdst)=localtime(time());
-	return sprintf("%4d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $day, $hour, $min, $sec);
-}
-
-
 sub USAGE {#
 	my $usage=<<"USAGE";
 Program:
@@ -401,6 +405,7 @@ Usage:
   Options:
   -i  <file>   	Input file, forced
   -r  <file>   	Input ref file, [$fref]
+  -s  <file>   	Input ref file containing snps, [$fref_snp]
   -k  <str>     Key of output file, forced
 
   --dieC		die when ref base check failed

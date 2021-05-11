@@ -16,7 +16,7 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 my ($NoSpecificity, $FiterRepeat, $NoFilter, $NoCoverN);
-my ($fIn,$fkey,$outdir);
+my ($ftem,$ftem_snp,$fkey,$outdir);
 my $step = 1;
 my $recov;
 my $para_num = 10;
@@ -32,7 +32,8 @@ my $range_dis;
 my $range_len="18,28,2";
 GetOptions(
 				"help|?" =>\&USAGE,
-				"i:s"=>\$fIn,
+				"i:s"=>\$ftem,
+				"is:s"=>\$ftem_snp,
 				"r:s"=>\$fref,
 				"k:s"=>\$fkey,
 				"NoSpecificity:s"=>\$NoSpecificity,
@@ -51,7 +52,7 @@ GetOptions(
 				"step:s"=>\$step,
 				"od:s"=>\$outdir,
 				) or &USAGE;
-&USAGE unless ($fIn and $fkey);
+&USAGE unless ($ftem and $ftem_snp and $fkey);
 
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
@@ -81,7 +82,22 @@ if ($step == 1){
 	if(defined $range_dis){
 		@rdis = &check_merge_rdis($range_dis);
 	}
-	open(I, $fIn) or die $!;
+
+	## get template seq containing snp
+	my %seq_snp;
+	open(I, $ftem_snp) or die $!;
+	$/=">";
+	while(<I>){
+		chomp;
+		next if(/^$/);
+		my ($id_info, @line)=split /\n/, $_;
+		my $seq = join("", @line);
+		my ($id)=split /\s+/, $id_info;
+		$seq_snp{$id}=$seq;
+	}
+	
+	## get primer seq
+	open(I, $ftem) or die $!;
 	open(PT, ">$outdir/$fkey.primer.list") or die $!;
 	$/=">";
 	while(<I>){
@@ -98,6 +114,7 @@ if ($step == 1){
 		if(!defined $dend){
 			$dend = 0;
 		}
+		my $seq_snp = $seq_snp{$id};
 		
 		## 
 		my $tlen = length($seq);
@@ -129,19 +146,22 @@ if ($step == 1){
 				`mkdir $dir` unless(-d $dir);
 				my $fn=$n%1000;
 				open(P, ">$dir/$fkey.primer.list_$fn") or die $!;
-				for(my $l=$min_len; $l<=$max_len; $l+=$scale_len){
+				for(my $l=$max_len; $l>=$min_len; $l-=$scale_len){
 					next if($p+$l>$tlen);
-					my $primer=&get_primer($id, $p, $l, $seq);
+					my ($primer)=&get_primer($id, $p, $l, $seq);
+					my ($primer_snp)=&get_primer($id, $p, $l, $seq_snp);
 					next if(defined $NoCoverN && ($primer=~/N/ || $primer=~/n/));
-					my $id_new = $id."-".$p."-".$l;
+					my $id_new = $id."-".$p; ##primers of different length are evalued in primer_evaluation.pl
+					#my $id_new = $id."-".$p."-".$l;
 					if(defined $FiterRepeat){
 						my @match = ($primer=~/[atcg]/g);
 						next if(scalar @match > length($primer)*0.4);
 					}
 					
-					print P $id_new,"\t",$primer,"\n";
-					print PT $id_new,"\t",$primer,"\n";
+					print P $id_new,"\t",$primer,":", $primer_snp, "\n";
+					print PT $id_new,"\t",$primer,":", $primer_snp, "\n";
 					$seq{$id_new}=$primer;
+					last; ##  primers of different length are evalued in primer_evaluation.pl
 				}
 				close(P);
 			}
@@ -158,7 +178,8 @@ if($step ==2){
 	foreach my $f (@fprimer){	
 		my $fname = basename($f);
 		my $dir_new = dirname($f);
-		my $cmd = "perl $Bin/primer_evaluation.pl --nohead -p $f -d $fref -n 1 -thread 1 -stm $stm -k $fname -type $type -opttm $opt_tm -od $dir_new";
+		my $olens=join(",", $min_len,$max_len, $scale_len); 
+		my $cmd = "perl $Bin/primer_evaluation.pl --nohead -p $f -d $fref -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir_new";
 		if(defined $opt_tm_probe){
 			$cmd .= " -opttmp $opt_tm_probe";
 		}
@@ -173,8 +194,8 @@ if($step ==2){
 	}
 	close (SH);
 	my $timeout = 400;
-	Run("parallel -j $para_num --timeout $timeout < $outdir/$fkey.primer.evalue.sh", 1);
-#	Run("parallel -j $para_num  < $outdir/$fkey.primer.evalue.sh", 1);
+#	Run("parallel -j $para_num --timeout $timeout < $outdir/$fkey.primer.evalue.sh", 1);
+	Run("parallel -j $para_num  < $outdir/$fkey.primer.evalue.sh", 1);
 	
 	##cat
 	my @dirs = glob("$outdir/split_*");
@@ -233,7 +254,7 @@ if($step ==2){
 
 	$step++;
 }
-
+die;
 my %info;
 my %score;
 # score and output
@@ -445,6 +466,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 Usage:
   Options:
   -i  	<file>   	Input template fa file, forced
+  -is  	<file>   	Input template add snp fa file, forced
   -r  	<file>   	Input ref fa file, [$fref]
   -k  	<str>		Key of output file, forced
 

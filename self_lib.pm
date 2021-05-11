@@ -1,3 +1,270 @@
+## eg:(off=6, min_score=8)  
+##:  #|||**-||||^^^|||||||||||||             =>      ||||^^^||||||||||||| 
+##:  ||*||||^^|||----------||||||||||||      =>      ####||||||||||||
+##:  #######||*|||||||||||  (off=4)          =>      ###||*|||||||||||
+sub map_visual_trim{
+	my ($mv, $off, $end3_match, $min_score)=@_;
+	#trim from offset
+	my @unit=split //, $mv;
+	my $ntrim=0;
+	while($ntrim<$off){
+		if($unit[0] ne "-" && $unit[0] ne "^"){
+			shift @unit;
+			$ntrim++;
+		}else{
+			shift @unit;
+		}
+	}
+
+	#rm indel 
+	while($unit[0] eq "-" || $unit[0] eq "^"){
+		shift @unit;
+	}
+	my $mvsub = join("", @unit);
+	
+	##
+	if($unit[0] eq "#"){ ## no need adjust
+		return($mvsub, $end3_match);
+	}
+
+	## adjust
+	my ($wmatch, $wmis, $windel)=(2,1,2);
+	my $irm=-1;
+	my $score=0;
+	for(my $i=0; $i<@unit; $i++){
+		if($unit[$i] eq "|"){
+			$score+=$wmatch;
+		}elsif($unit[$i] eq "*"){
+			$score-=$wmis;
+		}elsif($unit[$i] eq "-" || $unit[$i] eq "^"){## InDel
+			my $len=1;
+			for(my $j=$i+1; $j<@unit; $j++){
+				if($unit[$j] ne $unit[$i]){
+					$score-=$windel * (int($len/5)+1);
+					$i=$j-1;
+					last;
+				}
+				$len++;
+			}
+		}
+		if($score<=0){
+			$irm=$i;
+			$score=0;
+		}elsif($score>=$min_score){
+			last;
+		}
+	}
+	my $mvaf = substr($mvsub, $irm+1);
+	my $mvbf ="";
+	for(my $i=0; $i<=$irm;$i++){
+		if($unit[$i] eq "*" || $unit[$i] eq "|"){
+			$mvbf .= "#";
+		}
+	}
+	my $mvn = $mvbf.$mvaf;
+	if($irm==-1 && $end3_match > length($mvsub)){
+		$end3_match=length($mvsub);
+	}
+	return ($mvn, $end3_match);
+}
+
+
+
+
+#1S5M1D4M3I13M   3G0T0^G17       =>      #|||**-||||^^^|||||||||||||
+#13M16D5M        13^GGGCGTCAGATGCAGG5    =>      |||||||||||||----------------|||||
+#10M1D4M1I3M     10^T3C3 =>      ||||||||||-|||*^|||
+sub map_visualation{
+	my ($cigar, $md)=@_;
+	my ($acigar_n, $acigar_str)=&cigar_split($cigar);
+	my @numcg=@{$acigar_n};
+	my @strcg=@{$acigar_str};
+
+	my ($amds)=&md_split($md);
+	my @mds=@{$amds};
+	my $minfo;
+	my $imd=0; ## md index
+	for(my $i=0; $i<@strcg; $i++){
+		if($strcg[$i] eq "S" || $strcg[$i] eq "H"){
+			$minfo.="#" x $numcg[$i];
+		}elsif($strcg[$i] eq "M"){
+			my $Mlen=0;
+			for(my $j=$imd; $j<@mds; $j++){
+				#print join("\t", $i, $j, $mds[$j], $Mlen, $numcg[$i]),"\n";
+				if($mds[$j]=~/[0-9]/){
+					if($Mlen+$mds[$j]<=$numcg[$i]){
+						$minfo.="|" x $mds[$j];
+						$Mlen+=$mds[$j];
+					}else{
+						my $l=$numcg[$i]-$Mlen;
+						$mds[$j]-=$l;
+						$minfo.="|" x $l;
+						$imd=$j;
+						last;
+					}
+				}elsif($mds[$j]=~/\^/){
+					die "Wrong: $md, $cigar\n";
+				}elsif($mds[$j]=~/[ATCG]/){
+					if(length $mds[$j] > 1){
+						die "Wrong: $md\n";
+					}
+					$minfo.="*";
+					$Mlen++;
+				}
+
+				if($Mlen==$numcg[$i]){
+					$imd=$j+1;
+					if($imd<$#mds && $mds[$imd] eq '0'){
+						$imd++;
+					}
+					last;
+				}
+
+			}
+		}elsif($strcg[$i] eq "I"){
+			#$minfo.="-" x $numcg[$i];
+			$minfo.="^" x $numcg[$i];
+		}elsif($strcg[$i] eq "D"){
+			#$minfo.="^" x $numcg[$i];
+			$minfo.="-" x $numcg[$i];
+			$imd++;
+		}else{
+			die "Wrong: $cigar\n";
+		}
+	}
+	#print join("\t", $cigar, $md, "=>", $minfo),"\n";
+	return $minfo;
+}
+
+
+
+sub md_split{
+   my($md)=@_;
+   my @unit = split //, $md;
+   my @mds;
+   my $temp;
+   for(my $i=0; $i<@unit; $i++){
+       if($unit[$i]=~/[ATCGN]/){
+		   push @mds, $temp;
+           push @mds, $unit[$i];
+           $temp = "";
+       }elsif($unit[$i] eq "^"){
+		   push @mds, $temp;
+           $temp = $unit[$i];
+		   my $j;
+           for($j=$i+1;$j<@unit;$j++){
+               last if($unit[$j]!~/[ATCGN]/);
+               $temp .= $unit[$j];
+           }
+		   $i=$j-1;
+		   push @mds, $temp;
+		   $temp="";
+       }elsif($unit[$i]=~/[0-9]/){
+		   $temp.=$unit[$i];
+	   }
+   }
+   push @mds, $temp;
+   return(\@mds);
+}
+
+sub cigar_split{
+    my($cigar)=@_;
+    my @ucigar = split //, $cigar;
+    my (@match_n,@match_str);
+    my $nstr="";
+    foreach my $i(0..$#ucigar){
+        if($ucigar[$i] eq "M" || $ucigar[$i] eq "I" || $ucigar[$i] eq "D" || $ucigar[$i] eq "S"){
+            push @match_str, $ucigar[$i];
+            push @match_n, $nstr;
+            $nstr = "";
+        }elsif($ucigar[$i] eq "H"){
+            $nstr = "";
+        }else{
+            $nstr .= $ucigar[$i];
+        }
+    }
+    return(\@match_n,\@match_str);
+}
+
+### add snp/indel info to sequence, convert as following:
+#A       G         ==> S
+#G       A,T       ==> M
+#AAAG    A         ==> ADDD
+#G       GA        ==> I
+#G       GAA       ==> J
+#G       GAAA      ==> K
+#G       GATTTT    ==> L
+#G       GA,GAAA   ==> K
+## aseq: addr of sequence array
+## p: poly(snp or indel) position, count from 1
+## ref: ref base, ref in vcf
+## alt: alt base, alt in vcf
+sub sequence_convert_poly{
+	my ($aseq, $p, $ref, $alt)=@_;
+	my @Ins=("I", "J", "K", "L");
+
+	my $type=&mutant_type($ref, $alt);
+	my @types = split /,/, $type;
+	my ($poly, $len, $off)=("S", 0, 0);
+	my $num=0;
+	foreach my $tp(@types){##usually D will not be with S and I.
+		$num++;
+		my ($t, $l, $o)=split /_/, $tp;
+		$poly=$t;
+		if($l>$len){
+			$len=$l;
+			$off=$o;
+		}
+	}
+	if($p-1>=0){
+		if($poly eq "S"){
+			if($num==1){
+				 $aseq->[$p-1]="S";
+			}else{
+				 $aseq->[$p-1]="M";
+			}
+		}elsif($poly eq "I"){
+			my $ix=($len-1)>=3? 3: ($len-1);
+			$aseq->[$p-1]=$Ins[$ix];
+		}
+	}
+	if($poly eq "D"){
+		for(my $i=$p+$off; $i<($p+$off+$len); $i++){
+			if($i-1>=0){
+				$aseq->[$i-1]="D";
+			}
+		}
+	}
+}
+
+
+sub mutant_type{
+	my ($ref, $alt)=@_;
+	my $lenr=$ref eq "-"? 0: length $ref;
+	my @alts=split /,/, $alt;
+	my $lena=0;
+	my @type;
+	foreach my $at(@alts){
+		my $type;
+		my $lena = $at eq "-"? 0: length $at;
+		if($lenr == $lena){ ## SNP
+			$type="S_0_0";
+		}else{
+			my $dl=abs($lenr-$lena);
+			if($lenr > $lena){## Del
+				$type="D_".$dl."_".$lena;
+			}else{ ## Ins
+				$type="I_".$dl."_".$lenr;
+			}
+		}
+		push @type, $type;
+	}
+	return (join(",", @type));
+}
+
+
+
+
 #### return primer 5end position on the initial template, from postion on tid xxx-U/D
 ## sm, em, strandm: the start, end, strand of template sequence(xxx-U/D), from "XP:Z:xxx"
 ## strandp: usually "+", only when rev from primer(defined $frev, not used in primerScore pipeline) is "-", and when rev from template($tid=~/_rev/), is "+"
@@ -27,6 +294,48 @@ sub get_chr_info{
 	return($pos, $strand);
 }
 
+sub poly_check{
+	my ($seq)=@_;
+	$seq = reverse $seq;
+	my @unit = split //, $seq;
+	
+	my $min_plen = 3; # min poly length
+	my @polys;
+	my $last = $unit[0];
+	my $poly = $unit[0];
+	my $maxl=0; ## longest poly len
+	my $maxb; ## longest poly base
+	my $total=0; ## total poly len
+	for(my $i=1; $i<@unit; $i++){
+		if($unit[$i] eq $last){
+			$poly.=$unit[$i];
+		}else{
+			my $len = length($poly);
+			if($len>=$min_plen){
+				$total+=$len;
+				if($len>$maxl){
+					$maxl=$len;
+					$maxb=$last;
+				}
+				push @polys, ($i-$len).$last.$len;
+			}
+			$last = $unit[$i];
+			$poly=$last;
+		}
+	}
+	my $len = length $poly;
+	if($len>=$min_plen){
+		$total+=$len;
+		if($len>$maxl){
+			$maxl=$len;
+			$maxb=$last;
+		}
+		push @polys, ($#unit+1-$len).$last.$len;
+	}
+	return ($total, $maxl, $maxb, join(",", @polys));
+}
+
+#calculate a poly factor according to poly len、num and position
 sub get_poly_value{
 	my ($seq)=@_;
 	$seq = reverse $seq;
@@ -102,7 +411,8 @@ sub GC_stat{
 }
 
 sub GC{
-   	my @u=@_;
+	my ($s)=@_;
+   	my @u=split //, $s;
 	my $total = 0;
 	my $gc = 0;
 	foreach $b (@u){
@@ -118,7 +428,7 @@ sub GC_info_stat{
     my ($p, $Wind_GC)=@_;
     my @u = split //, $p;
 
-	my $GC = &GC(@u);
+	my $GC = &GC($p);
 	my ($GC5, $GC3);
 	my $min_GC=1;
 	my $max_GC=0;
@@ -143,7 +453,7 @@ sub GC_info_stat{
 }
 
 
-
+## get endA number
 sub get_end_A{
 	my ($seq)=@_;
 	my @unit = split //, $seq;
@@ -346,7 +656,7 @@ sub revcom{#&revcom($ref_seq);
 	my $seq=shift;
 	$seq=~tr/ATCGatcg/TAGCtagc/;
 	$seq=reverse $seq;
-	return uc $seq;
+	return $seq;
 }
 
 ################################################################################################################

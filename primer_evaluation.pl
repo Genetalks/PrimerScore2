@@ -17,7 +17,6 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 my ($fprimer, $fkey,$detail,$outdir);
 my $NoSpecificity;
-my $pnum = 1;
 my $min_tm_spec = 40; #when caculate specificity
 my $nohead;
 my $thread = 3;
@@ -31,24 +30,30 @@ my $len_map=20; ##bwa result is the most when 20bp
 my $opt_tm = 65;
 my $opt_tm_probe;
 my $opt_size = 100;
-my $dis_range="80,120,30,300"; ## pair dis range(best_min, best_max, min, max)
-my $type = "face-to-face";
 my $Debug;
+my $probe;
+my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
+my $olens;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$fprimer,
 				"d:s"=>\$fdatabases,
-				"n:s"=>\$pnum,
 				"k:s"=>\$fkey,
+				"probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
 				"NoSpecificity:s"=>\$NoSpecificity,
-				"rdis:s"=>\$dis_range,
-				"type:s"=>\$type,
 				"nohead:s"=>\$nohead,
 				"maplen:s"=>\$len_map,
+				"olens:s"=>\$olens,
 				"opttm:s"=>\$opt_tm,
 				"opttmp:s"=>\$opt_tm_probe,
 				"stm:s"=>\$min_tm_spec,
+				"mv:s"=>\$mv,
+				"dv:s"=>\$dv,
+				"dNTP:s"=>\$dNTP,
+				"dna:s"=>\$dna,
+				"tp:s"=>\$tp,
+				"sc:s"=>\$sc,
 				"Detail:s"=>\$detail,
 				"thread:s"=>\$thread,
 				"Debug:s"=>\$Debug,
@@ -59,305 +64,316 @@ GetOptions(
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
-my $min_end_match = 6;
 my $merge_len = 100;
 my $Wind_GC = 8;
-my $MAX_hairpin_tm = 55;
+my $MAX_hairpin_tm = 55; ## 55 from experience
+my $Max_Dimer_tm = 55;
+my $Max_SNP_num = 1;
+my $Max_poly_total = 12;
+my $Max_poly_G = 3;
+my $Max_poly_ATC = 5; 
 my $MAX_endA = 4;
 my $MAX_poly = 20;
+my $Max_High_Tm_Num = 300; ## too high tm aligns will be filtered
 my @rank_end=(3,   5,   8); #  PCR efficiency when dis of mismatch pos to 3end <= @rank_end
 my @eff_end =(0.1, 0.4, 0.8 );
+my $max_end3_eff = $rank_end[-1];
 my $eff_times = 10;
 my $min_eff = 0.1;
 my $MIN_tm = $opt_tm-10;
 my $MAX_tm = defined $opt_tm_probe? $opt_tm_probe+10: $opt_tm+10;
-my $MIN_gc = 0.15;
-my $MAX_gc = 0.85;
-my @dis = split /,/, $dis_range;
-($dis[2], $dis[3])=($dis[2]*0.5, $dis[3]*1.5); ## amplify range: min and max
+my $MIN_gc = 0.2;
+my $MAX_gc = 0.8;
 my @tm = ($opt_tm*0.8, $opt_tm*2, $opt_tm*0.6, $opt_tm*2);
-my $extend = $dis[-1];
 	
 my $oligotm = "$PATH_PRIMER3/src/oligotm";
 my $ntthal = "$PATH_PRIMER3/src/ntthal";
-my $primer3_config = "$PATH_PRIMER3/src/primer3_config/";
 
 ## creat primer.fa
-my @PN=();
-for (my $i=0; $i<$pnum; $i++){
-	open ($PN[$i], ">$outdir/$fkey.primer_$i.fa") or die $!;
-}
+open(PN, ">$outdir/$fkey.primer.fa") or die $!;
 if(!defined $NoFilter){
 	open(F, ">$outdir/$fkey.filter.list") or die $!;
 }
 my %evalue;
-my %seq;
 my %map;
 my %map_id;
+my %olen_primer;
 open (P, $fprimer) or die $!;
 while (<P>){
 	chomp;
 	next if(/^$/);
 	$_=~s/\s+$//;
-	my ($id, @seq)=split /\s+/, $_;
-	@{$seq{$id}}=@seq;
-	for (my $i=0; $i<$pnum; $i++){
-		my $primer_seq = $seq[$i];
-		## len Tm GC Hairpin, Dimer between itself
-		if(!defined $primer_seq){
-			print $_,"\n";
-			die;
+	my ($id0, $seq)=split /\s+/, $_;
+	my ($primer_seq0, $primer_seq_snp0) = split /:/, $seq;
+	if(!defined $primer_seq0){
+		print $_,"\n";
+		die;
+	}
+	push @{$olen_primer{$id0}}, [$id0, 0, $primer_seq0, $primer_seq_snp0];
+	if(defined $olens){
+		my ($min, $max, $scale)=split /,/, $olens;
+		my $len0 = length($primer_seq0);
+		for(my $l=$min; $l<$max; $l+=$scale){
+			last if($l>=$len0);
+			my $off=$len0-$l;
+			my $id=$id0."-".$l;
+			my $seq = substr($primer_seq0, $off);
+			my $seq_snp = substr($primer_seq_snp0, $off);
+			push @{$olen_primer{$id0}}, [$id, $off, $seq, $seq_snp];
 		}
+	}
 
-		## filter endA and poly
-		my $nendA = &get_end_A($primer_seq);
-		my $vpoly = &get_poly_value($primer_seq);
+	## filter
+	my $nendA = &get_end_A($primer_seq0);
+	my $is_all_filter=1;
+	for(my $i=0; $i<@{$olen_primer{$id0}}; $i++){
+		my ($id, $off, $primer_seq, $primer_seq_snp)=@{$olen_primer{$id0}->[$i]};
 		my $ftype;
+		## filter endA
 		if(!defined $NoFilter && $nendA>$MAX_endA){
 			$ftype = "EndA";
 			print F join("\t",  $id, $primer_seq, $ftype, $nendA),"\n";
 			next;
 		}
-		if(!defined $NoFilter && $vpoly >$MAX_poly){
-			$ftype = "Poly";
-			print F join("\t",  $id, $primer_seq, $ftype, $vpoly),"\n";
-			next;
-		}
-
+		
 		## filter TM and GC
-		my $Tm = `$oligotm $primer_seq`;
+		my $Tm = `$oligotm -mv $mv -dv $dv -n $dNTP -d $dna -tp $tp -sc $sc $primer_seq `;
 		chomp $Tm;
 		$Tm = sprintf "%0.2f", $Tm;
-		my @GC_info = &GC_info_stat($primer_seq, $Wind_GC);
+		my $GC=&GC($primer_seq);
 		if(!defined $NoFilter && ($Tm<$MIN_tm || $Tm>$MAX_tm)){
 			$ftype = "Tm";
 			print F join("\t",  $id, $primer_seq, $ftype, $Tm),"\n";
 			next;
 		}
-		if(!defined $NoFilter && ($GC_info[0]<$MIN_gc || $GC_info[0]>$MAX_gc)){
+		if(!defined $NoFilter && ($GC<$MIN_gc || $GC>$MAX_gc)){
 			$ftype = "GC";
-			print F join("\t",  $id, $primer_seq, $ftype, $GC_info[0]),"\n";
+			print F join("\t",  $id, $primer_seq, $ftype, $GC),"\n";
 			next;
 		}
 		
-		## filter hairpin
-		my $len = length($primer_seq);
-		my ($hairpin_dg, $hairpin_tm, $dimer_dg, $dimer_tm)=('','','','');
+		## filter Self_Complementarity
+		my $hairpin_tm = `$ntthal -a HAIRPIN -s1 $primer_seq -r`;
+		chomp $hairpin_tm;
+		if(!defined $NoFilter && $hairpin_tm > $MAX_hairpin_tm){
+			print F join("\t", $id, $primer_seq, "Hairpin:".$hairpin_tm),"\n";
+			next;
+		}
+		my $END_tm = `$ntthal -a END1 -s1 $primer_seq -s2 $primer_seq -r`;
+		chomp $END_tm;
+		if(!defined $NoFilter && $END_tm > $Max_Dimer_tm){
+			print F join("\t", $id, $primer_seq, "END Dimer:".$END_tm),"\n";
+			next;
+		}
+		my $ANY_tm = `$ntthal -a ANY -s1 $primer_seq -s2 $primer_seq -r`;
+		chomp $ANY_tm;
+		if(!defined $NoFilter && $ANY_tm > $Max_Dimer_tm){
+			print F join("\t", $id, $primer_seq, "ANY Dimer:".$ANY_tm),"\n";
+			next;
+		}
 		
-		my $hairpin_result = `$ntthal -path $primer3_config -a HAIRPIN -s1 $primer_seq`;
-		($hairpin_dg, $hairpin_tm)=$hairpin_result=~/dG = ([\d\-\.]+)\tt = ([\d\-\.]+)/;
-		if (!defined $hairpin_dg){
-			$hairpin_dg = '';
-			$hairpin_tm = '';
-		}else{
-			$hairpin_dg =  sprintf "%0.2f",$hairpin_dg;
-			$hairpin_tm =  sprintf "%0.2f",$hairpin_tm;
-			if(!defined $NoFilter && $hairpin_tm > $MAX_hairpin_tm){
-				print F join("\t", $id, $primer_seq, "Hairpin:".$hairpin_tm),"\n";
+		## filter SNP
+		my ($SNP_num, $SNP_info)=&SNP_check($primer_seq_snp);
+		$SNP_info=$SNP_num==0? "NA":$SNP_info;
+		if(!defined $NoFilter && $SNP_num > $Max_SNP_num){
+			print F join("\t", $id, $primer_seq, "SNP:".$SNP_info),"\n";
+			next;
+		}
+	
+		## filter poly
+		my ($total, $max_len, $max_base, $poly_info)=&poly_check($primer_seq);
+		$poly_info = "NA" if($total==0);
+		if(!defined $NoFilter && $total>0){
+			if($total > $Max_poly_total || ($max_base eq "G" && $max_len>$Max_poly_G) || ($max_base ne "G" && $max_len>$Max_poly_ATC)){
+				print F join("\t", $id, $primer_seq, "Poly:".$poly_info),"\n";
 				next;
 			}
 		}
-		
-		my $dimer_result = `$ntthal -path $primer3_config -a END1 -s1 $primer_seq -s2 $primer_seq`;
-		($dimer_dg, $dimer_tm)=$dimer_result=~/dG = ([\d\-\.]+)\tt = ([\d\-\.]+)/;
-		if (!defined $dimer_dg){
-			$dimer_dg = '';
-			$dimer_tm = '';
-		}else{
-			$dimer_dg =  sprintf "%0.2f",$dimer_dg;
-			$dimer_tm = sprintf "%0.2f",$dimer_tm;
-		}
-		
-		push @{$evalue{$id}},[$len, $Tm, @GC_info, $hairpin_dg, $hairpin_tm, $dimer_dg, $dimer_tm];
-		
-		my $id_new = "$id\_$i";
-		my $off = (length $primer_seq)-$len_map;
-		$off=$off>0? $off: 0;
-		my $mseq = substr($primer_seq, $off);
-		if(exists $map{$i}{$mseq}){
-			$map_id{$id_new}=$map{$i}{$mseq};
-			next;
-		}
-		$map{$i}{$mseq}=$id_new;
-		$map_id{$id_new}=$id_new;
-		print {$PN[$i]} ">$id_new\n";
-		print {$PN[$i]} $mseq,"\n";
+		my $len = length($primer_seq);
+		push @{$evalue{$id}},($primer_seq, $len, $Tm, sprintf("%.3f",$GC), sprintf("%.2f",$hairpin_tm), sprintf("%.2f",$END_tm), sprintf("%.2f",$ANY_tm), $SNP_info, $poly_info);
+		$is_all_filter=0;
 	}
+	
+	
+	if($is_all_filter==0){
+		my $off = (length $primer_seq0)-$len_map;
+		$off=$off>0? $off: 0;
+		my $mseq = substr($primer_seq0, $off);
+		print PN ">$id0\n";
+		print PN $mseq,"\n";
+	}
+	
 }
-for (my $i=0; $i<$pnum; $i++){
-	close($PN[$i]);
-}
-if(!defined $NoFilter){
-	close(F);
-}
+close(PN);
 exit(0) if(scalar keys %evalue==0);
 
 if(defined $detail){
 	open (Detail, ">$outdir/$fkey.evaluation.detail") or die $!;
 }
 my $DB;
-my %speci;
 my %efficiency;
 if(!defined $NoSpecificity){
-	for (my $pn=0; $pn<$pnum; $pn++){
-		if($pn!=$pnum-1){
-			open ($DB, ">$outdir/$fkey.database_$pn") or die $!;
+	my %db_region;
+	### bwa
+	my %mapping;
+	my $fa_primer = "$outdir/$fkey.primer.fa";
+	my @fdatabase=split /,/, $fdatabases;	
+	foreach my $fdatabase(@fdatabase){
+		if(!-e "$fdatabase\.ann"){
+			`bwa index $fdatabase`;
 		}
+		my $name = basename($fdatabase);
+		Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer |samtools view -bS - >$fa_primer\_$name.bam");
+	#	Run("bwa mem -D 0 -k 9 -t 4 -c 5000000 -y 100000 -T 12 -B 1 -O 2,2 -L 1,1 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
 		
-		my %db_region;
-		### bwa
-		my %mapping;
-		my $fa_primer = "$outdir/$fkey.primer_$pn.fa";
-		my @fdatabase=split /,/, $fdatabases;	
-		foreach my $fdatabase(@fdatabase){
-			if(!-e "$fdatabase\.ann"){
-				`bwa index $fdatabase`;
-			}
-			my $name = basename($fdatabase);
-			Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer |samtools view -bS - >$fa_primer\_$name.bam");
-		#	Run("bwa mem -D 0 -k 9 -t 4 -c 5000000 -y 100000 -T 12 -B 1 -O 2,2 -L 1,1 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
-			
-			### read in sam
-			open (I, "samtools view $fa_primer\_$name.bam|") or die $!;
-			while (<I>){
-				chomp;
-				my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;
-				my ($is_unmap, $is_reverse)=&explain_bam_flag_unmap($flag);
-				my ($md)=$_=~/MD:Z:(\S+)/;
-				next if ($is_unmap);
-				#next if($pn!=0 && $is_reverse);
-				my ($H3)=&get_3end1_mismatch($is_reverse, $cigar);
-				next if($H3>1);
-				push @{$mapping{$id}{$name}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
-			}
-			close(I);
+		### read in sam
+		open (I, "samtools view $fa_primer\_$name.bam|") or die $!;
+		while (<I>){
+			chomp;
+			my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;
+			my ($is_unmap, $is_reverse)=&explain_bam_flag_unmap($flag);
+			my ($md)=$_=~/MD:Z:(\S+)/;
+			next if ($is_unmap);
+			my ($H3)=&get_3end1_mismatch($is_reverse, $cigar);
+			#print "H3:", join("\t", $H3,$id, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
+			next if(!defined $probe && $H3>1);
+			push @{$mapping{$id}{$name}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
 		}
-		### evaluate
-		foreach my $ido (sort {$a cmp $b} keys %evalue){
-			my ($primer_seq)=$seq{$ido}->[$pn];
-			my $mid = $map_id{$ido."_".$pn};
-			my $align_num = 0;
-			if(!exists $mapping{$mid}){
-				print "No mapping result: $mid!\n";
-				die;
-			}
-			my @high_tm;
-			my %high_info;
-			foreach my $name(keys %{$mapping{$mid}}){
-				my $map_num = scalar @{$mapping{$mid}{$name}};
-				for (my $i=0; $i<$map_num; $i++){
-					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$mid}{$name}->[$i]};
+		close(I);
+	}
+	### evaluate
+	open(O, ">$outdir/$fkey.specificity.sam") or die $!;
+	foreach my $id (sort {$a cmp $b} keys %olen_primer){
+		my $primer_seq=$olen_primer{$id}->[0][2];
+		my $align_num = 0;
+		my @high_tm;
+		my %high_info;
+		foreach my $name(keys %{$mapping{$id}}){
+			my $map_num = scalar @{$mapping{$id}{$name}};
+			for (my $i=0; $i<$map_num; $i++){
+				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id}{$name}->[$i]};
 
-#					print join("\t", ("test", $ido, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md)),"\n";
-					## specificity
-					my ($dG, $tm, $end_match, $ntthal_result, $pos3, $cigar_new, $md_new) = &ntthal_map($primer_seq, $chr, $pos, $is_reverse, $fdatabase);
-					next if($end_match == -1); ## map to NNNN region, invalid
-					($pos, $cigar, $md) = ($pos3, $cigar_new, $md_new);
-#					print "new:", join(",",($tm, $pos, $cigar, $md)),"\n";
+				if(defined $detail){
+					print Detail "\nOriginal:",join("\t",$id, $is_reverse, $flag, $chr, $pos, $score),"\n";
+				}
+				## specificity
+				my $len = length($primer_seq);
+				my $extend = 20;
+				
+				### get seq
+				my ($start, $end);
+				my $off = $len-$len_map;
+				if($is_reverse){# "-"
+					$start = $pos-$extend;
+					$end = $pos+$len+$extend;
+				}else{
+					$start = $pos-$off-$extend;
+					$end = $pos-$off-1+$len+$extend;
+				}
+				#print join("\t", $pos, $is_reverse, $start, $end),"\n";
+				$start=$start>1? $start: 1;
+				my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
+				my @seq_info = split /\n/, $seq_info;
+				shift @seq_info;
+				my $seq = join("",@seq_info);
+				if($seq!~/[ATCGatcg]+/){
+					print "Wrong: extract aligned region sequence failed\n";
+					print $_,"\n";
+					print join("\t", $chr, $start, $end, $fdatabase),"\n";
+					die;
+				}
+				$seq=uc($seq);
+				if ($is_reverse == 0){
+					$seq=&revcom($seq);
+				}
+				### ntthal
+				my $result = `$ntthal -a ANY -s1 $primer_seq -s2 $seq`;
+				if(defined $detail){
+					print Detail "$ntthal -a ANY -s1 $primer_seq -s2 $seq\n";
+					print Detail $result;
+				}
+			
+				### get tm 
+				my ($dG, $tm) = $result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
+				next if($dG eq ""); ## map to NNNN region, invalid
+				next if($tm<$min_tm_spec);
+				my @line = split /\n/, $result;
+				shift @line;	
+				if(!defined $line[1]){ ## just print and return
+					print join("\t",$primer_seq, $chr, $pos, $is_reverse, $fdatabase),"\n";
+					print "$SAMTOOLS faidx $fdatabase $chr:$start-$end\n";
+					print "$ntthal -a ANY -s1 $primer_seq -s2 $seq\n";
+					return (-1,-1,-1,-1);
+				}
+				## match position and cigar
+				my ($pos3, $cigar_new, $md_new, $end_match)=&get_match_cigar_from_ntthal(\@line, $is_reverse, $start, $end);
+				($pos, $cigar, $md) = ($pos3, $cigar_new, $md_new);
+				if(defined $detail){
+					print Detail "ntthal map:"; 
+					print Detail join("\t", $pos3, $cigar, $md, $end_match, $chr, $is_reverse, $start, $end),"\n";
+				}
+				next if(!defined $probe && $end_match<0);
+				my $mvisual=&map_visualation($cigar, $md);
+				$align_num++;
+				if($align_num>$Max_High_Tm_Num){
+					for(my $x=0; $x<@{$olen_primer{$id}}; $x++){
+						my ($idt, undef, $seqt) = @{$olen_primer{$id}->[$x]};
+						print F join("\t", $idt, $seqt, "Align_Too_More"),"\n";
+						delete $evalue{$idt};
+					}
+					last;
+				}
 
-					## get pcr efficiency
-					my ($last_eff, $dis);
-					if($pn==0){
-						$last_eff = 1;
-						$dis = 0;
-					}else{
-						$last_eff = $efficiency{$chr}*$eff_times; ## eff_times: few DNA in the last step will be amplified, so multiply by eff_times
-						$dis = $pos;
-					}
-					my ($eff, $eff_tm, $eff_dis, $eff_end)=&get_pcr_efficienty($tm, $dis, $cigar, $md, $min_tm_spec, $last_eff, \@rank_end, \@eff_end, $pn);
-					if($pn==1 && defined $Debug){
-						print join("\t", "Eff:".$eff, "Tm($tm):".$eff_tm, "Dis($dis):".$eff_dis, "End:".$eff_end, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
-					}
-
-					$align_num++;
-					if(($tm<$min_tm_spec && $align_num>200) || ($align_num>400)){
-						last;
-					}
-					
-					## store info
-					my $strand = $is_reverse? "-": "+";
-					if($pn==0){
-						push @{$high_info{sprintf("%.2f",$tm)}},[$strand, $chr, $pos, $cigar, $md, $end_match, $eff];
-					}else{
-						push @{$high_info{sprintf("%.2f",$eff)}},[$strand, $chr, $pos, $cigar, $md, $end_match, $tm];
-					}
-
-					## out database
-					if ($tm >= $min_tm_spec){
-						if ($pn != $pnum-1){
-							my $seq;
-							my $spos;
-							if($type eq "back-to-back"){
-								$seq = &get_database_seq_back($chr, $pos, $is_reverse, $fdatabase, $extend); 
-								@dis=($extend-$dis[0]/2, $extend, 0, $extend);
-								my $len = length($primer_seq);
-								$spos=$is_reverse? $pos+$extend-$len: $pos-$extend+$len; ## to be compatible with other type
-							}else{
-								$seq = &get_database_seq($primer_seq, $chr, $pos, $is_reverse, $fdatabase, $extend); #($primer, $fdatabae, $chr, $pos, $is_reverse)
-								$spos=$pos;
-							}
-							$chr=$is_reverse? "-".$chr: "+".$chr;
-							my $id_db = join(",", $ido."_".$pn, $chr, $spos); ## spos in $id_db is used to calculate primer positions in sub get_high_info
-							$efficiency{$id_db}=$eff;
-							print $DB ">$id_db\n$seq\n";
-						}
-					}
+				## get pcr efficiency
+				my $eff_mis = &efficienty_end3_mismatch($mvisual, $max_end3_eff, \@rank_end, \@eff_end);
+				# tm eff
+				my $eff_tm = &score_single($tm, 1, @tm);
+				$eff_tm = $eff_tm>0? $eff_tm: 0;
+				my $eff = $eff_tm * $eff_mis;
+				if(defined $detail){
+					print Detail "New info:",join("\t",$id, $flag, $chr, $pos, $primer_seq, "TM:i:$tm", "EF:Z:$eff","EM:i:$end_match", "MD:Z:$md","MV:Z:$mvisual"),"\n";
+				}
+				if(exists $evalue{$id}){
+					print O join("\t",$id, $flag, $chr, $pos, $primer_seq, "TM:i:$tm", "EF:Z:$eff","EM:i:$end_match", "MV:Z:$mvisual", "MD:Z:$md", "CG:Z:$cigar"),"\n";
+				}
+				## other len's primers
+				for(my $i=1; $i<@{$olen_primer{$id}}; $i++){
+					my ($idn, $off, $pseq)=@{$olen_primer{$id}->[$i]};
+					next if(!exists $evalue{$idn});
+					my ($mvn, $ematchn) = &map_visual_trim($mvisual, $off, $end_match, 8);
+					my $tmn = `$ntthal -a ANY -s1 $pseq -s2 $seq -r`;
+					chomp $tmn;
+					my $eff_tmn = &score_single($tmn, 1, @tm);
+					$eff_tmn = $eff_tmn>0? $eff_tmn: 0;
+					my $effn = $eff_tmn * $eff_mis;
 					if(defined $detail){
-						print Detail join("\t",$primer_seq, join(",",$chr, $pos, $is_reverse),$dG, $tm, $end_match),"\n";
-						print Detail $ntthal_result;
+						print Detail "New Sam:",join("\t",$idn, $flag, $chr, $pos, $pseq, "TM:i:$tmn", "EF:Z:$effn","EM:i:$ematchn", "MV:Z:$mvn"),"\n";
 					}
+					print O join("\t",$idn, $flag, $chr, $pos, $pseq, "TM:i:$tmn", "EF:Z:$effn","EM:i:$ematchn", "MV:Z:$mvn"),"\n";
 				}
 			}
-			my ($high_tm_num, $high_eff_num, $high_info);
-			if($pn==0){
-				($high_tm_num, $high_eff_num, $high_info)=&get_high_info(\%high_info, $min_tm_spec, $min_eff, $pn);
-			}else{
-				($high_eff_num, $high_tm_num, $high_info)=&get_high_info(\%high_info, $min_eff, $min_tm_spec, $pn);
-			}
-
-			if(defined $detail){
-				print Detail "##",join("\t", $ido, $pn, $align_num, $high_tm_num, $high_eff_num, $high_info),"\n";
-			}
-
-			push @{$speci{$ido}}, [$align_num, $high_tm_num, $high_eff_num, $high_info];
 		}
-		
-		if($pn !=$pnum-1){
-			close($DB);
-			$fdatabases = "$outdir/$fkey.database_$pn";
-			if(-f "$fdatabases.amb"){ ## rm old bwa indexed files 
-				`rm $fdatabases.*`;
-			}
-			Run("bwa index $fdatabases");
-		}
-		
 	}
+	close(O);
 	if(defined $detail){
 		close (Detail);
 	}
 }
 
+if(!defined $NoFilter){
+	close(F);
+}
 ### output
 open (O, ">$outdir/$fkey.evaluation.out") or die $!;
 if(!defined $nohead){
 	print O "##High_Info(n=1): TM        : Flag/DatabaseID/Pos/Cigar/MD/End_match_num/Efficiency\n";
-	if($pnum>1){
-		print O "##High_Info(n>1): Efficiency: Flag/DatabaseID/Pos/Cigar/MD/End_match_num/TM\n";
-	}
 	print O "#ID";
-	for (my $i=0; $i<$pnum; $i++){
-		print O "\tSeq\tLen\tTm\tGC\tGC5\tGC3\tdGC\tdG_Hairpin\tTm_Hairpin\tdG_Dimer\tTm_Dimer\tAlign_Num\tHigh_Tm_Num\tHigh_Efficiency_Num\tHigh_Info";
-	}
+	print O "\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tSNP\tPoly\tAlign_Num\tHigh_Tm_Num\tHigh_Efficiency_Num\tHigh_Info";
 	print O "\n";
 }
 
 foreach my $id (sort {$a cmp $b} keys %evalue){
-	print O $id;
-	for (my $i=0; $i<$pnum; $i++){
-		my @spe = defined $NoSpecificity? ("","","",""):@{$speci{$id}->[$i]};
-		print O "\t",$seq{$id}->[$i],"\t",join("\t",@{$evalue{$id}->[$i]}),"\t",join("\t",@spe);
-	}
-	print O "\n";
+	print O join("\t",$id, @{$evalue{$id}}), "\n";
 }
 close(O);
 #######################################################################################
@@ -367,136 +383,55 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 # sub function
 # ------------------------------------------------------------------
-
-sub get_high_info{
-	my ($ahigh_info, $min_key, $min_other, $pn)=@_;
-	my %high_info=%{$ahigh_info};
-	
-	my @high_info=();
-	my @high_value=();
-	my $n = 0;
-	my $high_key_num = 0;
-	my $high_other_num=0;
-	
-	my %record;
-	foreach my $t (sort{$b<=>$a} keys %high_info){
-		last if($t<$min_key && $n>=3);
-	#	last if($t<$min_key);
-		for(my $i=0; $i<@{$high_info{$t}}; $i++){
-			if($pn>0){
-				my ($strand, $database_id, $pos, $cigar)=@{$high_info{$t}->[$i]}[0..3];
-				#check strand 
-				if(($type eq "Nested" && $strand eq "-") || ($type ne "Nested" && $strand eq "+")){
-					print "Wrong strand: ", join(",", ($strand, $database_id, $pos, $cigar)),"\n";
-					next;
-				}
-				
-				my ($idt, $chrt_ori, $p3t)=split /,/, $database_id;
-				my ($idto)=$idt=~/(\S+)\_\d+$/;
-				my ($strandt,$chrt)=$chrt_ori=~/([+-])(\S+)/;
-
-				my $plen = length ($seq{$idto}->[$pn-1]);
-				my ($unmap_len5) = $cigar=~/^(\d+)H/; ## when primer 5end is not mapped, indicate that: the primer is connected to the last primer, it is not expected
-				if(!defined $unmap_len5){
-					$unmap_len5=0;
+sub SNP_check{
+	my ($seq)=@_;
+	my @u=split //, $seq;
+	my @snp;
+	for(my $i=0; $i<@u; $i++){
+		if($u[$i] eq "S"){
+			push @snp, $i."S1";
+		}elsif($u[$i] eq "D"){
+			my $l=1;
+			while(1){
+				if($u[$i+1] eq "D"){
+					$l++;
+					$i++;
 				}else{
-					if($type eq "Nested" && $pos==1){
-						print "Wrong: the last primer $database_id been connected on the 5end\n";
-					}
+					last;
 				}
-				if($type eq "Nested"){
-					$p3t = $strandt eq "+"? $p3t+$pos-$plen-$unmap_len5: $p3t-$pos+$plen+$unmap_len5;
-					#print "Pos3:",join("\t", ($p3t, $strand, $database_id, $pos, $cigar)),"\n";
-				}else{
-					$p3t = $strandt eq "+"? $p3t+$pos-$plen: $p3t-$pos+$plen;
-				}
-#				print join("\t","pos3:", $database_id, $p3t, $pos, $plen, $unmap_len5),"\n";
-				if(exists $record{$chrt."_".$p3t}){
-					my $ix = $record{$chrt."_".$p3t};
-					$high_info[$ix].="@".$database_id; 
-					next;
-				}
-				$record{$chrt."_".$p3t}=$n;
 			}
-			if($t >= $min_key){
-				$high_key_num++;
-			}
-			my ($other) = @{$high_info{$t}->[$i]}[-1];
-			if ($other >=$min_other){
-				$high_other_num++;
-			}
-			if($n<3){
-				push @high_value, $t;
-				push @high_info, join("/",@{$high_info{$t}->[$i]});
-			}
-			$n++;
+			push @snp, $i."D".$l;
+		}elsif($u[$i]=~/IJKL/){
+			my $l=ord($u[$i])-ord('I')+1;
+			push @snp, $i."I".$l;
 		}
 	}
-#	print Dumper %record;
-	my $high_info = join(",",@high_value).":".join(";",@high_info);
-	return($high_key_num, $high_other_num, $high_info);
+	return (scalar @snp, join(",", @snp));
 }
 
-sub get_pcr_efficienty{ 
-	my ($tm, $dis, $cigar, $md, $min_tm, $last_eff, $arank_end, $aeff_end, $pn)=@_;
-#	if($tm < $min_tm){
-#		return 0;
-#	}
-
-	# tm eff
-	my $eff_tm = &score_single($tm, 1, @tm);
-	$eff_tm = $eff_tm>0? $eff_tm: 0;
-	# dis eff
-	my $eff_dis = $pn>0? &score_single($dis, 1, @dis) : 1;
-	$eff_dis = $eff_dis>0? $eff_dis: 0;
-
-	# mismatch pos to 3end
+sub efficienty_end3_mismatch{
+	my ($mvisual,$max_end3, $arank_end, $aeff_end)=@_;
+	my $mapr= reverse ($mvisual);
+	my @unit = split //, $mapr;
 	my @mis_pos;
-	&get_3end_mismatch($cigar, $md, \@mis_pos, $arank_end->[-1]);
+	for(my $i=0; $i<$max_end3; $i++){
+		if($unit[$i] eq "*"){# mismatch
+			push @mis_pos, $i;
+		}elsif($unit[$i] eq "-" || $unit[$i] eq "^"){# Del or Ins ==> 2 mismatch
+			push @mis_pos, ($i, $i);
+			for(my $j=$i+1; $j<$max_end3;$j++){
+				if($unit[$j] ne $unit[$i]){
+					$i=$j-1;
+					last;
+				}
+			}
+		}
+	}
 	my $eff_end = 1;
 	for(my $i=0; $i<@mis_pos; $i++){
 		$eff_end *= &get_eff_rank($mis_pos[$i], $arank_end, $aeff_end, "<=");
 	}
-
-	my $eff = sprintf("%.2f", $last_eff * $eff_tm * $eff_dis * $eff_end);
-#	print "eff:\t", join("\t", $eff, $last_eff, $eff_tm, $eff_dis, $eff_end, ":", $tm, $dis, $md),"\n";
-
-	#$eff=$eff>1? 1: $eff;
-	return ($eff, $eff_tm, $eff_dis, $eff_end);
-}
-
-sub get_3end_mismatch{
-	my ($cigar, $md, $aresult, $end_len)=@_;
-	## insert: 2 mismatch
-	if($cigar=~/I/){
-		$cigar=~s/\d+S//;
-		{
-			my @num=split /[MID]/, $cigar;
-			my @minfo=split /\d+/, $cigar;
-			my $sum=0;
-			for(my $i=$#num; $i>=0; $i--){
-				$sum+=!defined $num[$i]? 0: $num[$i];
-				$sum++;
-				if($sum<=$end_len && $minfo[$i] eq "I"){
-					push @{$aresult}, ($sum, $sum);
-				}
-			}
-		}
-	}
-
-	## del
-	$md=~s/\^[A-Z]+/A0A/g; ## one del ==> 2 mismatch
-		
-	## mismatch
-	my @num=split /[A-Z]+/, $md;
-	my $sum=0;
-	for(my $i=$#num; $i>=0; $i--){
-		$sum+=!defined $num[$i]? 0: $num[$i];
-		$sum++;
-		if($sum<=$end_len){
-			push @{$aresult}, $sum;
-		}
-	}
+	return $eff_end;
 }
 
 sub get_eff_rank{
@@ -539,115 +474,6 @@ sub get_3end1_mismatch{
 	return $H3;
 }
 
-sub get_database_seq_back{
-	my ($chr, $pos, $is_reverse, $fref, $extend)=@_;
-	my ($s, $e); ## contain primer sequence
-	if($is_reverse==0){
-		$s=$pos-$extend;
-		$e=$pos;
-	}else{
-		$s=$pos;
-		$e=$s+$extend;
-	}
-	$s=$s>1? $s: 1;
-	# get seq
-	my $rout = `$SAMTOOLS faidx $fref $chr:$s-$e`;
-	chomp $rout;
-	my ($id, @seq)=split /\n/, $rout;
-	my $seq = join("", @seq);
-	if($is_reverse){
-		$seq=~tr/ATCGatcg/TAGCtagc/;
-		$seq=reverse $seq;
-	}
-	return ($seq);
-}
-
-sub get_database_seq_back_old{
-	my ($adrange, $primer, $chr, $pos, $is_reverse, $fref)=@_;
-	my $plen = length $primer;
-	my $dextend = 30; ## fragments amplified by primers mapped on downstream sequence will be removed because of no cyclizing marks
-
-#	#### downstream: not contain primer sequence
-#	my ($s, $e);
-#	if ($is_reverse == 0){
-#		$s = $pos+1;
-#		$e = $s+$dextend;
-#	}else{
-#		$e = $pos-1;
-#		$s = $e - $dextend;
-#	}
-#	$s=$s>1? $s: 1;
-#
-#	# get seq
-#	my $rout = `$SAMTOOLS faidx $fref $chr:$s-$e`;
-#	chomp $rout;
-#	my ($id, @seq)=split /\n/, $rout;
-#	my $seq = join("", @seq);
-#	if($is_reverse){
-#		$seq=~tr/ATCGatcg/TAGCtagc/;
-#		$seq=reverse $seq;
-#	}
-	
-	#### upstream: contain primer revcom sequence
-	my $bseq;
-	{
-		my ($bs, $be);
-		if($is_reverse){
-			$bs=$pos;
-			$be=$bs+$extend;
-		}else{
-			$bs=$pos-$extend;
-			$be=$pos;
-		}
-		$bs=$bs>1? $bs: 1;
-		# get seq
-		my $rout = `$SAMTOOLS faidx $fref $chr:$bs-$be`;
-		chomp $rout;
-		my ($id, @seq)=split /\n/, $rout;
-		my $seq = join("", @seq);
-		if($is_reverse){
-			$seq=~tr/ATCGatcg/TAGCtagc/;
-			$seq=reverse $seq;
-		}
-		$bseq = $seq; ## contain primer revcom sequence
-	}
-
-#	$seq = $seq.$bseq;
-
-	my @dr=@{$adrange};
-	@{$adrange} = ($extend+$dextend-2*$plen+$dr[2], $extend+$dextend, $dextend, $extend+$dextend); ## position of primer 3end
-	return ($bseq);
-
-}
-
-## pos is postion of primer 3end
-sub get_database_seq{
-	my ($primer, $chr, $pos, $is_reverse, $fref, $extend)=@_;
-	my $plen = length $primer;
-	my ($s, $e);
-	if ($is_reverse == 0){
-		$s = $pos+1;
-		$e = $s+$extend;
-	}else{
-		$e = $pos-1;
-		$s = $e - $extend;
-	}
-	$s=$s>1? $s: 1;
-
-	# get seq
-	my $rout = `$SAMTOOLS faidx $fref $chr:$s-$e`;
-	chomp $rout;
-	my ($id, @seq)=split /\n/, $rout;
-	my $seq = join("", @seq);
-	if($is_reverse){
-		$seq=~tr/ATCGatcg/TAGCtagc/;
-		$seq=reverse $seq;
-	}
-	$seq=$primer.$seq;
-
-	return ($seq);
-}
-
 sub Run{
     my ($cmd, $log_fh)=@_;
 
@@ -659,78 +485,6 @@ sub Run{
     if ($ret) {
         die "Run $cmd failed!\n";
     }
-}
-
-sub ntthal_map{
-	my ($primer_seq, $chr, $pos, $is_reverse, $fdatabase)=@_;
-	my $len = length($primer_seq);
-	my $extend = 10;
-	
-	### get seq
-	my ($start, $end);
-	my $off = (length $primer_seq)-$len_map;
-	if($is_reverse){# "-"
-		$start = $pos-$extend;
-		$end = $pos+$len+$extend;
-	}else{
-		$start = $pos-$off-$extend;
-		$end = $pos-$off-1+$len+$extend;
-	}
-	#print join("\t", $pos, $is_reverse, $start, $end),"\n";
-	$start=$start>1? $start: 1;
-	my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
-	my @seq_info = split /\n/, $seq_info;
-	shift @seq_info;
-	my $seq = join("",@seq_info);
-	if($seq!~/[ATCGatcg]+/){
-		return (-1,-1,-1,-1);
-	}
-	$seq=uc($seq);
-	if ($is_reverse == 0){
-		$seq=~tr/atcg/tagc/;
-		$seq=~tr/ATCG/TAGC/;
-		$seq = reverse $seq;
-	}
-	### ntthal
-	if(defined $detail){
-		print Detail "$ntthal -path $primer3_config -a END1 -s1 $primer_seq -s2 $seq\n";
-	}
-	my $result = `$ntthal -path $primer3_config -a END1 -s1 $primer_seq -s2 $seq`;
-
-	### get tm 
-	my ($dG, $tm) = $result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
-	my @line = split /\n/, $result;
-	shift @line;	
-	if(!defined $line[1]){ ## just print and return
-		print join("\t",$primer_seq, $chr, $pos, $is_reverse, $fdatabase),"\n";
-		print "$SAMTOOLS faidx $fdatabase $chr:$start-$end\n";
-		print "$ntthal -path $primer3_config -a END1 -s1 $primer_seq -s2 $seq\n";
-		return (-1,-1,-1,-1);
-	}
-	## match position and cigar
-	my ($pos_new, $cigar, $md)=&get_match_cigar_from_ntthal(\@line, $is_reverse, $start, $end);
-	#print $result,"\n";
-	#print "ntthal map:\n"; 
-	#print join("\t", $pos_new, $cigar, $md,  $chr, $is_reverse, $start, $end),"\n";
-
-	## get end_match
-	my @aunit = split //, $line[1];
-	my $end_match = 0;
-	my $count_flag = 0;
-	for (my $i=$#aunit; $i>=0; $i--){
-		if ($aunit[$i] ne " "){
-			$count_flag = 1;
-		}
-		if ($count_flag ==1){
-			if($aunit[$i] ne " "){
-				$end_match++;
-			}else{
-				last;
-			}
-		}
-	}
-
-	return($dG, $tm, $end_match, $result, $pos_new, $cigar, $md);
 }
 
 #Example: 
@@ -819,23 +573,46 @@ sub get_match_cigar_from_ntthal{
 		$md.=$mlen;
 	}
 
-	## end handle
-	
-	if($cigar=~/(\d+)D$/){
+	## end handle D
+	if($cigar=~/\d+D$/){
 		($tright)=$cigar=~/(\d+)D$/;
 		$cigar=~s/\d+D$//;
 		$md=~s/\^[A-Z]+$//;
-	}elsif($cigar!~/M$/){
-		print "Wrong:$cigar\n";
-		print join("\n", @line),"\n";
-		die;
+	}elsif($cigar=~/\d+I$/){
+#eg: 10M12D8M2I
+#
+#                     ------------     TGACC
+#           GCCACTGCCT            GCTGG
+#           CGGTGACGGA            CGACC
+#CGTACACCCAC          GAAACACTGTAT     GAC--
+		$cigar=~s/\d+I//;
+	}
+	## end mismatch to Soft
+	if($md=~/[A-Z]$/){ ##end mismatch
+		$md.="0"; 
+	}
+	my $end_match;
+	my $mislen=0;
+	if($md=~/[ATCG]0$/){
+		while($md=~/[ATCG]0$/){
+			$md=~s/[ATCG]0$//;
+			$mislen++;
+		}
+		my ($mlen)=$cigar=~/(\d+)M$/;
+		$mlen-=$mislen;
+		$cigar=~s/(\d+)M$//;
+		$cigar.=$mlen."M".$mislen."S";
+		$end_match = -1*$mislen;
+	}else{
+		($end_match)=$md=~/(\d+)$/;
 	}
 	if($pleft>0){
 		$cigar = $pleft."S".$cigar;
 	}
 
-	my $pos_new = $is_reverse? $start+$tright: $end-$tright; ## position of  primer3
-	return($pos_new, $cigar, $md);
+	my $pos_new = $is_reverse? $start+$tright+$mislen: $end-$tright-$mislen; ## position of  primer3
+	#my $pos_new = $is_reverse? $start+$tright+$mislen: $start+$tleft;
+	return($pos_new, $cigar, $md, $end_match);
 }
 
 sub explain_bam_flag_unmap{
@@ -866,17 +643,27 @@ Usage:
   Options:
   -p  <file>             Input primer list file, forced
   -d  <files>            Input database files separated by ",", [$fdatabases]
-  -n  <int>              combined primer num, single primer: 1, primer pair: 2, forced
   -k  <str>              Key of output file, forced
 
   --NoFilter             Not filter any primers
+  --probe                design probe, if not defined, will only consider mapping region where primer 3end matched exactly when caculate specificity.
   --NoSpecificity        Not evalue specificity
-  -type      <str>       primer type, "face-to-face", "back-to-back", "Nested", [$type]
-  -rdis      <str>       distance range between pair primers when evaluate primer efficiency, (opt_min, opt_max, min, max) separted by ",", [$dis_range]
   -opttm     <int>       optimal tm of primer, [$opt_tm]
   -opttmp    <int>       optimal tm of probe, not design probe when not set the parameter, optional
   -maplen    <int>      length to map with bwa, [$len_map]
+  -olen      <int,int,int>  other length's primers, <min,max,scale> of length, optional
   -stm       <int>      min tm to be High_TM when caculate specificity, [$min_tm_spec]
+  -mv        <int>      concentration of monovalent cations in mM, [$mv]
+  -dv        <float>    concentration of divalent cations in mM, [$dv]
+  -dNTP      <float>    concentration of deoxynycleotide triphosphate in mM, [$dNTP]
+  -dna       <int>      concentration of DNA strands in nM, [$dna]
+  -tp        [0|1]      Specifies the table of thermodynamic parameters and the method of melting temperature calculation,[$tp]
+                        0   Breslauer et al., 1986 and Rychlik et al., 1990
+						1   Use nearest neighbor parameters from SantaLucia 1998
+  -sc        [0|1|2]    Specifies salt correction formula for the melting temperature calculation, [$sc]
+                        0   Schildkraut and Lifson 1965, used by primer3 up to and including release 1.1.0.
+						1   SantaLucia 1998
+						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
   --Detail              Output Detail Info, optional
   -od        <dir>      Dir of output file, default ./
