@@ -75,11 +75,6 @@ my $Max_poly_ATC = 5;
 my $MAX_endA = 4;
 my $MAX_poly = 20;
 my $Max_High_Tm_Num = 300; ## too high tm aligns will be filtered
-my @rank_end=(3,   5,   8); #  PCR efficiency when dis of mismatch pos to 3end <= @rank_end
-my @eff_end =(0.1, 0.4, 0.8 );
-my $max_end3_eff = $rank_end[-1];
-my $eff_times = 10;
-my $min_eff = 0.1;
 my $MIN_tm = $opt_tm-10;
 my $MAX_tm = defined $opt_tm_probe? $opt_tm_probe+10: $opt_tm+10;
 my $MIN_gc = 0.2;
@@ -214,7 +209,7 @@ if(defined $detail){
 	open (Detail, ">$outdir/$fkey.evaluation.detail") or die $!;
 }
 my $DB;
-my %efficiency;
+my %bound;
 if(!defined $NoSpecificity){
 	my %db_region;
 	### bwa
@@ -225,12 +220,12 @@ if(!defined $NoSpecificity){
 		if(!-e "$fdatabase\.ann"){
 			`bwa index $fdatabase`;
 		}
-		my $name = basename($fdatabase);
-		Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer |samtools view -bS - >$fa_primer\_$name.bam");
+		my $dname = basename($fdatabase);
+		Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer |samtools view -bS - >$fa_primer\_$dname.bam");
 	#	Run("bwa mem -D 0 -k 9 -t 4 -c 5000000 -y 100000 -T 12 -B 1 -O 2,2 -L 1,1 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
 		#&SHSHOW_TIME("read in sam");		
 		### read in sam
-		open (I, "samtools view $fa_primer\_$name.bam|") or die $!;
+		open (I, "samtools view $fa_primer\_$dname.bam|") or die $!;
 		while (<I>){
 			chomp;
 			my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;
@@ -240,7 +235,7 @@ if(!defined $NoSpecificity){
 			my ($H3)=&get_3end1_mismatch($is_reverse, $cigar);
 			#print "H3:", join("\t", $H3,$id, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
 			next if(!defined $probe && $H3>1);
-			push @{$mapping{$id}{$name}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
+			push @{$mapping{$id}{$dname}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
 		}
 		close(I);
 	}
@@ -249,15 +244,13 @@ if(!defined $NoSpecificity){
 	open(O, ">$outdir/$fkey.specificity.sam") or die $!;
 	foreach my $id (sort {$a cmp $b} keys %olen_primer){
 		my $primer_seq=$olen_primer{$id}->[0][2];
-		my $align_num = 0;
-		my @high_tm;
-		my %high_info;
-		foreach my $name(keys %{$mapping{$id}}){
-			my $map_num = scalar @{$mapping{$id}{$name}};
-			#&SHSHOW_TIME($name);
-			my %lowtm;
+		my $bound_num = 0;
+		my %lowtm;
+		foreach my $dname(keys %{$mapping{$id}}){
+			my $map_num = scalar @{$mapping{$id}{$dname}};
+			#&SHSHOW_TIME($dname);
 			for (my $i=0; $i<$map_num; $i++){
-				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id}{$name}->[$i]};
+				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id}{$dname}->[$i]};
 				#&SHSHOW_TIME(join(",",$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase);
 				next if(exists $lowtm{join(",",$is_reverse,$cigar, $md)});
 				if(defined $detail){
@@ -324,8 +317,8 @@ if(!defined $NoSpecificity){
 				}
 				next if(!defined $probe && $end_match<0);
 				my $mvisual=&map_visualation($cigar, $md);
-				$align_num++;
-				if($align_num>$Max_High_Tm_Num){
+				$bound_num++;
+				if($bound_num>$Max_High_Tm_Num){
 					for(my $x=0; $x<@{$olen_primer{$id}}; $x++){
 						my ($idt, undef, $seqt) = @{$olen_primer{$id}->[$x]};
 						print F join("\t", $idt, $seqt, "Align_Too_More"),"\n";
@@ -334,17 +327,12 @@ if(!defined $NoSpecificity){
 					last;
 				}
 
-				## get pcr efficiency
-				my $eff_mis = &efficienty_end3_mismatch($mvisual, $max_end3_eff, \@rank_end, \@eff_end);
-				# tm eff
-				my $eff_tm = &score_single($tm, 1, @tm);
-				$eff_tm = $eff_tm>0? $eff_tm: 0;
-				my $eff = $eff_tm * $eff_mis;
 				if(defined $detail){
-					print Detail "New info:",join("\t",$id, $flag, $chr, $pos, $primer_seq, "TM:i:$tm", "EF:Z:$eff","EM:i:$end_match", "MD:Z:$md","MV:Z:$mvisual"),"\n";
+					print Detail "New info:",join("\t",$id, $is_reverse, $chr, $pos, $primer_seq, $tm, $end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
 				}
 				if(exists $evalue{$id}){
-					print O join("\t",$id, $flag, $chr, $pos, $primer_seq, "TM:i:$tm", "EF:Z:$eff","EM:i:$end_match", "MV:Z:$mvisual", "MD:Z:$md", "CG:Z:$cigar"),"\n";
+					print O join("\t",$id, $is_reverse, $chr, $pos, $primer_seq, $tm,$end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
+					push @{$bound{$id}{$tm}}, [$is_reverse, $chr, $pos, $end_match,$mvisual];
 				}
 				## other len's primers
 				for(my $i=1; $i<@{$olen_primer{$id}}; $i++){
@@ -353,16 +341,15 @@ if(!defined $NoSpecificity){
 					my ($mvn, $ematchn) = &map_visual_trim($mvisual, $off, $end_match, 8);
 					my $tmn = `$ntthal -a ANY -s1 $pseq -s2 $seq -r`;
 					chomp $tmn;
-					my $eff_tmn = &score_single($tmn, 1, @tm);
-					$eff_tmn = $eff_tmn>0? $eff_tmn: 0;
-					my $effn = $eff_tmn * $eff_mis;
 					if(defined $detail){
-						print Detail "New Sam:",join("\t",$idn, $flag, $chr, $pos, $pseq, "TM:i:$tmn", "EF:Z:$effn","EM:i:$ematchn", "MV:Z:$mvn"),"\n";
+						print Detail "New Sam:",join("\t",$idn, $is_reverse, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
 					}
-					print O join("\t",$idn, $flag, $chr, $pos, $pseq, "TM:i:$tmn", "EF:Z:$effn","EM:i:$ematchn", "MV:Z:$mvn"),"\n";
+					print O join("\t",$idn, $is_reverse, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
+					push @{$bound{$idn}{$tmn}}, [$is_reverse, $chr, $pos, $ematchn,$mvn];
 				}
 			}
 		}
+		push @{$evalue{$id}}, $bound_num;
 	}
 	close(O);
 	if(defined $detail){
@@ -373,17 +360,35 @@ if(!defined $NoSpecificity){
 if(!defined $NoFilter){
 	close(F);
 }
+
 #&SHSHOW_TIME("Output:");
 ### output
 open (O, ">$outdir/$fkey.evaluation.out") or die $!;
 if(!defined $nohead){
-	print O "#ID";
-	print O "\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tSNP\tPoly";
-	print O "\n";
+	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tSNP\tPoly\tBoundNum\tHighestTm\tHighestInfo\n";
 }
 
 foreach my $id (sort {$a cmp $b} keys %evalue){
-	print O join("\t",$id, @{$evalue{$id}}), "\n";
+	## get bounds info of the max tm
+	my @tms=sort{$b <=> $a} keys %{$bound{$id}};
+	my $maxn=3;
+	my @tm;
+	my @binfo;
+	my $n=0;
+	for(my $i=0; $i<@tms; $i++){
+		for(my $j=0; $j<@{$bound{$id}{$tms[$i]}}; $j++){
+			push @tm, sprintf("%.2f",$tms[$i]);
+			my ($is_reverse, $chr, $pos, $ematchn,$mvn)=@{$bound{$id}{$tms[$i]}->[$j]};
+			my $strand=$is_reverse? "-": "+";
+#			push @binfo, join("/", $strand, $chr, $pos, $mvn);
+			push @binfo, $strand."/".$chr."/".$pos.":".$mvn;
+			$n++;
+			last if($n>=$maxn);
+		}
+		last if($n>=$maxn);
+	}
+	my $binfo = join(",", @tm).":".join(";", @binfo);
+	print O join("\t",$id, @{$evalue{$id}}, join(",", @tm), join(";", @binfo)), "\n";
 }
 close(O);
 #######################################################################################
@@ -417,57 +422,6 @@ sub SNP_check{
 		}
 	}
 	return (scalar @snp, join(",", @snp));
-}
-
-sub efficienty_end3_mismatch{
-	my ($mvisual,$max_end3, $arank_end, $aeff_end)=@_;
-	my $mapr= reverse ($mvisual);
-	my @unit = split //, $mapr;
-	my @mis_pos;
-	for(my $i=0; $i<$max_end3; $i++){
-		if($unit[$i] eq "*"){# mismatch
-			push @mis_pos, $i;
-		}elsif($unit[$i] eq "-" || $unit[$i] eq "^"){# Del or Ins ==> 2 mismatch
-			push @mis_pos, ($i, $i);
-			for(my $j=$i+1; $j<$max_end3;$j++){
-				if($unit[$j] ne $unit[$i]){
-					$i=$j-1;
-					last;
-				}
-			}
-		}
-	}
-	my $eff_end = 1;
-	for(my $i=0; $i<@mis_pos; $i++){
-		$eff_end *= &get_eff_rank($mis_pos[$i], $arank_end, $aeff_end, "<=");
-	}
-	return $eff_end;
-}
-
-sub get_eff_rank{
-	my ($v, $arank, $aeff, $compare)=@_;
-	my @rank = @{$arank};
-	my @eff = @{$aeff};
-	
-	my $eff;
-	for(my $i=0; $i<@rank; $i++){
-		if($compare eq ">="){
-			if($v >= $rank[$i]){
-				$eff = $eff[$i];
-				last;
-			}
-		}else{
-			if($v <= $rank[$i]){
-				$eff = $eff[$i];
-				last;
-			}
-		}
-	}
-	if(!defined $eff){
-		$eff = 0;
-	}
-	return $eff;
-
 }
 
 sub get_3end1_mismatch{

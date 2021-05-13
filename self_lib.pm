@@ -1,3 +1,62 @@
+
+#my @rank_end=(3,   5,   8); #  PCR efficiency when dis of mismatch pos to 3end <= @rank_end
+#my @eff_end =(0.1, 0.4, 0.8 );
+#my $max_end3_eff = $rank_end[-1];
+#my $eff_times = 10;
+#my $min_eff = 0.1;
+sub efficienty_end3_mismatch{
+	my ($mvisual,$max_end3, $arank_end, $aeff_end)=@_;
+	my $mapr= reverse ($mvisual);
+	my @unit = split //, $mapr;
+	my @mis_pos;
+	for(my $i=0; $i<$max_end3; $i++){
+		if($unit[$i] eq "*"){# mismatch
+			push @mis_pos, $i;
+		}elsif($unit[$i] eq "-" || $unit[$i] eq "^"){# Del or Ins ==> 2 mismatch
+			push @mis_pos, ($i, $i);
+			for(my $j=$i+1; $j<$max_end3;$j++){
+				if($unit[$j] ne $unit[$i]){
+					$i=$j-1;
+					last;
+				}
+			}
+		}
+	}
+	my $eff_end = 1;
+	for(my $i=0; $i<@mis_pos; $i++){
+		$eff_end *= &get_eff_rank($mis_pos[$i], $arank_end, $aeff_end, "<=");
+	}
+	return $eff_end;
+}
+
+sub get_eff_rank{
+	my ($v, $arank, $aeff, $compare)=@_;
+	my @rank = @{$arank};
+	my @eff = @{$aeff};
+	
+	my $eff;
+	for(my $i=0; $i<@rank; $i++){
+		if($compare eq ">="){
+			if($v >= $rank[$i]){
+				$eff = $eff[$i];
+				last;
+			}
+		}else{
+			if($v <= $rank[$i]){
+				$eff = $eff[$i];
+				last;
+			}
+		}
+	}
+	if(!defined $eff){
+		$eff = 0;
+	}
+	return $eff;
+
+}
+
+
+
 ## eg:(off=6, min_score=8)  
 ##:  #|||**-||||^^^|||||||||||||             =>      ||||^^^||||||||||||| 
 ##:  ||*||||^^|||----------||||||||||||      =>      ####||||||||||||
