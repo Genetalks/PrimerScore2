@@ -99,6 +99,7 @@ my %map;
 my %map_id;
 my %olen_primer;
 open (P, $fprimer) or die $!;
+#&SHSHOW_TIME("Routine analysis:");
 while (<P>){
 	chomp;
 	next if(/^$/);
@@ -207,6 +208,8 @@ while (<P>){
 close(PN);
 exit(0) if(scalar keys %evalue==0);
 
+#&SHSHOW_TIME("Specificity analysis:");
+
 if(defined $detail){
 	open (Detail, ">$outdir/$fkey.evaluation.detail") or die $!;
 }
@@ -225,7 +228,7 @@ if(!defined $NoSpecificity){
 		my $name = basename($fdatabase);
 		Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer |samtools view -bS - >$fa_primer\_$name.bam");
 	#	Run("bwa mem -D 0 -k 9 -t 4 -c 5000000 -y 100000 -T 12 -B 1 -O 2,2 -L 1,1 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
-		
+		#&SHSHOW_TIME("read in sam");		
 		### read in sam
 		open (I, "samtools view $fa_primer\_$name.bam|") or die $!;
 		while (<I>){
@@ -242,6 +245,7 @@ if(!defined $NoSpecificity){
 		close(I);
 	}
 	### evaluate
+	#&SHSHOW_TIME("explain");		
 	open(O, ">$outdir/$fkey.specificity.sam") or die $!;
 	foreach my $id (sort {$a cmp $b} keys %olen_primer){
 		my $primer_seq=$olen_primer{$id}->[0][2];
@@ -250,9 +254,12 @@ if(!defined $NoSpecificity){
 		my %high_info;
 		foreach my $name(keys %{$mapping{$id}}){
 			my $map_num = scalar @{$mapping{$id}{$name}};
+			#&SHSHOW_TIME($name);
+			my %lowtm;
 			for (my $i=0; $i<$map_num; $i++){
 				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id}{$name}->[$i]};
-
+				#&SHSHOW_TIME(join(",",$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase);
+				next if(exists $lowtm{join(",",$is_reverse,$cigar, $md)});
 				if(defined $detail){
 					print Detail "\nOriginal:",join("\t",$id, $is_reverse, $flag, $chr, $pos, $score),"\n";
 				}
@@ -296,7 +303,10 @@ if(!defined $NoSpecificity){
 				### get tm 
 				my ($dG, $tm) = $result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
 				next if($dG eq ""); ## map to NNNN region, invalid
-				next if($tm<$min_tm_spec);
+				if($tm<$min_tm_spec){
+					$lowtm{join(",",$is_reverse,$cigar, $md)}=1;
+					next;
+				}
 				my @line = split /\n/, $result;
 				shift @line;	
 				if(!defined $line[1]){ ## just print and return
@@ -363,12 +373,12 @@ if(!defined $NoSpecificity){
 if(!defined $NoFilter){
 	close(F);
 }
+#&SHSHOW_TIME("Output:");
 ### output
 open (O, ">$outdir/$fkey.evaluation.out") or die $!;
 if(!defined $nohead){
-	print O "##High_Info(n=1): TM        : Flag/DatabaseID/Pos/Cigar/MD/End_match_num/Efficiency\n";
 	print O "#ID";
-	print O "\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tSNP\tPoly\tAlign_Num\tHigh_Tm_Num\tHigh_Efficiency_Num\tHigh_Info";
+	print O "\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tSNP\tPoly";
 	print O "\n";
 }
 
