@@ -52,7 +52,7 @@ GetOptions(
 				"step:s"=>\$step,
 				"od:s"=>\$outdir,
 				) or &USAGE;
-&USAGE unless ($ftem and $ftem_snp and $fkey);
+&USAGE unless ($ftem and $fkey);
 
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
@@ -85,15 +85,17 @@ if ($step == 1){
 
 	## get template seq containing snp
 	my %seq_snp;
-	open(I, $ftem_snp) or die $!;
-	$/=">";
-	while(<I>){
-		chomp;
-		next if(/^$/);
-		my ($id_info, @line)=split /\n/, $_;
-		my $seq = join("", @line);
-		my ($id)=split /\s+/, $id_info;
-		$seq_snp{$id}=$seq;
+	if(defined $ftem_snp){
+		open(I, $ftem_snp) or die $!;
+		$/=">";
+		while(<I>){
+			chomp;
+			next if(/^$/);
+			my ($id_info, @line)=split /\n/, $_;
+			my $seq = join("", @line);
+			my ($id)=split /\s+/, $id_info;
+			$seq_snp{$id}=$seq;
+		}
 	}
 	
 	## get primer seq
@@ -149,7 +151,6 @@ if ($step == 1){
 				for(my $l=$max_len; $l>=$min_len; $l-=$scale_len){
 					next if($p+$l>$tlen);
 					my ($primer)=&get_primer($id, $p, $l, $seq);
-					my ($primer_snp)=&get_primer($id, $p, $l, $seq_snp);
 					next if(defined $NoCoverN && ($primer=~/N/ || $primer=~/n/));
 					my $id_new = $id."-".$p; ##primers of different length are evalued in primer_evaluation.pl
 					#my $id_new = $id."-".$p."-".$l;
@@ -158,8 +159,14 @@ if ($step == 1){
 						next if(scalar @match > length($primer)*0.4);
 					}
 					
-					print P $id_new,"\t",$primer,":", $primer_snp, "\n";
-					print PT $id_new,"\t",$primer,":", $primer_snp, "\n";
+					if(defined $ftem_snp){
+						my ($primer_snp)=&get_primer($id, $p, $l, $seq_snp{$id});
+						print P $id_new,"\t",$primer,":", $primer_snp, "\n";
+						print PT $id_new,"\t",$primer,":", $primer_snp, "\n";
+					}else{
+						print P $id_new,"\t",$primer,"\n";
+						print PT $id_new,"\t",$primer,"\n";
+					}
 					$seq{$id_new}=$primer;
 					last; ##  primers of different length are evalued in primer_evaluation.pl
 				}
@@ -466,7 +473,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 Usage:
   Options:
   -i  	<file>   	Input template fa file, forced
-  -is  	<file>   	Input template add snp fa file, forced
+  -is  	<file>   	Input template add snp fa file, optional
   -r  	<file>   	Input ref fa file, [$fref]
   -k  	<str>		Key of output file, forced
 

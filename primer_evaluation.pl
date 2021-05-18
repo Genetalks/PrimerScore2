@@ -101,6 +101,9 @@ while (<P>){
 	$_=~s/\s+$//;
 	my ($id0, $seq)=split /\s+/, $_;
 	my ($primer_seq0, $primer_seq_snp0) = split /:/, $seq;
+	if(!defined $primer_seq_snp0){
+		$primer_seq_snp0=$primer_seq0;
+	}
 	if(!defined $primer_seq0){
 		print $_,"\n";
 		die;
@@ -112,7 +115,7 @@ while (<P>){
 		for(my $l=$min; $l<$max; $l+=$scale){
 			last if($l>=$len0);
 			my $off=$len0-$l;
-			my $id=$id0."-".$l;
+			my $id=$id0."_".$l;
 			my $seq = substr($primer_seq0, $off);
 			my $seq_snp = substr($primer_seq_snp0, $off);
 			push @{$olen_primer{$id0}}, [$id, $off, $seq, $seq_snp];
@@ -171,6 +174,7 @@ while (<P>){
 		## filter SNP
 		my ($SNP_num, $SNP_info)=&SNP_check($primer_seq_snp);
 		$SNP_info=$SNP_num==0? "NA":$SNP_info;
+#		$SNP_info.=",".$primer_seq_snp;
 		if(!defined $NoFilter && $SNP_num > $Max_SNP_num){
 			print F join("\t", $id, $primer_seq, "SNP:".$SNP_info),"\n";
 			next;
@@ -210,6 +214,7 @@ if(defined $detail){
 }
 my $DB;
 my %bound;
+my %bound_stat;
 if(!defined $NoSpecificity){
 	my %db_region;
 	### bwa
@@ -251,6 +256,7 @@ if(!defined $NoSpecificity){
 			#&SHSHOW_TIME($dname);
 			for (my $i=0; $i<$map_num; $i++){
 				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id}{$dname}->[$i]};
+				my $strand=$is_reverse? "-": "+";
 				#&SHSHOW_TIME(join(",",$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase);
 				next if(exists $lowtm{join(",",$is_reverse,$cigar, $md)});
 				if(defined $detail){
@@ -313,7 +319,7 @@ if(!defined $NoSpecificity){
 				($pos, $cigar, $md) = ($pos3, $cigar_new, $md_new);
 				if(defined $detail){
 					print Detail "ntthal map:"; 
-					print Detail join("\t", $pos3, $cigar, $md, $end_match, $chr, $is_reverse, $start, $end),"\n";
+					print Detail join("\t", $pos3, $cigar, $md, $end_match, $chr, $strand, $start, $end),"\n";
 				}
 				next if(!defined $probe && $end_match<0);
 				my $mvisual=&map_visualation($cigar, $md);
@@ -328,11 +334,12 @@ if(!defined $NoSpecificity){
 				}
 
 				if(defined $detail){
-					print Detail "New info:",join("\t",$id, $is_reverse, $chr, $pos, $primer_seq, $tm, $end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
+					print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $primer_seq, $tm, $end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
 				}
 				if(exists $evalue{$id}){
-					print O join("\t",$id, $is_reverse, $chr, $pos, $primer_seq, $tm,$end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
-					push @{$bound{$id}{$tm}}, [$is_reverse, $chr, $pos, $end_match,$mvisual];
+					print O join("\t",$id, $strand, $chr, $pos, $primer_seq, $tm,$end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
+					push @{$bound{$id}{$tm}}, [$strand, $chr, $pos, $end_match,$mvisual];
+					$bound_stat{$id}++;
 				}
 				## other len's primers
 				for(my $i=1; $i<@{$olen_primer{$id}}; $i++){
@@ -341,15 +348,16 @@ if(!defined $NoSpecificity){
 					my ($mvn, $ematchn) = &map_visual_trim($mvisual, $off, $end_match, 8);
 					my $tmn = `$ntthal -a ANY -s1 $pseq -s2 $seq -r`;
 					chomp $tmn;
+					next if($tmn<$min_tm_spec);
 					if(defined $detail){
-						print Detail "New Sam:",join("\t",$idn, $is_reverse, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
+						print Detail "New Sam:",join("\t",$idn, $strand, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
 					}
-					print O join("\t",$idn, $is_reverse, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
-					push @{$bound{$idn}{$tmn}}, [$is_reverse, $chr, $pos, $ematchn,$mvn];
+					$bound_stat{$idn}++;
+					print O join("\t",$idn, $strand, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
+					push @{$bound{$idn}{$tmn}}, [$strand, $chr, $pos, $ematchn,$mvn];
 				}
 			}
 		}
-		push @{$evalue{$id}}, $bound_num;
 	}
 	close(O);
 	if(defined $detail){
@@ -378,8 +386,7 @@ foreach my $id (sort {$a cmp $b} keys %evalue){
 	for(my $i=0; $i<@tms; $i++){
 		for(my $j=0; $j<@{$bound{$id}{$tms[$i]}}; $j++){
 			push @tm, sprintf("%.2f",$tms[$i]);
-			my ($is_reverse, $chr, $pos, $ematchn,$mvn)=@{$bound{$id}{$tms[$i]}->[$j]};
-			my $strand=$is_reverse? "-": "+";
+			my ($strand, $chr, $pos, $ematchn,$mvn)=@{$bound{$id}{$tms[$i]}->[$j]};
 #			push @binfo, join("/", $strand, $chr, $pos, $mvn);
 			push @binfo, $strand."/".$chr."/".$pos.":".$mvn;
 			$n++;
@@ -388,7 +395,7 @@ foreach my $id (sort {$a cmp $b} keys %evalue){
 		last if($n>=$maxn);
 	}
 	my $binfo = join(",", @tm).":".join(";", @binfo);
-	print O join("\t",$id, @{$evalue{$id}}, join(",", @tm), join(";", @binfo)), "\n";
+	print O join("\t",$id, @{$evalue{$id}}, $bound_stat{$id}, join(",", @tm), join(";", @binfo)), "\n";
 }
 close(O);
 #######################################################################################
@@ -400,6 +407,7 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 sub SNP_check{
 	my ($seq)=@_;
+	$seq = reverse $seq;
 	my @u=split //, $seq;
 	my @snp;
 	for(my $i=0; $i<@u; $i++){
