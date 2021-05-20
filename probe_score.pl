@@ -15,20 +15,20 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($fprimer,$fkey,$outdir);
+my ($foligo,$fkey,$outdir);
 my $min_len=20;
 my $max_len=35;
 my $opt_tm=70;
 GetOptions(
 				"help|?" =>\&USAGE,
-				"i:s"=>\$fprimer,
+				"i:s"=>\$foligo,
 				"maxl:s"=>\$max_len,
 				"minl:s"=>\$min_len,
 				"opttm:s"=>\$opt_tm,
 				"k:s"=>\$fkey,
 				"od:s"=>\$outdir,
 				) or &USAGE;
-&USAGE unless ($fprimer and $fkey);
+&USAGE unless ($foligo and $fkey);
 
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
@@ -42,8 +42,9 @@ my @bnum = (1,5,1,100); #bound number
 my @CGd = (0.1, 1, 0, 1);
 
 my $fulls=10;
-open(O, ">$outdir/$fkey.probe.design") or die $!;
-open(P, $fprimer) or die $!;
+open(O, ">$outdir/$fkey.probe.score") or die $!;
+print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTM\tGC\tHairpin\tEND\tANY\tSNP\tPoly\tBoundNum\tBoundTM\tBoundInfo\n";
+open(P, $foligo) or die $!;
 while(<P>){
 	chomp;
 	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm)=split /\t/, $_;
@@ -126,7 +127,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 Usage:
   Options:
-  -i  <file>   Input file, forced
+  -i  <file>   Input oligo evaluation file, forced
   -k  <str>	   Key of output file, forced
 
   -minl  <int>  min len of probe, [$min_len]

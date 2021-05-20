@@ -27,19 +27,21 @@ our $BWA;
 my $fdatabases = $REF_HG19;
 my $NoFilter;
 my $len_map=20; ##bwa result is the most when 20bp
-my $opt_tm = 65;
-my $opt_tm_probe;
+my $opt_tm = 60;
+my $opt_tm_probe=70;
 my $opt_size = 100;
 my $Debug;
 my $probe;
 my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $olens;
+my $revcom;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$fprimer,
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
-				"probe:s"=>\$probe,
+				"Revcom:s"=>\$revcom,
+				"Probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"nohead:s"=>\$nohead,
@@ -74,9 +76,9 @@ my $Max_poly_G = 3;
 my $Max_poly_ATC = 5; 
 my $MAX_endA = 4;
 my $MAX_poly = 20;
-my $Max_High_Tm_Num = 300; ## too high tm aligns will be filtered
-my $MIN_tm = $opt_tm-10;
-my $MAX_tm = defined $opt_tm_probe? $opt_tm_probe+10: $opt_tm+10;
+my $Max_Bound_Num = 300; ## too high tm aligns will be filtered
+my $MIN_tm = $opt_tm-5;
+my $MAX_tm = defined $opt_tm_probe? $opt_tm_probe+5: $opt_tm+5;
 my $MIN_gc = 0.2;
 my $MAX_gc = 0.8;
 my @tm = ($opt_tm*0.8, $opt_tm*2, $opt_tm*0.6, $opt_tm*2);
@@ -108,27 +110,41 @@ while (<P>){
 		print $_,"\n";
 		die;
 	}
-	push @{$olen_primer{$id0}}, [$id0, 0, $primer_seq0, $primer_seq_snp0];
+	push @{$olen_primer{$id0}}, [$id0."_F_0","+", 0, $primer_seq0, $primer_seq_snp0];
+	my ($primer_seq0r, $primer_seq_snp0r);
+	if(defined $revcom){
+		$primer_seq0r=&revcom($primer_seq0);
+		$primer_seq_snp0r=&revcom($primer_seq_snp0);
+		push @{$olen_primer{$id0}}, [$id0."_R_0", "-", 0, $primer_seq0r, $primer_seq_snp0r];
+	}
 	if(defined $olens){
 		my ($min, $max, $scale)=split /,/, $olens;
 		my $len0 = length($primer_seq0);
 		for(my $l=$min; $l<$max; $l+=$scale){
 			last if($l>=$len0);
 			my $off=$len0-$l;
-			my $id=$id0."_".$l;
+			my $id=$id0."_F"."_".$off;
 			my $seq = substr($primer_seq0, $off);
 			my $seq_snp = substr($primer_seq_snp0, $off);
-			push @{$olen_primer{$id0}}, [$id, $off, $seq, $seq_snp];
+			push @{$olen_primer{$id0}}, [$id, "+", $off, $seq, $seq_snp];
+			if(defined $revcom){
+				$id=$id0."_R"."_".$off;
+				my $seq = substr($primer_seq0r, $off);
+				my $seq_snp = substr($primer_seq_snp0r, $off);
+				push @{$olen_primer{$id0}}, [$id,"-", $off, $seq, $seq_snp];
+			}
 		}
 	}
 
 	## filter
-	my $nendA = &get_end_A($primer_seq0);
+	my $nendA0 = &get_end_A($primer_seq0);
+	my $nendA0r = &get_end_A($primer_seq0r);
 	my $is_all_filter=1;
 	for(my $i=0; $i<@{$olen_primer{$id0}}; $i++){
-		my ($id, $off, $primer_seq, $primer_seq_snp)=@{$olen_primer{$id0}->[$i]};
+		my ($id, $ori, $off, $primer_seq, $primer_seq_snp)=@{$olen_primer{$id0}->[$i]};
 		my $ftype;
 		## filter endA
+		my $nendA = $ori eq "+"? $nendA0: $nendA0r;
 		if(!defined $NoFilter && $nendA>$MAX_endA){
 			$ftype = "EndA";
 			print F join("\t",  $id, $primer_seq, $ftype, $nendA),"\n";
@@ -228,7 +244,6 @@ if(!defined $NoSpecificity){
 		my $dname = basename($fdatabase);
 		Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_primer |samtools view -bS - >$fa_primer\_$dname.bam");
 	#	Run("bwa mem -D 0 -k 9 -t 4 -c 5000000 -y 100000 -T 12 -B 1 -O 2,2 -L 1,1 -h 200 -a  $fdatabase $fa_primer > $fa_primer.sam");
-		#&SHSHOW_TIME("read in sam");		
 		### read in sam
 		open (I, "samtools view $fa_primer\_$dname.bam|") or die $!;
 		while (<I>){
@@ -239,30 +254,27 @@ if(!defined $NoSpecificity){
 			next if ($is_unmap);
 			my ($H3)=&get_3end1_mismatch($is_reverse, $cigar);
 			#print "H3:", join("\t", $H3,$id, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
-			next if(!defined $probe && $H3>1);
+			next if(!defined $probe && !defined $revcom && $H3>1);
 			push @{$mapping{$id}{$dname}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
 		}
 		close(I);
 	}
 	### evaluate
-	#&SHSHOW_TIME("explain");		
 	open(O, ">$outdir/$fkey.specificity.sam") or die $!;
-	foreach my $id (sort {$a cmp $b} keys %olen_primer){
-		my $primer_seq=$olen_primer{$id}->[0][2];
+	foreach my $id0 (sort {$a cmp $b} keys %olen_primer){
+		my ($id,undef, undef, $primer_seq)=@{$olen_primer{$id0}->[0]};
 		my $bound_num = 0;
 		my %lowtm;
-		foreach my $dname(keys %{$mapping{$id}}){
-			my $map_num = scalar @{$mapping{$id}{$dname}};
-			#&SHSHOW_TIME($dname);
+		foreach my $dname(keys %{$mapping{$id0}}){
+			my $map_num = scalar @{$mapping{$id0}{$dname}};
 			for (my $i=0; $i<$map_num; $i++){
-				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id}{$dname}->[$i]};
+				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0}{$dname}->[$i]};
 				my $strand=$is_reverse? "-": "+";
-				#&SHSHOW_TIME(join(",",$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase);
-				next if(exists $lowtm{join(",",$is_reverse,$cigar, $md)});
+				next if(exists $lowtm{join(",",$is_reverse,$cigar, $md)});## filter bound regions whose map info are same with where bound tm too low 
 				if(defined $detail){
-					print Detail "\nOriginal:",join("\t",$id, $is_reverse, $flag, $chr, $pos, $score),"\n";
+					print Detail "\nOriginal:",join("\t",$id0, $is_reverse, $flag, $chr, $pos, $score),"\n";
 				}
-				## specificity
+				######## specificity
 				my $len = length($primer_seq);
 				my $extend = 20;
 				
@@ -289,9 +301,7 @@ if(!defined $NoSpecificity){
 					die;
 				}
 				$seq=uc($seq);
-				if ($is_reverse == 0){
-					$seq=&revcom($seq);
-				}
+				$seq=&revcom($seq)if(!$is_reverse);
 				### ntthal
 				my $result = `$ntthal -a ANY -s1 $primer_seq -s2 $seq`;
 				if(defined $detail){
@@ -314,47 +324,61 @@ if(!defined $NoSpecificity){
 					print "$ntthal -a ANY -s1 $primer_seq -s2 $seq\n";
 					return (-1,-1,-1,-1);
 				}
-				## match position and cigar
-				my ($pos3, $cigar_new, $md_new, $end_match)=&get_match_cigar_from_ntthal(\@line, $is_reverse, $start, $end);
-				($pos, $cigar, $md) = ($pos3, $cigar_new, $md_new);
+				## match visual
+				my ($mvisual, $pos3, $pos5)=&map_visual_from_ntthal(\@line, $is_reverse, $start, $end);
+				my ($end_match3) = &end_match_length($mvisual);
+				my $mvisualr=reverse $mvisual;
+				my ($end_match5) = &end_match_length($mvisualr);
 				if(defined $detail){
 					print Detail "ntthal map:"; 
-					print Detail join("\t", $pos3, $cigar, $md, $end_match, $chr, $strand, $start, $end),"\n";
+					print Detail join("\t", ($mvisual, $pos3, $pos5, $end_match3, $end_match5)),"\n";
 				}
-				next if(!defined $probe && $end_match<0);
-				my $mvisual=&map_visualation($cigar, $md);
+				next if(!defined $probe && !defined $revcom && $end_match3<0);
 				$bound_num++;
-				if($bound_num>$Max_High_Tm_Num){
-					for(my $x=0; $x<@{$olen_primer{$id}}; $x++){
-						my ($idt, undef, $seqt) = @{$olen_primer{$id}->[$x]};
-						print F join("\t", $idt, $seqt, "Align_Too_More"),"\n";
+				if(!defined $NoFilter && $bound_num>$Max_Bound_Num){
+					for(my $x=0; $x<@{$olen_primer{$id0}}; $x++){
+						my ($idt, undef, undef, $seqt) = @{$olen_primer{$id0}->[$x]};
+						##here, Bound contain regions where end_match3<0 when defined $probe or $revcom; it maybe imprecise and will filter some oligos fit for primer, but the effect should be very small when parameter $Max_Bound_Num is very big
+						print F join("\t", $idt, $seqt, "Bound_Too_More"),"\n";
 						delete $evalue{$idt};
 					}
 					last;
 				}
-
 				if(defined $detail){
-					print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $primer_seq, $tm, $end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
+					print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $primer_seq, $tm, $end_match3,$mvisual),"\n";
 				}
-				if(exists $evalue{$id}){
-					print O join("\t",$id, $strand, $chr, $pos, $primer_seq, $tm,$end_match,$mvisual, "MD:Z:$md", "CG:Z:$cigar"),"\n";
-					push @{$bound{$id}{$tm}}, [$strand, $chr, $pos, $end_match,$mvisual];
+				if(defined $probe || (!defined $probe && $end_match3>0)){
 					$bound_stat{$id}++;
+					print O join("\t",$id, $strand, $chr, $pos, $primer_seq, $tm, $end_match3,$mvisual),"\n";
+					push @{$bound{$id}{$tm}}, [$strand, $chr, $pos, $end_match3,$mvisual];
 				}
-				## other len's primers
-				for(my $i=1; $i<@{$olen_primer{$id}}; $i++){
-					my ($idn, $off, $pseq)=@{$olen_primer{$id}->[$i]};
+				## other len's primers and revcom
+				for(my $i=1; $i<@{$olen_primer{$id0}}; $i++){
+					my ($idn, $ori, $off, $pseqn)=@{$olen_primer{$id0}->[$i]};
 					next if(!exists $evalue{$idn});
-					my ($mvn, $ematchn) = &map_visual_trim($mvisual, $off, $end_match, 8);
-					my $tmn = `$ntthal -a ANY -s1 $pseq -s2 $seq -r`;
+					my $posn = $pos3;
+					my $end_matchn=$end_match3;
+					my $seqn=$seq;
+					my $strandn=$strand;
+					my $mvisualn=$mvisual;
+					if($ori eq "-"){
+						$mvisualn=reverse($mvisual);
+						$seqn=&revcom($seq);
+						$posn = $pos5;
+						$end_matchn=$end_match5;
+						$strandn=$strand eq "+"? "-": "+";
+					}
+					my $tmn = `$ntthal -a ANY -s1 $pseqn -s2 $seqn -r`;
 					chomp $tmn;
 					next if($tmn<$min_tm_spec);
+					my ($mvn, $ematchn) = &map_visual_trim($mvisualn, $off, $end_matchn); 
+					next if(!defined $probe && $ematchn<0);
 					if(defined $detail){
-						print Detail "New Sam:",join("\t",$idn, $strand, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
+						print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
 					}
 					$bound_stat{$idn}++;
-					print O join("\t",$idn, $strand, $chr, $pos, $pseq, $tmn,$ematchn,$mvn),"\n";
-					push @{$bound{$idn}{$tmn}}, [$strand, $chr, $pos, $ematchn,$mvn];
+					print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
+					push @{$bound{$idn}{$tmn}}, [$strandn, $chr, $posn, $ematchn,$mvn];
 				}
 			}
 		}
@@ -394,8 +418,8 @@ foreach my $id (sort {$a cmp $b} keys %evalue){
 		}
 		last if($n>=$maxn);
 	}
-	my $binfo = join(",", @tm).":".join(";", @binfo);
-	print O join("\t",$id, @{$evalue{$id}}, $bound_stat{$id}, join(",", @tm), join(";", @binfo)), "\n";
+	my $bnum=exists $bound_stat{$id}? $bound_stat{$id}: 0;
+	print O join("\t",$id, @{$evalue{$id}}, $bnum, join(",", @tm), join(";", @binfo)), "\n";
 }
 close(O);
 #######################################################################################
@@ -459,134 +483,6 @@ sub Run{
     }
 }
 
-#Example: 
-#cigar: 2S21M1D3M
-#md: 13C5T0C^A3
-#SEQ                               TT             A     AT-   ----
-#SEQ                                 TGGGTGGTGCTAC TCTTC   AAT
-#STR                                 ACCCACCACGATG AGAAG   TTA
-#STR     AACCGTCCCAACCCCCAACACACCCCCC             G     AGT   AGGA
-sub get_match_cigar_from_ntthal{
-	my ($aline, $is_reverse, $start, $end)=@_;
-	my @line = @{$aline};
-	$line[0]=~s/SEQ\t//;
-	$line[1]=~s/SEQ\t//;
-	$line[2]=~s/STR\t//;
-	$line[3]=~s/STR\t//;
-	my @punmap = split //, $line[0];
-	my @pmap = split //, $line[1];
-	my @tmap = split //, $line[2];
-	my @tunmap = split //, $line[3];
-	my $is_start = 1;
-	my ($tleft, $tright, $pleft, $pright)=(0,0,0,0);
-	my ($cigar, $md);
-	my ($mlen, $Mlen_cigar)=(0, 0);
-	for(my $i=0; $i<@punmap; $i++){
-		if($pmap[$i] ne " " && $tmap[$i] ne " "){ ### match
-			$mlen++;
-			$Mlen_cigar++;
-			$is_start=0;
-		}else{### not match
-			if($is_start){ ## start: soft
-				if($punmap[$i] ne " "){
-					$pleft++;
-				}
-				if($tunmap[$i] ne " "){
-					$tleft++;
-				}
-				next;
-			}
-				
-			if($punmap[$i] ne "-" && $tunmap[$i] ne "-"){ ## mismatch
-				$Mlen_cigar++;
-				my $b = $tunmap[$i];
-				$b=~tr/ATCG/TAGC/;
-				$md .= $mlen.$b;
-				$mlen=0;
-			}else{## Indel
-				$cigar.=$Mlen_cigar."M";
-				$Mlen_cigar=0;
-
-				my $len = 0;
-				my $str;
-				if($punmap[$i] eq "-"){ # del
-					$md.=$mlen;
-					$mlen=0;
-					$str=$tunmap[$i];
-					$len++;
-					my $j=$i+1;
-					while($j<@punmap){
-						last if($punmap[$j] ne "-");
-						$len++;
-						$str.=$tunmap[$j];
-						$j++;
-					}
-					$str=~tr/ATCG/TAGC/;
-					$md.="^".$str;
-					$cigar.=$len."D";
-					$i=$j-1;
-				}else{ # insert
-					$len++;
-					my $j=$i+1;
-					while($j<@punmap){
-						last if($tunmap[$j] ne "-");
-						$len++;
-						$str.=$punmap[$j];
-						$j++;
-					}
-					$cigar.=$len."I";
-					$i=$j-1;
-				}
-			}
-		}
-	}
-	if($mlen>0){
-		$cigar.=$Mlen_cigar."M";
-		$md.=$mlen;
-	}
-
-	## end handle D
-	if($cigar=~/\d+D$/){
-		($tright)=$cigar=~/(\d+)D$/;
-		$cigar=~s/\d+D$//;
-		$md=~s/\^[A-Z]+$//;
-	}elsif($cigar=~/\d+I$/){
-#eg: 10M12D8M2I
-#
-#                     ------------     TGACC
-#           GCCACTGCCT            GCTGG
-#           CGGTGACGGA            CGACC
-#CGTACACCCAC          GAAACACTGTAT     GAC--
-		$cigar=~s/\d+I//;
-	}
-	## end mismatch to Soft
-	if($md=~/[A-Z]$/){ ##end mismatch
-		$md.="0"; 
-	}
-	my $end_match;
-	my $mislen=0;
-	if($md=~/[ATCG]0$/){
-		while($md=~/[ATCG]0$/){
-			$md=~s/[ATCG]0$//;
-			$mislen++;
-		}
-		my ($mlen)=$cigar=~/(\d+)M$/;
-		$mlen-=$mislen;
-		$cigar=~s/(\d+)M$//;
-		$cigar.=$mlen."M".$mislen."S";
-		$end_match = -1*$mislen;
-	}else{
-		($end_match)=$md=~/(\d+)$/;
-	}
-	if($pleft>0){
-		$cigar = $pleft."S".$cigar;
-	}
-
-	my $pos_new = $is_reverse? $start+$tright+$mislen: $end-$tright-$mislen; ## position of  primer3
-	#my $pos_new = $is_reverse? $start+$tright+$mislen: $start+$tleft;
-	return($pos_new, $cigar, $md, $end_match);
-}
-
 sub explain_bam_flag_unmap{
 	my ($flag)=@_;
 	my $flag_bin=sprintf("%b", $flag);
@@ -617,13 +513,12 @@ Usage:
   -d  <files>            Input database files separated by ",", [$fdatabases]
   -k  <str>              Key of output file, forced
 
-  --NoFilter             Not filter any primers
-  --probe                design probe, if not defined, will only consider mapping region where primer 3end matched exactly when caculate specificity.
-  --NoSpecificity        Not evalue specificity
+  --Revcom               evalue revcom primers
+  --Probe                design probe and will consider mapping region where primer 3end not matched exactly when caculate specificity
+  -olen   <int,int,int>  evalue other length's primers, <min,max,scale> of length, optional
   -opttm     <int>       optimal tm of primer, [$opt_tm]
-  -opttmp    <int>       optimal tm of probe, not design probe when not set the parameter, optional
+  -opttmp    <int>       optimal tm of probe, [$opt_tm_probe]
   -maplen    <int>      length to map with bwa, [$len_map]
-  -olen      <int,int,int>  other length's primers, <min,max,scale> of length, optional
   -stm       <int>      min tm to be High_TM when caculate specificity, [$min_tm_spec]
   -mv        <int>      concentration of monovalent cations in mM, [$mv]
   -dv        <float>    concentration of divalent cations in mM, [$dv]
@@ -637,7 +532,9 @@ Usage:
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
-  --Detail              Output Detail Info, optional
+  --NoFilter             Not filter any primers
+  --NoSpecificity        Not evalue specificity
+  --Detail              Output Detail Info to xxx.evaluation.detail, optional
   -od        <dir>      Dir of output file, default ./
   -h		 Help
 

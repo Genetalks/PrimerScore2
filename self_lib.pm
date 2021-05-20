@@ -57,12 +57,15 @@ sub get_eff_rank{
 
 
 
-## eg:(off=6, min_score=8)  
+## eg:(off=6)  
 ##:  #|||**-||||^^^|||||||||||||             =>      ||||^^^||||||||||||| 
 ##:  ||*||||^^|||----------||||||||||||      =>      ####||||||||||||
 ##:  #######||*|||||||||||  (off=4)          =>      ###||*|||||||||||
 sub map_visual_trim{
-	my ($mv, $off, $end3_match, $min_score)=@_;
+	my ($mv, $off, $end3_match)=@_;
+	if($off ==0){
+		return($mv, $end3_match);
+	}
 	#trim from offset
 	my @unit=split //, $mv;
 	my $ntrim=0;
@@ -87,6 +90,7 @@ sub map_visual_trim{
 	}
 
 	## adjust
+	my $min_score=8;
 	my ($wmatch, $wmis, $windel)=(2,1,2);
 	my $irm=-1;
 	my $score=0;
@@ -127,6 +131,227 @@ sub map_visual_trim{
 	return ($mvn, $end3_match);
 }
 
+#Example: 
+#mv:                               ##|||||||||||||*|||||**-|||
+#SEQ                               TT             A     AT-   ----
+#SEQ                                 TGGGTGGTGCTAC TCTTC   AAT
+#STR                                 ACCCACCACGATG AGAAG   TTA
+#STR     AACCGTCCCAACCCCCAACACACCCCCC             G     AGT   AGGA
+
+#mv:                             ###|||*|*|||**^^^^||||||*||||||||||##
+#SEQ                             ATA   A G   GGTTTC      C          AC---
+#SEQ                                AAT A CCT      AACCCT TAATTCTTGC
+#STR                                TTA T GGA      TTGGGA ATTAAGAACG
+#STR     AACTGAAATCTTCTTCTCTCCGACAGG   G G   AA----      C          ATTCC
+
+sub map_visual_from_ntthal{
+	my ($aline, $is_reverse, $start, $end)=@_;
+	my @line = @{$aline};
+	$line[0]=~s/SEQ\t//;
+	$line[3]=~s/STR\t//;
+	my @pmap = split //, $line[0];
+	my @tmap = split //, $line[3];
+	my ($tleft, $tright, $pleft, $pright)=(0,0,0,0);
+	## trim end 
+	while($pmap[0] eq " " && $tmap[0] ne " "){
+		shift @pmap;
+		shift @tmap;
+		$tleft++;
+	}
+	while($pmap[-1] eq "-"){
+		pop @pmap;
+		pop @tmap;
+		$tright++;
+	}
+
+	## get map visual
+	my @mv;
+	for(my $i=0; $i<@pmap; $i++){
+		if($pmap[$i] eq " "){
+			$mv[$i]="|";
+		}elsif($pmap[$i] eq "-"){
+			$mv[$i]="-";
+		}else{
+			if($tmap[$i] eq "-"){
+				$mv[$i]="^";
+			}else{
+				$mv[$i]="*";
+			}
+		}
+	}
+	## * of end => #
+	for(my $i=0; $i<@mv;$i++){
+		last if($mv[$i] ne "*");
+		$mv[$i]="#";
+		$pleft++;
+		$tleft++;
+	}
+	for(my $i=$#mv; $i>=0;$i--){
+		last if($mv[$i] ne "*");
+		$mv[$i]="#";
+		$pright++;
+		$tright++;
+	}
+
+	my $mv = join("", @mv);
+	my ($pos3, $pos5);
+	if($is_reverse){
+		$pos5=$end-$tleft;
+		$pos3=$start+$tright;
+	}else{
+		$pos5=$start+$tleft;
+		$pos3=$end-$tright;
+	}
+	return ($mv, $pos3, $pos5);
+}
+
+sub end_match_length{
+	my ($mv)=@_;
+	my @mv=split //, $mv;
+	my $len=1;
+	my $ref=$mv[$#mv];
+	for($i=$#mv-1; $i>=0; $i--){
+		last if($mv[$i] ne $ref);
+		$len++;
+	}
+	my $endm;
+	if($ref eq "|"){
+		$endm=$len;
+	}elsif($ref eq "#"){
+		$endm=$len*(-1);
+	}else{
+		die "Wrong end3 map visual info: $mv\n";
+	}
+	return $endm;
+}
+
+#Example: 
+#cigar: 2S21M1D3M
+#md: 13C5T0C^A3
+#SEQ                               TT             A     AT-   ----
+#SEQ                                 TGGGTGGTGCTAC TCTTC   AAT
+#STR                                 ACCCACCACGATG AGAAG   TTA
+#STR     AACCGTCCCAACCCCCAACACACCCCCC             G     AGT   AGGA
+sub get_match_cigar_from_ntthal{
+	my ($aline, $is_reverse, $start, $end)=@_;
+	my @line = @{$aline};
+	$line[0]=~s/SEQ\t//;
+	$line[1]=~s/SEQ\t//;
+	$line[2]=~s/STR\t//;
+	$line[3]=~s/STR\t//;
+	my @punmap = split //, $line[0];
+	my @pmap = split //, $line[1];
+	my @tmap = split //, $line[2];
+	my @tunmap = split //, $line[3];
+	my $is_start = 1;
+	my ($tleft, $tright, $pleft, $pright)=(0,0,0,0);
+	my ($cigar, $md);
+	my ($mlen, $Mlen_cigar)=(0, 0);
+	for(my $i=0; $i<@punmap; $i++){
+		if($pmap[$i] ne " " && $tmap[$i] ne " "){ ### match
+			$mlen++;
+			$Mlen_cigar++;
+			$is_start=0;
+		}else{### not match
+			if($is_start){ ## start: soft
+				if($punmap[$i] ne " "){
+					$pleft++;
+				}
+				if($tunmap[$i] ne " "){
+					$tleft++;
+				}
+				next;
+			}
+				
+			if($punmap[$i] ne "-" && $tunmap[$i] ne "-"){ ## mismatch
+				$Mlen_cigar++;
+				my $b = $tunmap[$i];
+				$b=~tr/ATCG/TAGC/;
+				$md .= $mlen.$b;
+				$mlen=0;
+			}else{## Indel
+				$cigar.=$Mlen_cigar."M";
+				$Mlen_cigar=0;
+
+				my $len = 0;
+				my $str;
+				if($punmap[$i] eq "-"){ # del
+					$md.=$mlen;
+					$mlen=0;
+					$str=$tunmap[$i];
+					$len++;
+					my $j=$i+1;
+					while($j<@punmap){
+						last if($punmap[$j] ne "-");
+						$len++;
+						$str.=$tunmap[$j];
+						$j++;
+					}
+					$str=~tr/ATCG/TAGC/;
+					$md.="^".$str;
+					$cigar.=$len."D";
+					$i=$j-1;
+				}else{ # insert
+					$len++;
+					my $j=$i+1;
+					while($j<@punmap){
+						last if($tunmap[$j] ne "-");
+						$len++;
+						$str.=$punmap[$j];
+						$j++;
+					}
+					$cigar.=$len."I";
+					$i=$j-1;
+				}
+			}
+		}
+	}
+	if($mlen>0){
+		$cigar.=$Mlen_cigar."M";
+		$md.=$mlen;
+	}
+
+	## end handle D
+	if($cigar=~/\d+D$/){
+		($tright)=$cigar=~/(\d+)D$/;
+		$cigar=~s/\d+D$//;
+		$md=~s/\^[A-Z]+$//;
+	}elsif($cigar=~/\d+I$/){
+#eg: 10M12D8M2I
+#
+#                     ------------     TGACC
+#           GCCACTGCCT            GCTGG
+#           CGGTGACGGA            CGACC
+#CGTACACCCAC          GAAACACTGTAT     GAC--
+		$cigar=~s/\d+I//;
+	}
+	## end mismatch to Soft
+	if($md=~/[A-Z]$/){ ##end mismatch
+		$md.="0"; 
+	}
+	my $end_match;
+	my $mislen=0;
+	if($md=~/[ATCG]0$/){
+		while($md=~/[ATCG]0$/){
+			$md=~s/[ATCG]0$//;
+			$mislen++;
+		}
+		my ($mlen)=$cigar=~/(\d+)M$/;
+		$mlen-=$mislen;
+		$cigar=~s/(\d+)M$//;
+		$cigar.=$mlen."M".$mislen."S";
+		$end_match = -1*$mislen;
+	}else{
+		($end_match)=$md=~/(\d+)$/;
+	}
+	if($pleft>0){
+		$cigar = $pleft."S".$cigar;
+	}
+
+	my $pos_new = $is_reverse? $start+$tright+$mislen: $end-$tright-$mislen; ## position of  primer3
+	#my $pos_new = $is_reverse? $start+$tright+$mislen: $start+$tleft;
+	return($pos_new, $cigar, $md, $end_match);
+}
 
 
 
