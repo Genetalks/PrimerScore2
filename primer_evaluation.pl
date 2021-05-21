@@ -349,8 +349,8 @@ if(!defined $NoSpecificity){
 				}
 				if(defined $probe || (!defined $probe && $end_match3>0)){
 					$bound_stat{$id}++;
-					print O join("\t",$id, $strand, $chr, $pos, $primer_seq, $tm, $end_match3,$mvisual),"\n";
-					push @{$bound{$id}{$tm}}, [$strand, $chr, $pos, $end_match3,$mvisual];
+					print O join("\t",$id, $strand, $chr, $pos3, $primer_seq, $tm, $end_match3,$mvisual),"\n";
+					push @{$bound{$id}{$tm}}, [$strand, $chr, $pos3, $end_match3,$mvisual];
 				}
 				## other len's primers and revcom
 				for(my $i=1; $i<@{$olen_primer{$id0}}; $i++){
