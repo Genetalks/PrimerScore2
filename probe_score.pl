@@ -17,7 +17,7 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 my ($foligo,$fkey,$outdir);
 my $min_len=20;
-my $max_len=35;
+my $max_len=36;
 my $opt_tm=70;
 GetOptions(
 				"help|?" =>\&USAGE,
@@ -35,13 +35,16 @@ $outdir||="./";
 $outdir=AbsolutePath("dir",$outdir);
 my $dlen=$max_len-$min_len;
 my @endA = (0, 0, 0, 2);
-my @len = ($min_len,$max_len-$dlen*0.3,$min_len, $max_len+$dlen*0.3);
+my @len = ($min_len,$max_len-$dlen*0.5,$min_len, $max_len+1);
 my @tm = ($opt_tm-1, $opt_tm+1, $opt_tm-5, $opt_tm+5);
-my @self = (-50, 40, -50, 60); ## self tm
+my @self = (-50, 40, -50, 55); ## self tm
 my @bnum = (1,5,1,100); #bound number
 my @CGd = (0.1, 1, 0, 1);
+my $max_self_tm=$self[3];
+my $max_bound_num=$bnum[3];
 
 my $fulls=10;
+open(F,">$outdir/$fkey.probe.filter") or die $!;
 open(O, ">$outdir/$fkey.probe.score") or die $!;
 print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTM\tGC\tHairpin\tEND\tANY\tSNP\tPoly\tBoundNum\tBoundTM\tBoundInfo\n";
 open(P, $foligo) or die $!;
@@ -49,16 +52,41 @@ while(<P>){
 	chomp;
 	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm)=split /\t/, $_;
 	
+	## filter
+	if($len>$max_len){
+		print F "Len\t$_\n";
+		next;
+	}
+	if($tm<$opt_tm-5 || $tm>$opt_tm+5){
+		print F "TM\t$_\n";
+		next;
+	}
+	my $self = &max($hairpin, $END, $ANY);
+	if($self>$max_self_tm){
+		print F "Self-complementary\t$_\n";
+		next;
+	}
+	my ($is_G5, $CGd) = &G_content($seq);
+	if($is_G5){
+		print F "5endG\t$_\n";
+		next;
+	}
+	if($CGd<=0){
+		print F "GCdiff\t$_\n";
+		next;
+	}
+	if($bnum>$max_bound_num){
+		print F "Bound\t$_\n";
+		next;
+	}
+
 	## score
 	my $slen=int(&score_single($len, $fulls, @len)+0.5);## round: int(x+0.5)
 	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
-
-	my $self = &max($hairpin, $END, $ANY);
 	my $sself=int(&score_single($self, $fulls, @self)+0.5);
-
 	my $ssnp = int(&SNP_score($snp, $len, "Probe")*$fulls +0.5);
 	my $spoly = int(&poly_score($poly, $len, "Probe")*$fulls +0.5);
-	
+	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
 	#specificity: bound
 	my $sbound;
 	if($bnum==1){
@@ -66,29 +94,25 @@ while(<P>){
 	}else{
 		my @tm=split /,/, $btm;
 		my @btm = (0,$tm[0]*0.6,0,$tm[0]); #bound sec tm
-		my $etm = &score_single($tm[1], 0.5, @btm);
-		my $enum = &score_single($bnum, 0.5, @bnum);
-		$sbound = $etm+$enum>0.1? int(($etm+$enum)*$fulls+0.5): int(0.1*$fulls+0.5);
+		my $etm = &score_single($tm[1], 0.45, @btm);
+		my $enum = &score_single($bnum, 0.45, @bnum);
+		my $etotal = 0.1+$etm+$enum;
+		$sbound = int($etotal*$fulls+0.5);
 	}
 	
-	my ($is_G5, $CGd) = &G_content($seq);
-	my $sG5=$is_G5? 0: $fulls;
-	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
-
-	my @score = ($slen, $stm, $sself, $ssnp, $spoly, $sbound, $sG5, $sCGd);
-	#my @weight =(0.05,   0.2, 0.1,    0.05,  0.1,    0.3,     0.5
-	my $score=1;
+	my @score = ($slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd);
+	my @weight =(0.5,   3,     1,      2,    2,      0.5,     1);
+	my $sadd=0;
 	for(my $i=0; $i<@score; $i++){
 		$score[$i]=$score[$i]<0? 0: $score[$i];
-		$score*=$score[$i]/$fulls;
+		$sadd+=$weight[$i]*$score[$i];
 	}
-	
 	my $score_info=join(",", @score);
-	print O join("\t", $id, $seq, $len, $score, $score_info, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm),"\n";
+	print O join("\t", $id, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm),"\n";
 }
 close(P);
 close(O);
-
+close(F);
 
 
 #######################################################################################
