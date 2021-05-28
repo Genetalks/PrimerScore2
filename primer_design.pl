@@ -27,6 +27,7 @@ our $REF_HG19;
 my $fref = $REF_HG19;
 my $format_dis = 3;
 my $probe;
+my $orient; ## primer orient on template, F: forward, R: reverse, FR: both forward and reverse 
 my $ptype = "face-to-face";
 my $range_dis;
 my $range_len="18,36,2";
@@ -35,6 +36,7 @@ GetOptions(
 				"i:s"=>\$ftem,
 				"is:s"=>\$ftem_snp,
 				"r:s"=>\$fref,
+				"fr:s"=>\$orient,
 				"k:s"=>\$fkey,
 				"Probe:s"=>\$probe,
 				"NoSpecificity:s"=>\$NoSpecificity,
@@ -52,7 +54,7 @@ GetOptions(
 				"step:s"=>\$step,
 				"od:s"=>\$outdir,
 				) or &USAGE;
-&USAGE unless ($ftem and $fkey);
+&USAGE unless ($ftem and $orient and $fkey);
 
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
@@ -98,6 +100,7 @@ if ($step == 1){
 		}
 	}
 	
+	my $pori = $orient=~/F/? "F": "R"; ## FR
 	## get primer seq
 	open(I, $ftem) or die $!;
 	open(PT, ">$outdir/$fkey.primer.list") or die $!;
@@ -123,17 +126,8 @@ if ($step == 1){
 		if(!defined $range_dis){
 			@rdis = (1, $tlen, 1);
 		}
-		my @rdisc=@rdis;
-		if($format_dis == 5){ ## convert to format '3'
-			for(my $i=0; $i<@rdis; $i+=3){
-				my $e =$tlen-$rdis[$i]-$min_len;
-				my $s =$tlen-$rdis[$i+1]-$max_len;
-				$rdisc[$i]=$s;
-				$rdisc[$i+1]=$e;
-			}
-		}
-		for(my $r=0; $r<@rdisc; $r+=3){
-			my ($min_dis, $max_dis) = ($rdisc[$r], $rdisc[$r+1]);
+		for(my $r=0; $r<@rdis; $r+=3){
+			my ($min_dis, $max_dis) = ($rdis[$r], $rdis[$r+1]);
 			my $min_p = $min_dis-$dstart>0? $min_dis-$dstart: 0; ## dstart=1
 			my $max_p = $max_dis-$dend<$tlen? $max_dis-$dend: $tlen;
 			if($max_p < $min_p){
@@ -150,17 +144,16 @@ if ($step == 1){
 				open(P, ">$dir/$fkey.primer.list_$fn") or die $!;
 				for(my $l=$max_len; $l>=$min_len; $l-=$scale_len){
 					next if($p+$l>$tlen);
-					my ($primer)=&get_primer($id, $p, $l, $seq);
+					my ($primer)=&get_primer($id, $p, $l, $seq, $pori); ## $p is left position on template
 					next if(defined $NoCoverN && ($primer=~/N/ || $primer=~/n/));
-					my $id_new = $id."-".$p; ##primers of different length are evalued in primer_evaluation.pl
-					#my $id_new = $id."-".$p."-".$l;
+					my $id_new = $id."-".$pori."-".$p; ##primers of different length are evalued in primer_evaluation.pl
 					if(defined $FiterRepeat){
 						my @match = ($primer=~/[atcg]/g);
 						next if(scalar @match > length($primer)*0.4);
 					}
 					
 					if(defined $ftem_snp){
-						my ($primer_snp)=&get_primer($id, $p, $l, $seq_snp{$id});
+						my ($primer_snp)=&get_primer($id, $p, $l, $seq_snp{$id}, $pori);
 						print P $id_new,"\t",$primer,":", $primer_snp, "\n";
 						print PT $id_new,"\t",$primer,":", $primer_snp, "\n";
 					}else{
@@ -187,7 +180,7 @@ if($step ==2){
 		my $dir_new = dirname($f);
 		my $olens=join(",", $min_len,$max_len, $scale_len); 
 		my $cmd = "perl $Bin/primer_evaluation.pl --nohead -p $f -d $fref -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir_new";
-		if($ptype eq "face-to-face" || $ptype eq "back-to-back"){
+		if($orient eq "FR"){
 			$cmd .= " --Revcom";
 		}
 		if(defined $probe){
@@ -344,13 +337,15 @@ sub score{ #&score($seq{$id},$dis, $len, $tm, $gc, $gc5, $gc3, $dgc, $dg_h, $tm_
 }
 
 sub get_primer{
-	my ($id, $pos, $len, $seq)=@_;
-	my $total_len = length $seq;
-	if($total_len-$pos-$len<0){
-		print "Extract primer failed! $seq, $pos, $len, $total_len-$pos-$len\n";
+	my ($id, $pos, $len, $seq, $ori)=@_;
+	my $primer = substr($seq, $pos-1, $len);
+	if($ori eq "R"){
+		$primer=&revcom($primer);
+	}
+	if(length $primer < $len){
+		print "Extract primer failed! $seq, $pos, $len, $ori\n";
 		die;
 	}
-	my $primer = substr($seq, $total_len-$pos-$len, $len);
 	return ($primer);
 }
 
@@ -423,6 +418,7 @@ Usage:
   -i  	<file>   	Input template fa file, forced
   -is  	<file>   	Input template add snp fa file, optional
   -r  	<file>   	Input ref fa file, [$fref]
+  -fr    <F|R|FR>	primer orient on template, F: forward, R: reverse, FR: both forward and reverse, forced
   -k  	<str>		Key of output file, forced
 
   --Probe                design probe
@@ -435,14 +431,13 @@ Usage:
   -opttm    <int>       optimal tm, [$opt_tm]
   -opttmp   <int>       optimal tm of probe, [$opt_tm_probe]
   -rlen     <str>       primer len ranges(start,end,scale), start <= end, [$range_len]
-  -rdis     <str>       region ranges(start,end,scale), start <= end, count format see -fdis, separated by ",", (1,len,1) when not given, optional
+  -rdis     <str>       region ranges(start,end,scale), start <= end, separated by ",", (1,len,1) when not given, optional
   		                Example: 
 			               sanger sequence primer: 100,150,2,400,500,5
 			               ARMS PCR primer: 1,1,1,80,180,2
-  -fdis    <5,3>        distance caculation format, 3: from primer right end to template 3'end; 5: from left right end to template 5'end, [$format_dis]
-  -stm     <int>		min tm to be High_tm in specifity, [$stm]
-  -para    <int>		parallel num, [$para_num]
-  -step	   <int>		step, [$step]
+  -stm     <int>	min tm to be High_tm in specifity, [$stm]
+  -para    <int>	parallel num, [$para_num]
+  -step	   <int>	step, [$step]
   	1: get primer seq
 	2: evalue primer
 	3: score and output

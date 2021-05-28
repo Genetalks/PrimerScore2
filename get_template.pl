@@ -187,29 +187,16 @@ foreach my $tid(sort {$a cmp $b} keys %{$tem_target{"tem"}}){
 	my ($pos_infoU, $seqU, $seqUs)=@{$tseq{$tid}{"U"}};
 	my ($pos_infoD, $seqD, $seqDs)=@{$tseq{$tid}{"D"}};
 	my $id_str = join(";", @oidU);
-	if(!defined $UD_devide){
-		print {$out{"U"}} ">$tidU-U\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
-		print {$out{"U"}} $seqU,"\n";
-		print {$out{"U"}} ">$tidU-D\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
-		print {$out{"U"}} $seqD,"\n";
+	print {$out{"U"}} ">$tidU-U\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
+	print {$out{"U"}} $seqU,"\n";
+	print {$out{"U"}} ">$tidU-D\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
+	print {$out{"U"}} $seqD,"\n";
 
-		print {$out{"Us"}} ">$tidU-U\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
-		print {$out{"Us"}} $seqUs,"\n";
-		print {$out{"Us"}} ">$tidU-D\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
-		print {$out{"Us"}} $seqDs,"\n";
+	print {$out{"Us"}} ">$tidU-U\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
+	print {$out{"Us"}} $seqUs,"\n";
+	print {$out{"Us"}} ">$tidU-D\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
+	print {$out{"Us"}} $seqDs,"\n";
 
-	}else{
-		print {$out{"U"}} ">$tidU\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
-		print {$out{"U"}} $seqU,"\n";
-		print {$out{"D"}} ">$tidU\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
-		print {$out{"D"}} $seqD,"\n";
-
-		print {$out{"Us"}} ">$tidU\tXS:i:$Us\tXE:i:$Ue\tXP:Z:$pos_infoU\tXI:Z:$id_str\n";
-		print {$out{"Us"}} $seqUs,"\n";
-		print {$out{"Ds"}} ">$tidU\tXS:i:$Ds\tXE:i:$De\tXP:Z:$pos_infoD\tXI:Z:$id_str\n";
-		print {$out{"Ds"}} $seqDs,"\n";
-
-	}
 }
 close($out{"U"});
 close($out{"Us"});
@@ -263,9 +250,9 @@ sub get_template_seq{
 		## get seq
 		my $seq=&faidx_seq($fref, $chr, $start, $end);
 		my $seq_snp=&faidx_seq($fref_snp, $chr, $start, $end);
-		$seq_snp=&seq_snp_add_target($seq_snp, $atarget, $chr, $start, $end);
+		$seq_snp=&seq_snp_add_target($seq_snp, $atarget, $chr, $start, $end); #add targetspot snp
 		my $strand = "+";
-		if($flank eq "D"){
+		if($flank eq "U"){## targetspot is on the start of sequence
 			$seq = &revcom($seq);
 			$seq_snp = &revcom($seq_snp);
 			$strand = "-";
