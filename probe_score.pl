@@ -38,10 +38,9 @@ my @endA = (0, 0, 0, 2);
 my @len = ($min_len,$max_len-$dlen*0.5,$min_len, $max_len+1);
 my @tm = ($opt_tm-1, $opt_tm+1, $opt_tm-5, $opt_tm+5);
 my @self = (-50, 40, -50, 55); ## self tm
-my @bnum = (1,5,1,100); #bound number
 my @CGd = (0.1, 1, 0, 1);
 my $max_self_tm=$self[3];
-my $max_bound_num=$bnum[3];
+my $max_bound_num=100;
 
 my $fulls=10;
 open(F,">$outdir/$fkey.probe.filter") or die $!;
@@ -50,20 +49,11 @@ print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTM\tGC\tHairpin\tEND\tANY\tSNP\tPoly\t
 open(P, $foligo) or die $!;
 while(<P>){
 	chomp;
-	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm)=split /\t/, $_;
+	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, undef, undef, $snp, $poly, $bnum, $btm)=split /\t/, $_;
 	
 	## filter
-	if($len>$max_len){
-		print F "Len\t$_\n";
-		next;
-	}
 	if($tm<$opt_tm-5 || $tm>$opt_tm+5){
 		print F "TM\t$_\n";
-		next;
-	}
-	my $self = &max($hairpin, $END, $ANY);
-	if($self>$max_self_tm){
-		print F "Self-complementary\t$_\n";
 		next;
 	}
 	my ($is_G5, $CGd) = &G_content($seq);
@@ -79,27 +69,16 @@ while(<P>){
 		print F "Bound\t$_\n";
 		next;
 	}
-
 	## score
 	my $slen=int(&score_single($len, $fulls, @len)+0.5);## round: int(x+0.5)
 	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
+	my $self = &max($hairpin, $END, $ANY);
 	my $sself=int(&score_single($self, $fulls, @self)+0.5);
 	my $ssnp = int(&SNP_score($snp, $len, "Probe")*$fulls +0.5);
 	my $spoly = int(&poly_score($poly, $len, "Probe")*$fulls +0.5);
 	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
 	#specificity: bound
-	my $sbound;
-	if($bnum==1){
-		$sbound=$fulls;
-	}else{
-		my @tm=split /,/, $btm;
-		my @btm = (0,$tm[0]*0.6,0,$tm[0]); #bound sec tm
-		my $etm = &score_single($tm[1], 0.45, @btm);
-		my $enum = &score_single($bnum, 0.45, @bnum);
-		my $etotal = 0.1+$etm+$enum;
-		$sbound = int($etotal*$fulls+0.5);
-	}
-	
+	my $sbound=&bound_score($bnum, $btm, $fulls);
 	my @score = ($slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd);
 	my @weight =(0.5,   3,     1,      2,    2,      0.5,     1);
 	my $sadd=0;

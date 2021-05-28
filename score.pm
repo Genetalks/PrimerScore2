@@ -1,3 +1,19 @@
+sub bound_score{
+	my ($bnum, $btm, $fulls)=@_;
+	my $sbound;
+	my @bnum = (1,5,1,100); #bound number
+	if($bnum==1){
+		$sbound=$fulls;
+	}else{
+		my @tm=split /,/, $btm;
+		my @btm = (0,$tm[0]*0.6,0,$tm[0]); #bound sec tm
+		my $etm = &score_single($tm[1], 0.45, @btm);
+		my $enum = &score_single($bnum, 0.45, @bnum);
+		my $etotal = 0.1+$etm+$enum;
+		$sbound = int($etotal*$fulls+0.5);
+	}
+	return $sbound;
+}
 
 sub poly_score{
 	my ($info, $len, $type)=@_;

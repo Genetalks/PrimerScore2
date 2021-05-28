@@ -75,6 +75,7 @@ my $Max_poly_total = 12;
 my $Max_poly_G = 3;
 my $Max_poly_ATC = 5; 
 my $MAX_endA = 4;
+my $MAX_end_stability=9;
 my $MAX_poly = 20;
 my $Max_Bound_Num = 300; ## too high tm aligns will be filtered
 my $MIN_tm = $opt_tm-5;
@@ -137,18 +138,32 @@ while (<P>){
 	}
 
 	## filter
+	## primer 3end evalue
 	my $nendA0 = &get_end_A($primer_seq0);
-	my $nendA0r = &get_end_A($primer_seq0r);
+	my $dG_end30 = &get_end3_detaG($primer_seq0, 5);
+	my ($nendA0r, $dG_end30r);
+	if(defined $revcom){
+		$nendA0r = &get_end_A($primer_seq0r);
+		$dG_end30r = &get_end3_detaG($primer_seq0r, 5);
+	}
 	my $is_all_filter=1;
 	for(my $i=0; $i<@{$olen_primer{$id0}}; $i++){
 		my ($id, $ori, $off, $primer_seq, $primer_seq_snp)=@{$olen_primer{$id0}->[$i]};
 		my $ftype;
-		## filter endA
-		my $nendA = $ori eq "+"? $nendA0: $nendA0r;
-		if(!defined $NoFilter && $nendA>$MAX_endA){
-			$ftype = "EndA";
-			print F join("\t",  $id, $primer_seq, $ftype, $nendA),"\n";
-			next;
+		## filter endA and end stability
+		my ($nendA, $dG_end3) = $ori eq "+"? ($nendA0, $dG_end30): ($nendA0r, $dG_end30r);
+		if(!defined $probe && !defined $NoFilter){## Primer filter
+			$ftype="No";
+			if($nendA>$MAX_endA){
+				$ftype = "EndA";
+			}
+			if($dG_end3 > $MAX_end_stability){
+				$ftype = "EndStability";
+			}
+			if($ftype ne "No"){
+				print F join("\t",  $id, $primer_seq, $ftype, $nendA),"\n";
+				next;
+			}
 		}
 		
 		## filter TM and GC
@@ -206,7 +221,7 @@ while (<P>){
 			}
 		}
 		my $len = length($primer_seq);
-		push @{$evalue{$id}},($primer_seq, $len, $Tm, sprintf("%.3f",$GC), sprintf("%.2f",$hairpin_tm), sprintf("%.2f",$END_tm), sprintf("%.2f",$ANY_tm), $SNP_info, $poly_info);
+		push @{$evalue{$id}},($primer_seq, $len, $Tm, sprintf("%.3f",$GC), sprintf("%.2f",$hairpin_tm), sprintf("%.2f",$END_tm), sprintf("%.2f",$ANY_tm),$nendA,$dG_end3, $SNP_info, $poly_info);
 		$is_all_filter=0;
 	}
 	
@@ -260,7 +275,7 @@ if(!defined $NoSpecificity){
 		close(I);
 	}
 	### evaluate
-	open(O, ">$outdir/$fkey.specificity.sam") or die $!;
+	open(O, ">$outdir/$fkey.bound.info") or die $!;
 	foreach my $id0 (sort {$a cmp $b} keys %olen_primer){
 		my ($id,undef, undef, $primer_seq)=@{$olen_primer{$id0}->[0]};
 		my $bound_num = 0;
@@ -397,7 +412,7 @@ if(!defined $NoFilter){
 ### output
 open (O, ">$outdir/$fkey.evaluation.out") or die $!;
 if(!defined $nohead){
-	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tSNP\tPoly\tBoundNum\tHighestTm\tHighestInfo\n";
+	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tBoundNum\tHighestTm\tHighestInfo\n";
 }
 
 foreach my $id (sort {$a cmp $b} keys %evalue){

@@ -18,30 +18,30 @@ my $version="1.0.0";
 my ($NoSpecificity, $FiterRepeat, $NoFilter, $NoCoverN);
 my ($ftem,$ftem_snp,$fkey,$outdir);
 my $step = 1;
-my $recov;
 my $para_num = 10;
-my $stm = 45;
-my $opt_tm=65;
-my $opt_tm_probe;
+my $stm = 40;
+my $opt_tm=60;
+my $opt_tm_probe=70;
 our $PATH_PRIMER3;
 our $REF_HG19;
 my $fref = $REF_HG19;
 my $format_dis = 3;
-my $type = "face-to-face";
+my $probe;
+my $ptype = "face-to-face";
 my $range_dis;
-my $range_len="18,28,2";
+my $range_len="18,36,2";
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$ftem,
 				"is:s"=>\$ftem_snp,
 				"r:s"=>\$fref,
 				"k:s"=>\$fkey,
+				"Probe:s"=>\$probe,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"FilterRepeat:s"=>\$FiterRepeat,
 				"NoFilter:s"=>\$NoFilter,
 				"NoCoverN:s"=>\$NoCoverN,
-				"recov:s"=>\$recov,
-				"type:s"=>\$type,
+				"ptype:s"=>\$ptype,
 				"rlen:s"=>\$range_len,
 				"opttm:s"=>\$opt_tm,
 				"opttmp:s"=>\$opt_tm_probe,
@@ -187,8 +187,11 @@ if($step ==2){
 		my $dir_new = dirname($f);
 		my $olens=join(",", $min_len,$max_len, $scale_len); 
 		my $cmd = "perl $Bin/primer_evaluation.pl --nohead -p $f -d $fref -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir_new";
-		if(defined $opt_tm_probe){
-			$cmd .= " -opttmp $opt_tm_probe";
+		if($ptype eq "face-to-face" || $ptype eq "back-to-back"){
+			$cmd .= " --Revcom";
+		}
+		if(defined $probe){
+			$cmd .= " --Probe -opttmp $opt_tm_probe";
 		}
 		if(defined $NoSpecificity){
 			$cmd .= " --NoSpecificity";
@@ -200,64 +203,18 @@ if($step ==2){
 		print SH $cmd,"\n";
 	}
 	close (SH);
-	my $timeout = 400;
-#	Run("parallel -j $para_num --timeout $timeout < $outdir/$fkey.primer.evalue.sh", 1);
 	Run("parallel -j $para_num  < $outdir/$fkey.primer.evalue.sh", 1);
 	
 	##cat
 	my @dirs = glob("$outdir/split_*");
 	foreach my $dir (@dirs){
 		Run("cat $dir/*.evaluation.out > $dir/evaluation.out", 1);
+		Run("cat $dir/*.bound.info > $dir/bound.info", 1);
 		Run("cat $dir/*.filter.list > $dir/filter.list", 1);
 	}
 	Run("cat $outdir/*/evaluation.out >$outdir/$fkey.primer.evaluation.out", 1);
+	Run("cat $outdir/*/bound.info >$outdir/$fkey.primer.bound.info", 1);
 	Run("cat $outdir/*/filter.list >$outdir/$fkey.primer.filter.list", 1);
-
-	##get bwa fail list
-	my %suc;
-	my %filter;
-	open(E, "$outdir/$fkey.primer.evaluation.out") or die $!;
-	$/="\n";
-	while(<E>){
-		chomp;
-		my ($id)=split;
-		$suc{$id}=1;
-	}
-	close(E);
-	open(F, "$outdir/$fkey.primer.filter.list") or die $!;
-	while(<F>){
-		chomp;
-		my ($id)=split;
-		$filter{$id}=1;
-	}
-	close(F);
-	my %tid;
-#	open(FB, ">$outdir/$fkey.primer.filtered_by_timeout.list") or die $!;
-#	foreach my $id(keys %seq){
-#		my ($tid, $len, $dis)=$id=~/(\S+)-(\d+)-(\d+)$/;
-#		$tid{$tid}{"Total"}++;
-#		if(exists $suc{$id}){
-#			$tid{$tid}{"Suc"}++;
-#		}elsif(!exists $filter{$id}){
-#			print FB join("\t", $id, $seq{$id}),"\n";
-#		}
-#	}
-#	close(FB);
-	open(FO, ">$outdir/$fkey.primer_design.summary") or die $!;
-	print FO "TemplateID\tTotalCandidate\tEvaluatedSuccess\tPrimerDesignedSuccessOrNot\n";
-	foreach my $tid(keys %tid){
-		if(!exists $tid{$tid}{"Suc"}){
-			$tid{$tid}{"Suc"} = 0;
-		}
-		my $type = "Success";
-		if($tid{$tid}{"Suc"}<=2){
-			$type = "Failure";
-		}elsif($tid{$tid}{"Suc"}<10){
-			$type = "Warning";
-		}
-		print FO join("\t", $tid, $tid{$tid}{"Total"}, $tid{$tid}{"Suc"}, $type), "\n";
-	}
-	close(FO);
 
 	$step++;
 }
@@ -281,9 +238,6 @@ if($step==3){
 		#$nend=~s/\+//;
 		my ($score, $score_info) = &score($seq{$id}, $len, $tm, $gc, $gc5, $gc3, $dgc, $dg_h, $tm_h, $nhtm, $htm_info);	
 		my ($id_sub, $dis)=$id=~/(\S+)\-(\d+)\-\d+$/;
-		if(defined $recov){
-			$id_sub=~s/rev//;
-		}
 		push @{$score{$id_sub}{$score}},$id;
 		@{$info{$id}}=($id_sub, $len,$dis, $seq{$id}, $score, $score_info, @info);
 	}
@@ -397,12 +351,6 @@ sub get_primer{
 		die;
 	}
 	my $primer = substr($seq, $total_len-$pos-$len, $len);
-	if(defined $recov){
-		$primer =~tr/ATGCatgc/TACGtacg/;
-		$primer = reverse $primer;
-		$id.="rev";
-#		$pos = $total_len-$pos-$len;
-	}
 	return ($primer);
 }
 
@@ -477,15 +425,15 @@ Usage:
   -r  	<file>   	Input ref fa file, [$fref]
   -k  	<str>		Key of output file, forced
 
-  --recov           recov primer seq
+  --Probe                design probe
   --NoSpecificity   not evalue specificity
   --FilterRepeat	filter primers with repeat region(lowercase in fref) more than 40%
   --NoFilter             Not filter any primers
   --NoCoverN             candidate primer sequences can't contain N/n
 
-  -type     <str>       primer type, "face-to-face", "back-to-back", "Nested", [$type]
+  -ptype     <str>       primer type, "face-to-face", "back-to-back", "Nested", [$ptype]
   -opttm    <int>       optimal tm, [$opt_tm]
-  -opttmp    <int>     optimal tm of probe, not design probe when not set the parameter, optional
+  -opttmp   <int>       optimal tm of probe, [$opt_tm_probe]
   -rlen     <str>       primer len ranges(start,end,scale), start <= end, [$range_len]
   -rdis     <str>       region ranges(start,end,scale), start <= end, count format see -fdis, separated by ",", (1,len,1) when not given, optional
   		                Example: 

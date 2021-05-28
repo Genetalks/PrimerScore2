@@ -736,6 +736,21 @@ sub GC_info_stat{
     return ($GC, $GC5, $GC3, $max_GC-$min_GC);
 }
 
+sub get_end3_detaG{
+	my ($primer, $endlen)=@_;
+	my $len = length $primer;
+	my $endseq=substr($primer, $len-$endlen);
+	my %ix=("A",0, "C",1, "G",2, "T",3);
+	my @matrix=([-1.9,-1.3,-1.6, -1.5],[-1.9,-3.1,-3.6,-1.6],[-1.6,-3.1,-3.1,-1.3],[-1.0,-1.6,-1.9,-1.9]);
+	my @b = split //, $endseq;
+	my $detaG=0;
+	for(my $i=0; $i<@b-1; $i++){
+		my $ix1=$ix{$b[$i]};
+		my $ix2=$ix{$b[$i+1]};
+		$detaG+=$matrix[$ix1][$ix2];
+	}
+	return $detaG;
+}
 
 ## get endA number
 sub get_end_A{
