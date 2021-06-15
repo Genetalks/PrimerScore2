@@ -1,16 +1,26 @@
 sub bound_score{
-	my ($bnum, $btm, $fulls)=@_;
+	my ($bnum, $bvalue, $fulls, $type)=@_;
+	#bvalue: tm, Eff
 	my $sbound;
 	my @bnum = (1,5,1,100); #bound number
 	if($bnum==1){
 		$sbound=$fulls;
 	}else{
-		my @tm=split /,/, $btm;
-		my @btm = (0,$tm[0]*0.6,0,$tm[0]); #bound sec tm
-		my $etm = &score_single($tm[1], 0.45, @btm);
-		my $enum = &score_single($bnum, 0.45, @bnum);
-		my $etotal = 0.1+$etm+$enum;
+		my @value=split /,/, $bvalue;
+		my (@bvalue, $evalue, $enum, $etotal);
+		if($type eq "Tm"){
+			@bvalue = (0,$value[0]*0.6,0,$value[0]); #bound sec value
+			$evalue = &score_single($value[1], 0.7, @bvalue);
+			$enum = &score_single($bnum, 0.3, @bnum);
+			$etotal = $evalue+$enum;
+		}else{ #Eff
+			@bvalue = (0,0.001,0,1);
+			$evalue = &score_single($value[1], 0.8, @bvalue);
+			$enum = &score_single($bnum, 0.2, @bnum);
+			$etotal = $evalue+$enum;
+		}
 		$sbound = int($etotal*$fulls+0.5);
+		$sbound = $sbound>0? $sbound: 0;
 	}
 	return $sbound;
 }
@@ -31,7 +41,7 @@ sub poly_score{
 			my $de=$d5>$d3?$d3:$d5;
 			$s = 0.2+&score_single($de, 0.2, @dprobe)+&score_single($l,0.6,@polylen);
 		}else{
-			$s = 0.1+&score_single($d3, 0.3, @dprime)+&score_single($l,0.6,@polylen);
+			$s = 0.1+&score_single($d3, 0.3, @dprimer)+&score_single($l,0.6,@polylen);
 		}
 		$score*=$s;
 	}

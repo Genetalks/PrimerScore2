@@ -1,3 +1,21 @@
+sub get_highest_bound{
+	my ($abound, $maxn)=@_;
+	my %bound=%{$abound};
+	my @binfo=sort{$bound{$b} <=> $bound{$a}} keys %bound;
+	my $bnum = scalar @binfo;
+	my $n=0;
+	my @bvalue;
+	my @binfos;
+	foreach $binfo(@binfo){
+		push @binfos, $binfo;
+		push @bvalue, sprintf("%.2f",$bound{$binfo});
+		$n++;
+		last if($n==$maxn);
+	}
+	my $binfos=join(";", @binfos);
+	my $bvalues=join(",", @bvalue);
+	return ($bnum, $bvalues, $binfos);
+}
 
 #my @rank_end=(3,   5,   8); #  PCR efficiency when dis of mismatch pos to 3end <= @rank_end
 #my @eff_end =(0.1, 0.4, 0.8 );
@@ -219,8 +237,9 @@ sub end_match_length{
 		$endm=$len;
 	}elsif($ref eq "#"){
 		$endm=$len*(-1);
-	}else{
-		die "Wrong end3 map visual info: $mv\n";
+	}else{ ## primer end is not covered by template
+		print "Warn: end3 map visual info $mv\n";
+		$endm="Fail";
 	}
 	return $endm;
 }
@@ -452,7 +471,7 @@ sub md_split{
 }
 
 sub cigar_split{
-    my($cigar)=@_;
+    my($cigar, $keepH)=@_;
     my @ucigar = split //, $cigar;
     my (@match_n,@match_str);
     my $nstr="";
@@ -462,6 +481,10 @@ sub cigar_split{
             push @match_n, $nstr;
             $nstr = "";
         }elsif($ucigar[$i] eq "H"){
+			if(defined $keepH){
+				push @match_str, $ucigar[$i];
+				push @match_n, $nstr;
+			}
             $nstr = "";
         }else{
             $nstr .= $ucigar[$i];

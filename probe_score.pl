@@ -62,13 +62,13 @@ while(<P>){
 		next;
 	}
 	if($CGd<=0){
-		print F "GCdiff\t$_\n";
+		print F "C<G\t$_\n";
 		next;
 	}
-	if($bnum>$max_bound_num){
-		print F "Bound\t$_\n";
-		next;
-	}
+#	if($bnum>$max_bound_num){
+#		print F "Bound\t$_\n";
+#		next;
+#	}
 	## score
 	my $slen=int(&score_single($len, $fulls, @len)+0.5);## round: int(x+0.5)
 	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
@@ -78,7 +78,7 @@ while(<P>){
 	my $spoly = int(&poly_score($poly, $len, "Probe")*$fulls +0.5);
 	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
 	#specificity: bound
-	my $sbound=&bound_score($bnum, $btm, $fulls);
+	my $sbound=&bound_score($bnum, $btm, $fulls, "Tm");
 	my @score = ($slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd);
 	my @weight =(0.5,   3,     1,      2,    2,      0.5,     1);
 	my $sadd=0;
