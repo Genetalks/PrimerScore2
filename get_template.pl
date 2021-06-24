@@ -6,7 +6,8 @@ use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
 require "$Bin/path.pm";
-require "$Bin/self_lib.pm";
+require "$Bin/common.pm";
+require "$Bin/add_poly.pm";
 my $BEGIN_TIME=time();
 my $version="2.0";
 #######################################################################################

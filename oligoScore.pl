@@ -18,7 +18,7 @@ require "$Bin/math.pm";
 our ($VCF_dbSNP, $REF_HG19, $REF_HG19_SNP, $BLAT);
 my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer);
 my $fref = $REF_HG19;
-my $fref_snp = $REF_HG19_SNP;
+my $fref_snp;
 my $fdatabase = $REF_HG19;
 my $step = 1;
 my $para_num = 10;
@@ -371,7 +371,7 @@ Usage:
   -it        <file>   Input target file(SNP file or template fasta file), forced
    --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
   -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
-  -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, [$fref_snp]
+  -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
   -id        <file>   Input database file to check specificity, [$fdatabase] 
   -p         <str>    prefix of output file, forced
   --probe             design probe when -type "face-to-face", optional
