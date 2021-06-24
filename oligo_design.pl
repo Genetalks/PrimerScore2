@@ -6,7 +6,7 @@ use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
 require "$Bin/path.pm";
-require "$Bin/self_lib.pm";
+require "$Bin/common.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -15,43 +15,39 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($NoSpecificity, $FiterRepeat, $NoFilter, $NoCoverN);
+my ($NoSpecificity, $FiterRepeat, $NoFilter);
 my ($ftem,$ftem_snp,$fkey,$outdir);
-my $step = 1;
 my $para_num = 10;
 my $stm = 45;
 my $opt_tm=60;
 my $opt_tm_probe=70;
 our $PATH_PRIMER3;
 our $REF_HG19;
-my $fref = $REF_HG19;
-my $format_dis = 3;
+my $fdatabases = $REF_HG19;
 my $probe;
 my $orient; ## oligo orient on template, F: forward, R: reverse, FR: both forward and reverse 
 my $ptype = "face-to-face";
-my $range_dis;
+my $regions; ## regions: start, end, scale
 my $range_len="18,36,2";
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$ftem,
 				"is:s"=>\$ftem_snp,
-				"r:s"=>\$fref,
+				"d:s"=>\$fdatabases,
+				"r:s"=>\$fdatabases,
 				"fr:s"=>\$orient,
 				"k:s"=>\$fkey,
 				"Probe:s"=>\$probe,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"FilterRepeat:s"=>\$FiterRepeat,
 				"NoFilter:s"=>\$NoFilter,
-				"NoCoverN:s"=>\$NoCoverN,
 				"ptype:s"=>\$ptype,
 				"rlen:s"=>\$range_len,
 				"opttm:s"=>\$opt_tm,
 				"opttmp:s"=>\$opt_tm_probe,
-				"fdis:s"=>\$format_dis,
-				"rdis:s"=>\$range_dis,
+				"rregion:s"=>\$regions,
 				"stm:s"=>\$stm,
 				"para:s"=>\$para_num,
-				"step:s"=>\$step,
 				"od:s"=>\$outdir,
 				) or &USAGE;
 &USAGE unless ($ftem and $orient and $fkey);
@@ -64,9 +60,9 @@ my ($min_len, $max_len, $scale_len)=split /,/, $range_len;
 my %seq;
 
 my $n=0;
-my @rdis;
-if(defined $range_dis){
-	@rdis = &check_merge_rdis($range_dis);
+my @rregion;
+if(defined $regions){
+	@rregion = &check_merge_rregion($regions);
 }
 
 ## get template seq containing snp
@@ -84,6 +80,7 @@ if(defined $ftem_snp){
 	}
 }
 
+my %record;
 my $pori = $orient=~/F/? "F": "R"; ## FR
 ## get oligo seq
 open(I, $ftem) or die $!;
@@ -107,18 +104,18 @@ while(<I>){
 	
 	## 
 	my $tlen = length($seq);
-	if(!defined $range_dis){
-		@rdis = (1, $tlen, 1);
+	if(!defined $regions){
+		@rregion = (1, $tlen, 1);
 	}
-	for(my $r=0; $r<@rdis; $r+=3){
-		my ($min_dis, $max_dis) = ($rdis[$r], $rdis[$r+1]);
+	for(my $r=0; $r<@rregion; $r+=3){
+		my ($min_dis, $max_dis) = ($rregion[$r], $rregion[$r+1]);
 		my $min_p = $min_dis-$dstart>0? $min_dis-$dstart: 0; ## dstart=1
 		my $max_p = $max_dis-$dend<$tlen? $max_dis-$dend: $tlen;
 		if($max_p < $min_p){
-			print "Wrong: max position $max_p < min position $min_p! ($min_dis, $max_dis, $dstart, $dend) Maybe dend (XE:i:$dend) is too large, or -rdis range $range_dis is too narrow!\n";
+			print "Wrong: max position $max_p < min position $min_p! ($min_dis, $max_dis, $dstart, $dend) Maybe dend (XE:i:$dend) is too large, or -rregion range $regions is too narrow!\n";
 			die;
 		}
-		my $sdis = $rdis[$r+2];
+		my $sdis = $rregion[$r+2];
 		for(my $p=$min_p; $p<=$max_p; $p+=$sdis){
 			$n++;
 			my $dn=int($n/1000);
@@ -127,15 +124,19 @@ while(<I>){
 			my $fn=$n%1000;
 			open(P, ">$dir/$fkey.oligo.list_$fn") or die $!;
 			for(my $l=$max_len; $l>=$min_len; $l-=$scale_len){
-				next if($p+$l>$tlen);
+				next if(($pori eq "R" && $p+$l>$tlen) || ($pori eq "F" && $p-$l<0));
 				my ($oligo, $start, $end)=&get_oligo($id, $p, $l, $seq, $pori); ## $p is end3 position
-				next if(defined $NoCoverN && ($oligo=~/N/ || $oligo=~/n/));
+				next if($oligo=~/N/ || $oligo=~/n/);
 				my $id_new = $id."-".$pori."-".$start."-".$end; ##oligos of different length are evalued in oligo_evaluation.pl
+				if(exists $record{$id_new}){
+					die "Wrong: repeat id new! $id_new $id,$p,$l,$n!\n";
+				}
+				$record{$id_new}=1;	
+
 				if(defined $FiterRepeat){
 					my @match = ($oligo=~/[atcg]/g);
 					next if(scalar @match > length($oligo)*0.4);
 				}
-				
 				if(defined $ftem_snp){
 					my ($oligo_snp)=&get_oligo($id, $p, $l, $seq_snp{$id}, $pori);
 					print P $id_new,"\t",$oligo,":", $oligo_snp, "\n";
@@ -153,7 +154,6 @@ while(<I>){
 }
 close(PT);
 
-
 # evalue
 my @foligo = glob("$outdir/split_*/$fkey.oligo.list*");
 open (SH, ">$outdir/$fkey.oligo.evalue.sh") or die $!;
@@ -161,7 +161,7 @@ foreach my $f (@foligo){
 	my $fname = basename($f);
 	my $dir_new = dirname($f);
 	my $olens=join(",", $min_len, $max_len, $scale_len); 
-	my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $f -d $fref -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir_new";
+	my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir_new";
 	if($orient eq "FR"){
 		$cmd .= " --Revcom";
 	}
@@ -191,7 +191,6 @@ Run("cat $outdir/*/evaluation.out >$outdir/$fkey.oligo.evaluation.out", 1);
 Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info", 1);
 Run("cat $outdir/*/filter.list >$outdir/$fkey.oligo.filter.list", 1);
 
-$step++;
 
 
 
@@ -256,47 +255,47 @@ sub get_oligo{
 	return ($oligo, $start, $end);
 }
 
-sub check_merge_rdis{
-	my ($rdis)=$_;
-	##check range_dis
-	my @rdis = split /,/, $range_dis;
-	my $nrdis = scalar @rdis;
-	if($nrdis!=3 && $nrdis!=6){
-		print "Wrong: number of -rdis must be 3 or 6!\n";
+sub check_merge_rregion{
+	my ($rregion)=$_;
+	##check regions
+	my @rregion = split /,/, $regions;
+	my $nrregion = scalar @rregion;
+	if($nrregion!=3 && $nrregion!=6){
+		print "Wrong: number of -rregion must be 3 or 6!\n";
 		die;
 	}
-	for(my $i=0; $i<@rdis; $i+=3){
-		if($rdis[$i+1]-$rdis[$i] < 0){
-			print "Wrong: -rdis region must be ascending ordered, eg:3,40,1,100,150,5\n";
+	for(my $i=0; $i<@rregion; $i+=3){
+		if($rregion[$i+1]-$rregion[$i] < 0){
+			print "Wrong: -rregion region must be ascending ordered, eg:3,40,1,100,150,5\n";
 			die;
 		}
 	}
 
-	if($nrdis==3){
-		return(@rdis);
+	if($nrregion==3){
+		return(@rregion);
 	}else{ ##merge when overlap
-		my ($s1, $e1, $b1, $s2, $e2, $b2) = @rdis;
+		my ($s1, $e1, $b1, $s2, $e2, $b2) = @rregion;
 		## sort two regions
 		if($s1 > $s2){
-			($s2, $e2, $b2) = @rdis[0..2];
-			($s1, $e1, $b1) = @rdis[3..5];
+			($s2, $e2, $b2) = @rregion[0..2];
+			($s1, $e1, $b1) = @rregion[3..5];
 		}
-		if($e1>$s2){ ## overlap
+		if($e1>=$s2){ ## overlap
 			if($e1>$e2){ ## r1 include r2
 				if($b1<$b2){ ## prefer min bin
 					return($s1, $e1, $b1);
 				}else{
-					return ($s1, $s2, $b1, $s2, $e2, $b2, $e2, $e1, $b1);
+					return ($s1, $s2, $b1, $s2+1, $e2, $b2, $e2+1, $e1, $b1);
 				}
 			}else{## intersect 
 				if($b1<$b2){
-					return ($s1, $e1, $b1, $e1, $e2, $b2);
+					return ($s1, $e1, $b1, $e1+1, $e2, $b2);
 				}else{
-					return ($s1, $s2, $b1, $s2, $e2, $b2);
+					return ($s1, $s2, $b1, $s2+1, $e2, $b2);
 				}
 			}
 		}else{## no overlap
-			return @rdis;
+			return @rregion;
 		}
 
 	}
@@ -324,30 +323,25 @@ Usage:
   Options:
   -i  	<file>   	Input template fa file, forced
   -is  	<file>   	Input template add snp fa file, optional
-  -r  	<file>   	Input ref fa file, [$fref]
-  -fr    <F|R|FR>	oligo orient on template, F: forward, R: reverse, FR: both forward and reverse, forced
+  -d    <files>     Input database files separated by ",", [$fdatabases]
+  -fr   <F|R|FR>	oligo orient on template, F: forward, R: reverse, FR: both forward and reverse, forced
   -k  	<str>		Key of output file, forced
 
   --Probe                design probe
   --NoSpecificity   not evalue specificity
-  --FilterRepeat	filter oligos with repeat region(lowercase in fref) more than 40%
+  --FilterRepeat	filter oligos with repeat region(lowercase in fdatabases) more than 40%
   --NoFilter             Not filter any oligos
-  --NoCoverN             candidate oligo sequences can't contain N/n
 
   -ptype     <str>       oligo type, "face-to-face", "back-to-back", "Nested", [$ptype]
   -opttm    <int>       optimal tm, [$opt_tm]
   -opttmp   <int>       optimal tm of probe, [$opt_tm_probe]
   -rlen     <str>       oligo len ranges(start,end,scale), start <= end, [$range_len]
-  -rdis     <str>       region ranges(start,end,scale), start <= end, separated by ",", (1,len,1) when not given, optional
+  -rregion     <str>       region ranges(start,end,scale), start <= end, separated by ",", (1,len,1) when not given, optional
   		                Example: 
 			               sanger sequence oligo: 100,150,2,400,500,5
 			               ARMS PCR oligo: 1,1,1,80,180,2
   -stm     <int>	min tm to be High_tm in specifity, [$stm]
   -para    <int>	parallel num, [$para_num]
-  -step	   <int>	step, [$step]
-  	1: get oligo seq
-	2: evalue oligo
-	3: score and output
   -od <dir>	Dir of output file, default ./
   -h		 Help
 

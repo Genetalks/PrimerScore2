@@ -21,7 +21,7 @@ my ($ftarget,$fkey,$outdir);
 my $Max_Dis = 20;
 my $vcf;
 my $fref = $REF_HG19;
-my $fref_snp = $REF_HG19_SNP;
+my $fref_snp;
 my $Extend = 200;
 my $UD_devide;
 my $die_check;
@@ -42,7 +42,7 @@ GetOptions(
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
-
+$fref_snp = defined $fref_snp? $fref_snp: $fref;
 my $Max_Group_Len = $Max_Dis;
 my $Min_Dis_Detect = 0;
 
@@ -392,7 +392,7 @@ Usage:
   Options:
   -i  <file>   	Input file, forced
   -r  <file>   	Input ref file, [$fref]
-  -s  <file>   	Input ref file containing snps, [$fref_snp]
+  -s  <file>   	Input ref file containing snps, optional
   -k  <str>     Key of output file, forced
 
   --dieC		die when ref base check failed

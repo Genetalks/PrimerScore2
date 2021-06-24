@@ -6,7 +6,9 @@ use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
 require "$Bin/score.pm";
+require "$Bin/common.pm";
 require "$Bin/self_lib.pm";
+require "$Bin/math.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -45,6 +47,8 @@ my $max_bound_num=100;
 my $fulls=10;
 open(F,">$outdir/$fkey.probe.filter") or die $!;
 open(O, ">$outdir/$fkey.probe.score") or die $!;
+#$slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd
+print O "##ScoreInfo: scores of length, tm, self-complementary, snp, poly, bounding, CG content diff\n";
 print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTM\tGC\tHairpin\tEND\tANY\tSNP\tPoly\tBoundNum\tBoundTM\tBoundInfo\n";
 open(P, $foligo) or die $!;
 while(<P>){
@@ -79,8 +83,8 @@ while(<P>){
 	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
 	#specificity: bound
 	my $sbound=&bound_score($bnum, $btm, $fulls, "Tm");
-	my @score = ($slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd);
-	my @weight =(0.5,   3,     1,      2,    2,      0.5,     1);
+	my @score = ($slen, $stm, $sself, $sCGd, $ssnp, $spoly, $sbound);
+	my @weight =(0.5,   3,     1,      1,    2,    2,      0.5);
 	my $sadd=0;
 	for(my $i=0; $i<@score; $i++){
 		$score[$i]=$score[$i]<0? 0: $score[$i];

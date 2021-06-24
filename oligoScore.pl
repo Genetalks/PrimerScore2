@@ -8,55 +8,64 @@ use File::Basename qw(basename dirname);
 my $BEGIN_TIME=time();
 my $version="1.0.0";
 require "$Bin/path.pm";
+require "$Bin/common.pm";
+require "$Bin/math.pm";
 #######################################################################################
 
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-our ($VCF_dbSNP, $REF_HG19, $BLAT);
-my ($ftarget, $fkey,$outdir, $NoFilter, $NoCoverN);
+our ($VCF_dbSNP, $REF_HG19, $REF_HG19_SNP, $BLAT);
+my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer);
 my $fref = $REF_HG19;
+my $fref_snp = $REF_HG19_SNP;
 my $fdatabase = $REF_HG19;
 my $step = 1;
 my $para_num = 10;
 my $stm = 45;
-my $opt_tm=65;
-my $opt_tm_probe=75;
-
+my $opt_tm=60;
+my $opt_tm_probe=70;
+my $min_len=18;
+my $max_len=28;
+my $min_len_probe=18;
+my $max_len_probe=36;
+my $scale_len=2;
+my $pcr_size=600;
+my $pnum = 100; ## position num for one oligo, its candidate oligos num is roughly: pnum*(maxl-minl)/scalel.
+my $choose_num = 10; ## for a primer, at least $choose_num primers can be selected as its pair with the best dis.
 my $rfloat = 0.2;
 my $dis_aver = 500;
-my $size_range="100,150,70,200"; ## product size range(best_min, best_max, min, max)
+my $dis_range="100,150,70,200"; ##distance between oligos range(best_min, best_max, min, max), that is product size range when face-to-face
 my $pos_range; ## pos range(best_min, best_max, min, max)
-my $range_len="18,28,2";
-my $dis_range; ## distance between primers range, required when design non face-to-face primer
-my $type = "face-to-face:SNP";
+my $type = "face-to-face";
 my $ctype = "Single";
 my $onum = 3;
 my ($dimer_check, $homology_check, $SNP_check);
-my $averTLen;
 my $probe;
 my ($regions, $regions_rev);
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
+				"ComeFromRefer:s"=>\$ComeFromRefer,
 				"ir:s"=>\$fref,
+				"is:s"=>\$fref_snp,
 				"id:s"=>\$fdatabase,
 				"p:s"=>\$fkey,
-				"tlen:s"=>\$averTLen,
 				"dimer_check:s"=>\$dimer_check,
 				"homology_check:s"=>\$homology_check,
-				"SNP_check:s"=>\$SNP_check,
 				"NoFilter:s"=>\$NoFilter,
-				"NoCoverN:s"=>\$NoCoverN,
 
-				## primer design
+				## oligo design
 				"opttm:s"=>\$opt_tm,
 				"opttmp:s"=>\$opt_tm_probe,
+				"minl:s"=>\$min_len,
+				"maxl:s"=>\$max_len,
+				"minlp:s"=>\$min_len_probe,
+				"maxlp:s"=>\$max_len_probe,
+				"scalel:s"=>\$scale_len,
+
 				"regions:s"=>\$regions,
-				"regions_rev:s"=>\$regions_rev,
-				"rlen:s"=>\$range_len,
 				"rdis:s"=>\$dis_range,
-				"rsize:s"=>\$size_range,
 				"rpos:s"=>\$pos_range,
 
 				"type:s"=>\$type,
@@ -67,6 +76,8 @@ GetOptions(
 				"on:s"=>\$onum,
 
 				"stm:s"=>\$stm,
+				"pnum:s"=>\$pnum,
+				"size:s"=>\$pcr_size,
 				"para:s"=>\$para_num,
 				"step:s"=>\$step,
 				"od:s"=>\$outdir,
@@ -80,32 +91,20 @@ $fref=AbsolutePath("file", $fref);
 $fdatabase=AbsolutePath("file", $fdatabase);
 
 my ($score_dis, $score_pos)=(10,10);
-my ($min_len, $max_len, $scale_len)=split /,/, $range_len;
-my $choose_num = 5; ## for a primer, at least $choose_num primers can be selected as its pair.
-my $pnum = 50; ## position num for one primer, its candidate primers num is roughly: pnum*(maxl-minl)/scalel.
 my $sh;
 open($sh, ">$outdir/$fkey.sh") or die $!;
 
-if(defined $probe && $max_len<35){
-	die "Too small oligo length to design probe! $range_len\n";
-}
-
-if($type=~/face-to-face/){
-	$dis_range = $size_range;
-}else{
-	if(!defined $dis_range){
-		die "Wrong: -rdis must be given when primer type is not face-to-face!\n";
-	}
-}
-
 ### get template file
-my $ftemplate;
+my ($ftemplate, $ftemplate_snp);
 my $ftype;
 my $head = `head -1 $ftarget`;
 chomp $head;
 if($head=~/^>/){
 	$ftype = "fasta";
 	$ftemplate = $ftarget;
+	if(!defined $ComeFromRefer){
+		$fdatabase.=",".$ftemplate;
+	}
 }else{
 	$ftype = "SNP";
 	my @unit = split /\s+/, $head;
@@ -118,12 +117,6 @@ if($head=~/^>/){
 		die "Wrong input target file: $ftarget\n";
 	}
 }
-if($type=~/Region/ && $ftype ne "fasta"){
-	die "Wrong: The template file $ftarget must be fasta file when -type $type.\n";
-}
-if($type=~/SNP/ && $ftype ne "SNP"){
-	die "Wrong: The template file $ftarget must be SNP file when -type $type.\n";
-}
 
 if($ftype eq "SNP"){
 	my $extend_len;
@@ -135,8 +128,13 @@ if($ftype eq "SNP"){
 	}
 	my ($optmin, $optmax, $min, $max) = split /,/, $pos_range;
 	my $md = int (($max+$optmax)/2) - $optmin;
-	&Run("perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $md -od $outdir/ --dieC", $sh);
+	my $cmd = "perl $Bin/get_template.pl -i $ftarget -r $fref -k $fkey -et $extend_len -md $md -od $outdir/ --dieC";
+	if(defined $fref_snp){
+		$cmd .= " -s $fref_snp";
+	}
+	&Run($cmd, $sh);
 	$ftemplate = "$outdir/$fkey.template.fa";
+	$ftemplate_snp = "$outdir/$fkey.template_snp.fa";
 }
 
 
@@ -147,85 +145,58 @@ if($step==1){
 	}
 	$step++;
 }
-### primer design
-my ($stype)=split /:/, $type;
+
+### oligo design
 if($step==2){
-	my ($rdis1, $fdis1, $rdis2, $fdis2);
+	my $odir="$outdir/design/";
+	my $rregion;
 	if(defined $regions){
-		$fdis1=5;
-		$rdis1=$regions;
-		## check 
-		if($type eq "face-to-face:Region" || $type eq "back-to-back"){
-			if(!defined $regions_rev){ 
-				die "Wrong: No -regions_rev! -regions_rev must be given when type is face-to-face:Region and back-to-back!";
-			}else{
-				($fdis2, $rdis2)=(5, $regions_rev);
-			}
-		}
+		$rregion=$regions;
 	}else{
-		($rdis1, $fdis1, $rdis2, $fdis2)=&caculate_rdis($dis_range, $pos_range, $type, $min_len, $max_len);
+		$rregion=&caculate_rregion($dis_range, $pos_range, $type, $min_len, $max_len);
 	}
-	print "region range to design primers: ", join("\t", $fdis1.";".$rdis1, defined $fdis2? $fdis2.";".$rdis2:""),"\n";
-	my $dcmd = "perl $Bin/primer_design.pl -i $ftemplate -r $fdatabase -type $stype -opttm $opt_tm -rlen $range_len -fdis $fdis1 -rdis $rdis1 -stm $stm -para $para_num -k $fkey -od $outdir/design";
+	print "region range to design oligos: ", $rregion,"\n";
+	
+	### design oligo
+	my $FR="FR";
+	if($ftype eq "SNP" && ($type eq "face-to-face" || $type eq "Nested")){
+			$FR="R";
+	}
+	my $range_len=join(",", $min_len, $max_len, $scale_len);
+	if(defined $probe){
+		my $minl=&min($min_len, $min_len_probe);
+		my $maxl=&max($max_len, $max_len_probe);
+		$range_len=join(",", $minl, $maxl, $scale_len);
+	}
+	my $dcmd = "perl $Bin/oligo_design.pl -i $ftemplate -d $fdatabase -fr $FR -k $fkey -ptype $type -opttm $opt_tm -rlen $range_len -rregion $rregion -stm $stm -para $para_num -od $odir";
+	if(defined $ftemplate_snp){
+		$dcmd .= " -is $ftemplate_snp";
+	}
+	if(defined $probe){
+		$dcmd.=" --Probe -opttmp $opt_tm_probe";
+	}
 	if(defined $NoFilter){
 		$dcmd .= " --NoFilter";
 	}
-	if(defined $NoCoverN){
-		$dcmd .= " --NoCoverN";
-	}
-	if(defined $probe){
-		$dcmd.=" -opttmp $opt_tm_probe";
-	}
 	&Run($dcmd, $sh);
-	
-	if($type eq "face-to-face:Region" || $type eq "back-to-back"){
-		my $dir_rev = "$outdir/design_rev";
-		`mkdir $dir_rev` unless(-d $dir_rev);
-		my $fname = basename($ftemplate);
-		open(O, ">$dir_rev/$fname\_rev") or die $!;
-		open(I, $ftemplate) or die $!;
-		$/=">";
-		while(<I>){
-			chomp;
-			next if(/^$/);
-			my ($head, @seq)=split /\n/, $_;
-			my ($id)=split /\s+/, $head;
-			my $seq = join ("", @seq);
-			$seq =~tr/ATCGatcg/TAGCtagc/;
-			$seq = reverse $seq;
-			print O ">$id\_rev\n";
-			print O $seq,"\n";
-		}
-		close(O);
-		close(I);
-		$/="\n";
-		
-		if($rdis2 eq ""){
-			die "No rdis2!\n";
-		}
-		my $dcmd = "perl $Bin/primer_design.pl -i $dir_rev/$fname\_rev -r $fdatabase -type $stype -opttm $opt_tm -rlen $range_len -fdis $fdis2 -rdis $rdis2 -stm $stm -para $para_num -k $fkey\_rev -od $dir_rev";
-		if(defined $NoFilter){
-			$dcmd .= " --NoFilter";
-		}
-		if(defined $NoCoverN){
-			$dcmd .= " --NoCoverN";
-		}
-		if(defined $probe){
-			$dcmd.=" -opttmp $opt_tm_probe";
-		}
-		&Run($dcmd, $sh);
+	$step++;
+}
+
+if($step==3){
+	my $odir="$outdir/design/";
+	### probe score
+	if(defined $probe){
+		&Run("perl $Bin/probe_score.pl -i $odir/$fkey.oligo.evaluation.out -k $fkey -minl $min_len_probe -maxl $max_len_probe -opttm $opt_tm_probe -od $odir", $sh);
 	}
 	
-	
-	### select primer pair
+	### primer score and select
 	my $score_dis_range = $score_dis.",".$dis_range;
-	my $cmd = "perl $Bin/primer_pair_select.pl -i $outdir/design/$fkey.primer.score -it $ftemplate -k $fkey -rd $score_dis_range  -od $outdir -tp $type -ct $ctype";
-	if(defined $pos_range){
-		my $score_pos_range = $score_pos.",".$pos_range;
-		$cmd .= " -rp $score_pos_range";
+	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd $dis_range -ct $ctype -od $outdir";
+	if(defined $probe){
+		$cmd .= " -ip $odir/$fkey.probe.score";
 	}
-	if($type eq "face-to-face:Region" || $type eq "back-to-back"){
-		$cmd .= " -ir $outdir/design_rev/$fkey\_rev.primer.score";
+	if(defined $pos_range){
+		$cmd .= " -rp $pos_range";
 	}
 	if($ctype eq "Full-covered"){
 		$cmd .= " -ds $dis_aver -rf $rfloat";
@@ -236,26 +207,7 @@ if($step==2){
 	$step++;
 }
 
-if($step==3){
-	### specificity re-evaluation
-	my $dir_re = "$outdir/re_evalue";
-	`mkdir $dir_re` unless(-e $dir_re);
-	&Run("less $outdir/$fkey.final.result |perl -ne '{chomp; \@a=split; if(\$_=~/-P1/){print \$a[3],\"\\t\", \$a[4];}elsif(\$_=~/-P2/){ print \"\\t\", \$a[4],\"\\n\";}}'|less >$dir_re/$fkey.primer.pair.list", $sh);
-	my @diss = split /,/, $dis_range;
-	my $extend = $diss[-1]*2;
-	my $fcheck=$fdatabase;
-	#check templates come from database file or not
-	if($ftype eq "fasta" || $fref ne $fdatabase){
-		my $is_in=&template_database_check($ftemplate, $fdatabase, $outdir, $fkey);
-		print "Is_Template_in_Database: $is_in\n";
-		if(!$is_in){
-			$fcheck.=",".$ftemplate;
-		}
-	}
-	my $cmd = "perl $Bin/primer_evaluation.pl -p $dir_re/$fkey.primer.pair.list -d $fcheck -n 2 -k $fkey\_pair --NoFilter -type $stype -rdis $size_range -opttm $opt_tm -stm $stm -od $dir_re";
-	&Run($cmd, $sh);
-	
-	
+if($step==4){
 	### primers dimer check
 	if(defined $dimer_check){
 		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey -od $outdir/dimer_check", $sh);
@@ -263,24 +215,6 @@ if($step==3){
 
 	$step++;
 }
-
-if($step==4){
-	### select probe
-	if(defined $probe){
-		my $fprobe;
-		if($type eq "face-to-face:Region"){
-			$fprobe="$outdir/design/$fkey.primer.score,$outdir/design_rev/$fkey\_rev.primer.score";
-		}elsif($type eq "face-to-face:SNP"){
-			$fprobe="$outdir/design/$fkey.primer.score";
-		}else{
-			die "Wrong: the type is not face-to-face, Can't design probe!\n";
-		}
-		&Run("perl $Bin/probe_select.pl -ip $outdir/$fkey.final.result -it $ftemplate -io $fprobe -k $fkey.final.result -opttm $opt_tm_probe -minl $min_len -maxl $max_len -od $outdir", $sh);
-		`mv $outdir/$fkey.final.result.probe $outdir/$fkey.final.result`;
-	}
-}
-
-
 
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
@@ -337,76 +271,48 @@ sub template_database_check{
 	return $is_in;
 }
 
-sub caculate_rdis{
+sub caculate_rregion{
 	my ($dis_range, $pos_range, $type, $minl, $maxl)=@_;
-	## caculate -rdis parameter
+	## caculate -rregion parameter
 	my ($bmind, $bmaxd, $mind, $maxd)=split /,/, $dis_range;
 	my @region; ##  two-dimensional array, @{region[1]} is regions of revcom template sequence
 	my $alen = int(($minl+$maxl)/2);
-	my ($min, $max, $size, $index, $fdis1, $fdis2); #fdis: distance caculation format, 3: from primer right end to template 3'end; 5: from left right end to template 5'end
-	my $step0 = int(($bmaxd-$bmind)/$choose_num)+1; ## max step for distance range $dis_range
+	my ($min, $max);
+	my $step0 = int(($bmaxd-$bmind)/$choose_num+0.5); ## max step for distance range $dis_range
 	if(defined $pos_range){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
-		$fdis1 = 3;
-		push @{$region[0]}, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1);
-		if($type eq "face-to-face:SNP"){
+		push @region, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1);
+		if($type eq "face-to-face"){
 			$min = $mind-$maxp-2*$alen;
 			$max = $maxd-$minp-2*$alen;
-			$fdis1 = 3;
-			$index = 0;
 		}elsif($type eq "back-to-back"){
 			$min = $minp+$alen-$maxd;
 			$max = $maxp+$alen-$mind;
-			$fdis2 = 5; # from left right end to template 5'end
-			$index = 1;
 		}elsif($type eq "Nested"){
 			$min = $maxp+$mind;
 			$max = $maxp+$maxd;
-			$fdis1 = 3;
-			$index = 0;
 		}else{
-			die "Wrong type when defined -srpos, must be one of (face-to-face:SNP, back-to-back, Nested)!\n";
+			die "Wrong type when defined -srpos, must be one of (face-to-face, back-to-back, Nested)!\n";
 		}
 		my $posnum = int(($max-$min+1)/$step0);
 		if($posnum > $pnum*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
 			die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! Please narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
 		}
 		$min=$min<$maxp? $maxp: $min;
-		push @{$region[$index]}, ($min, $max, $step0);
+		push @region, ($min, $max, int(($max-$min)/$pnum)+1);
 	}else{
-		if(!defined $averTLen){
-			die "-tlen must be given when not defined -rpos!\n";
+		if($ctype eq "Single"){## usually is generic:Region
+			$min = 1;
+			$max = $min+$step0*$pnum;
+		}elsif($ctype eq "Full-covered"){
+			$min = 1;
+			$max = $min+$step0*$pnum*10; ## region is also limited when Full-covered considering running time
+			print "Warn: Region of templates to design oligos is $min-$max, it will not cover the whole templates if templates length are more than $max, then you can magnify -pnum $pnum or -rdis $dis_range!\n";
 		}
-		if($type eq "face-to-face:Region"){## usually is generic:Region
-			$min = $mind - $alen;
-			$max = $averTLen - $alen;
-			my $posnum = int(($max-$min+1)/$step0);
-			if($ctype eq "Single" && $posnum > $pnum*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
-				print "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! then narrow region to ";
-				my $d0 = ($step0-1)*$pnum;
-				my $x = ($max-$min-$d0)/2; ## size of range(min-max) to cutdown
-				$max = $max - $x;
-				$min = $min + $x;
-				print "$min-$max.\n";
-			}
-			if($ctype eq "Full-covered"){
-				my $npair = int (($averTLen-$mind)/$dis_aver);
-				if($posnum > ($pnum/2)*$npair*2){ ## check 
-					die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design!Please magnify -rdis $dis_range!\n";
-				}
-			}
-			#($fdis1, $fdis2) = (3, 3);
-			($fdis1, $fdis2) = (5, 3); ## fdis1: count from left on forward template; fdis2: count from right on backward template.
-			$min=$min<0? 0: $min;
-			push @{$region[0]}, ($min, $max, $step0);
-			push @{$region[1]}, ($min, $max, $step0);
-		}else{ ## Full-covered only support "face-to-face:Region"
-			die "Wrong type when not defined -srpos, only can be (face-to-face:Region)!\n";
-		}
+		push @region, ($min, $max, int(($max-$min)/$pnum+0.5));
 	}
-	my $rdis1 = join(",", @{$region[0]});
-	my $rdis2 = scalar @region==2? join(",", @{$region[1]}): "";
-	return ($rdis1, $fdis1, $rdis2, $fdis2);
+	my $range_region = join(",", @region);
+	return ($range_region);
 }
 
 sub Run{
@@ -420,42 +326,6 @@ sub Run{
         die "Run $cmd failed!\n";
     }
 }
-
-sub AbsolutePath
-{		#获取指定目录或文件的决定路径
-		my ($type,$input) = @_;
-
-		my $return;
-		if ($type eq 'dir')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-				chdir($input);
-				$return = `pwd`;
-				chomp $return;
-				chdir($pwd);
-		}
-		elsif($type eq 'file')
-		{
-				my $pwd = `pwd`;
-				chomp $pwd;
-
-				my $dir=dirname($input);
-				my $file=basename($input);
-				chdir($dir);
-				$return = `pwd`;
-				chomp $return;
-				$return .="\/".$file;
-				chdir($pwd);
-		}
-		return $return;
-}
-
-sub GetTime {
-	my ($sec, $min, $hour, $day, $mon, $year, $wday, $yday, $isdst)=localtime(time());
-	return sprintf("%4d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $day, $hour, $min, $sec);
-}
-
 
 sub USAGE {#
 	my $usage=<<"USAGE";
@@ -481,61 +351,56 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
     ###-rdis: distance range of pair primers, (best_min, best_max, min, max) separted by ",", example:
    		
- 	note: P1/P2 is distance from primer1/primer2 3'end to SNP or template 3'end.
-		  L1/L2 is length of primer1/primer2, L is length of template sequence.
+      face-to-face: |---> P1 x            dis_range:100,150,70,200(qPCR); 530,570,500,600(Sanger)
+         (SNP)               x  P2 <---|  
 
-      face-to-face: |---> P1 x            dis_range(P1+L1+Lt+P2+L2):100,150,70,200(qPCR); 530,570,500,600(Sanger)
-         (SNP)               x  P2 <---|  (Lt is scale length of target spots)
+      face-to-face: P1 |--->        x     dis_range:100,150,70,200(qPCR)
+        (Region)     x        <---| P2    
 
-      face-to-face: P1 |--->        x     dis_range(P1+L1+P2+L2-L):100,150,70,200(qPCR)
-        (Region)     x        <---| P2    (L is length of template sequence)
-                     ________________
-
-      back-to-back:  x <---| P2           dis_range(P1+L1+P2+L2-L):5,10,0,15
+      back-to-back:  x <---| P2           dis_range:5,10,0,15
                       P1 |---> x          (Overlap between p1 and p2: dis > 0)
-                     __________
 
-      back-to-back:  x <---| P2           dis_range(P1+L1+P2+L2-L):-50,-40,-60,-30
+      back-to-back:  x <---| P2           dis_range:-50,-40,-60,-30
                            P1 |---> x     (No overlap between p1 and p2: dis < 0)
-                     _______________
 
             Nested: P2 --->|   x          dis_range(P2-P1):10,15,5,30
                       P1 --->| x
 
-
-
 Usage:
   Options:
-  -it  <file>   Input target file(SNP file or template fasta file), forced
-  -ir  <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
-  -id  <file>   Input database file to check specificity, [$fdatabase] 
-  -p   <str>    prefix of output file, forced
-  -tlen <int>   template average length, must be given when -type is face-to-face:Region
+  -it        <file>   Input target file(SNP file or template fasta file), forced
+   --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
+  -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
+  -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, [$fref_snp]
+  -id        <file>   Input database file to check specificity, [$fdatabase] 
+  -p         <str>    prefix of output file, forced
   --probe             design probe when -type "face-to-face", optional
-  --NoCoverN          candidate primer sequences can't contain N/n
   --NoFilter          Not filter any primers
   --homology_check    check homologous sequence of template sequence when design for NGS primers, optional
   --dimer_check       check cross dimers among selected primers, optional
-  --SNP_check         check common SNP covered by selected primer sequence and modify to degenerated base, optional
 
   ### design parameters
   -opttm    <int>     optimal tm of primer, [$opt_tm]
   -opttmp   <int>     optimal tm of probe, [$opt_tm_probe]
-  -rlen     <str>     oligo len range and scale (start,end,scale), start <= end, [$range_len]
+  -minl     <int>     minimum length of primer, [$min_len]
+  -maxl     <int>     maximum length of primer, [$max_len]
+  -minlp    <int>     minimum length of probe, [$min_len_probe]
+  -maxlp    <int>     maximum length of probe, [$max_len_probe]
+  -scalel   <str>     candidate oligo length scale, [$scale_len]
   -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it is SNP file
-  -rsize    <str>     product size range (opt_min, opt_max, min, max), separted by ",", [$size_range]
-  -rdis     <str>     distance range between pair primers, required when -type is not "face-to-face", (opt_min, opt_max, min, max) separted by ",", optional
+  -rdis     <str>     distance range between pair primers, that is product size range when -type is "face-to-face", (opt_min, opt_max, min, max) separted by ",", [$dis_range]
   -regions  <str>     interested regions of candidate primers walking on template, format is "start,end,scale,start2,end2,scale2...", if not given, will caculate automatically, optional
-  -regions_rev  <str>     interested regions of candidate primers walking on reverse template needed when type is face-to-face:Region and back-to-back, format is "start,end,scale,start2,end2,scale2...", if not given, will caculate automatically, optional
 
   ### 
-  -type   <str>     primer type, "face-to-face:SNP", "face-to-face:Region", "back-to-back", "Nested", ["face-to-face:SNP"]
+  -type   <str>     primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
   -ctype  <str>     primer covered type, "Single" or "Full-covered", ["Single"]
      -ds  <int>     average distance between adjacent primers when -ctype "Full-covered", [500]
      -rf  <float>   ratio of distance between adjacent primers can float when -ctype "Full-covered", [0.2]
      -on  <int>     output num when -ctype "Single",[$onum]
 
   -stm    <int>      min tm to be High_tm in specifity, [$stm]
+  -pnum   <int>      position num of candidate oligos, [$pnum]
+  -size   <int>      max PCR size, [$pcr_size]
   -para   <int>      parallel num, [$para_num]
   -step   <int>      step, [$step]
                      1: homology check
