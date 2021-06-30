@@ -62,7 +62,7 @@ my @len = ($min_len,$max_len-$dlen*0.5,$min_len-5, $max_len+1);
 my @tm = ($opt_tm-1, $opt_tm+1, $opt_tm-5, $opt_tm+5);
 my @self = (-50, 40, -50, 55); ## self tm
 my $max_best_dis_primer_probe=3;
-my $max_dis_primer_probe=15;
+my $max_dis_primer_probe=20;
 my $min_eff=0.01;
 my $end_len=10;
 my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
@@ -175,12 +175,16 @@ if(defined $fprobe){
 		chomp;
 		next if(/^#/);
 		my ($id, $seq, $len, $score, $score_info)=split /\t/, $_;
-		my ($tid)=$id=~/(\w+)-[FR]/;
+		my $tid;
+		if($id=~/-[UD]-/){
+			($tid)=$id=~/^(\S+)-[UD]-/;
+		}else{
+			($tid)=$id=~/^(\S+)-[FR]/;
+		}
 		@{$probe{$tid}{$id}}=($score, $score_info);
 	}
 	close(B);
 }
-
 
 #### score pair and output
 open(O,">$outdir/$fkey.final.result") or die $!;
@@ -209,7 +213,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		my $n=0;
 		my %record;
 		foreach my $id (sort {$probec{$b}->[0]<=>$probec{$a}->[0]} keys %probec){
-			my ($subid)=$id=~/(\w+)_\d+$/;
+			my ($subid)=$id=~/(\S+)_\d+$/;
 			next if(exists $record{$subid}); ## more probes with the same position will only keep one
 			$record{$subid}=1;
 
@@ -226,9 +230,13 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				$pos3_max = $pos5+$max_dis_primer_probe;
 				$pos3_min = $pos5+1;
 			}
-			push @condv, [$strand, "Pos3", $pos3_min.",".$pos3_max, $pos3_bmin.",".$pos3_bmax, $id];
+			if(!defined $range_pos){##SNP
+				push @condv, [$strand, "Pos3", $pos3_min.",".$pos3_max, $pos3_bmin.",".$pos3_bmax, $id];
+			}else{
+				push @condv, [$strand, "Dis,Pos3", $rpos[-2].",".$rpos[-1].";".$pos3_min.",".$pos3_max, $pos3_bmin.",".$pos3_bmax, $id];
+			}
 			$n++;
-			last if($n==3*$max_probe_num);
+	#		last if($n==100*$max_probe_num);
 		}
 	}else{
 		if(defined $range_pos){ ## SNP
@@ -239,9 +247,14 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 	}
 	
 	my %primer_eff;
+	my $outnum=0;
+	print Dumper @condv;
 	for(my $i=0; $i<@condv; $i++){
+		print "####", join("\t", $i, $outnum, @{$condv[$i]}),"\n";
 		## get candidate primer1
 		my @primer1 = &get_candidate($condv[$i], $oligo_pos{$tid});
+		print "###Primer1:\n";
+		print Dumper @primer1;
 		my %score_pair;
 		my %score_pair_info;
 		my %pair_info;
@@ -272,6 +285,8 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			my @condv2=($sd, $pform, $pmin.",".$pmax);
 			
 			my @primer2=&get_candidate(\@condv2, $oligo_pos{$tid});
+			print "#Primer2:\n";
+			print Dumper @primer2;
 			foreach my $p2(@primer2){
 				my ($chr, $pos32, $pos52, $strand2, $dis2, $seq2, $len2, $tm2)=@{$oligo_info{$p2}};
 				my ($score2, $score_info2)=@{$oligo_score{$p2}};
@@ -298,7 +313,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				
 				# score pair
 				my $stotal = $score+$score2+$spos+$slend+$stmd+$sdis+$sprod;
-				if($condv[$i][1] eq "Pos3"){#Probe
+				if(defined $fprobe){#Probe
 					# probe num on products
 					my %pdr;
 					my $pb=$condv[$i][4];
@@ -364,9 +379,6 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			my ($chr2, $pos32, $pos52, $strand2, $dis2, $seq2, $len2, @info2)=@{$oligo_info{$p2}};
 			my ($score, $score_info)=@{$oligo_score{$p1}};
 			my ($score2, $score_info2)=@{$oligo_score{$p2}};
-			if($condv[$i][1] ne "Dis"){
-				$dis="NA";
-			}
 			my ($target)=$tid;
 			my $UD=$strand eq "+"? "U":"D";
 			$UD=$condv[$i][1] eq "Pos3"? "B".($i+1): $UD; ##Probe i
@@ -383,7 +395,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			}else{
 				print O join("\t", @opos, $size, @oinfo),"\n";
 			}
-			if($condv[$i][1] eq "Pos3"){#probe
+			if(defined $fprobe){#probe
 				my $pb=$condv[$i][4];
 				my $pb_new = $target."-".$UD."-Probe";
 				my ($pbs, $pbsi)=@{$probe{$tid}{$pb}};
@@ -411,7 +423,10 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				$success{$t}=1;
 			}
 		}
-		last if($i==$max_probe_num-1);
+		if($n>0){
+			$outnum++;
+		}
+		last if($outnum==$max_probe_num);
 	}
 }
 close(O);
@@ -419,13 +434,14 @@ close(O);
 
 ## check failed target
 open(O, ">$outdir/$fkey.design.status") or die $!;
+print O "## If Failed, you can try turning the -maxl/-maxlp up or choosing --Nofilter!\n";
 print O "#TargetID\tPrimerID\tStatus\n";
 foreach my $t(sort {$a cmp $b} keys %{$target{"id"}}){
 	if(exists $success{$t}){
 		print O join("\t", $t, $target{"id"}{$t}, "Successful"),"\n";
 	}else{
 		print O join("\t", $t, $target{"id"}{$t}, "Failed"),"\n";
-		print "Warn: $t design failed!\n";
+		print "Warn: $t design failed! you can try turning the -maxl/-maxlp up or turn the -opttm/-opttmp down, or amplify -regions!\n";
 	}
 }
 close(O);
@@ -620,32 +636,43 @@ sub primer2_scope{
 #@{$oligo_pos{$tid}{$strand}{$id}}=($dis, $pos3, $pos5);
 sub get_candidate{
 	my ($acondv, $aoligo)=@_;
-	my ($strand, @cond)=@{$acondv};
-	my $ix;
-	if($cond[0] eq "No"){
-		return (keys %{$aoligo->{$strand}});
-	}elsif($cond[0] eq "Pos3"){
-		$ix=1;
-	}elsif($cond[0] eq "Pos5"){
-		$ix=2;
-	}elsif($cond[0] eq "Dis"){
-		$ix=0;
-	}
-	my @oligo = sort{$aoligo->{$strand}{$a}->[$ix] <=> $aoligo->{$strand}{$b}->[$ix]} keys %{$aoligo->{$strand}};
-	
-	my ($min, $max)=split /,/, $cond[1];
-	my @final;
-	for(my $i=0; $i<@oligo; $i++){
-		next if($aoligo->{$strand}{$oligo[$i]}->[$ix]<$min);
-		last if($aoligo->{$strand}{$oligo[$i]}->[$ix]>$max);
-		push @final, $oligo[$i];
+	my ($strand, @conds)=@{$acondv};
+	my @cond=split /,/, $conds[0];
+	my @value=split /;/, $conds[1];
+	my (@oligo, @final);
+	for(my $i=0; $i<@cond; $i++){
+		my $ix;
+		if($cond[$i] eq "No"){
+			return (keys %{$aoligo->{$strand}});
+		}elsif($cond[$i] eq "Pos3"){
+			$ix=1;
+		}elsif($cond[$i] eq "Pos5"){
+			$ix=2;
+		}elsif($cond[$i] eq "Dis"){
+			$ix=0;
+		}
+		if($i==0){
+			@oligo = sort{$aoligo->{$strand}{$a}->[$ix] <=> $aoligo->{$strand}{$b}->[$ix]} keys %{$aoligo->{$strand}};
+		}else{
+			@oligo=@final;
+		}
+		my ($min, $max)=split /,/, $value[$i];
+		@final=();
+		for(my $i=0; $i<@oligo; $i++){
+			next if($aoligo->{$strand}{$oligo[$i]}->[$ix]<$min);
+			last if($aoligo->{$strand}{$oligo[$i]}->[$ix]>$max);
+			push @final, $oligo[$i];
+		}
+
+		print ">>>",join("\t", $cond[$i], $value[$i]),"\n";
+		print Dumper @final;
 	}
 	return @final;
 }
 
 sub get_position_info{
 	my ($id, $plen, $atpos)=@_;
-	my ($tid, $tori, $startt, $endt, $pori, $off)=$id=~/^(\S+)-([FR])-(\d+)-(\d+)_([FR])_(\d+)$/; ## primer pos
+	my ($tid, $tori, $startt, $endt, $pori, $off)=$id=~/^(\S+)-([FR])-(\d+)_(\d+)_([FR])_(\d+)$/; ## primer pos
 	if(!defined $tid){
 		die "Wrong oligo ID: $id\n";
 	}

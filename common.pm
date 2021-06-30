@@ -1,3 +1,70 @@
+sub convert_StartEndRefAlt{ ## copy from annovar
+	my ($start, $ref, $alt)=@_;
+	my ($head, $newstart, $newend, $newref, $newalt);
+
+	if (length ($ref) == 1 and length ($alt) == 1) {   #SNV
+	    ($newstart, $newend) = ($start, $start+length($ref)-1);
+	    ($newref, $newalt) = ($ref, $alt);
+	
+	} elsif (length ($ref) > length ($alt)) {       #deletion or block substitution
+	    $head = substr ($ref, 0, length ($alt));
+	    if ($head eq $alt) {
+	        ($newstart, $newend) = ($start+length ($head), $start + length ($ref)-1);
+	        ($newref, $newalt) = (substr($ref, length($alt)), '-');
+	    } else {
+	        ($newstart, $newend) = ($start, $start+length($ref)-1);     #changed to length(ref) on 20130820
+	        ($newref, $newalt) = ($ref, $alt);
+	    }
+	
+	    ($newstart, $newend, $newref, $newalt) = adjustStartEndRefAlt ($newstart, $newend, $newref, $newalt);  
+	
+	} elsif (length ($ref) < length ($alt)) {       #insertion or block substitution
+	    $head = substr ($alt, 0, length ($ref));
+	    if ($head eq $ref) {
+	        ($newstart, $newend) = ($start+length($ref)-1, $start+length($ref)-1);
+	        ($newref, $newalt) = ('-', substr($alt, length($ref)));
+	    } else {
+	        ($newstart, $newend) = ($start, $start+length($ref)-1);
+	        ($newref, $newalt) = ($ref, $alt);
+	    }
+	
+	    ($newstart, $newend, $newref, $newalt) = adjustStartEndRefAlt ($newstart, $newend, $newref, $newalt);
+	}
+	return ($newstart, $newend, $newref, $newalt);	
+	
+}
+sub adjustStartEndRefAlt {
+    my ($newstart, $newend, $newref, $newalt) = @_;
+
+    until (substr($newref,-1) ne substr($newalt,-1)) {
+        chop $newref;
+        chop $newalt;
+        $newend--;
+        if (not $newref) {
+            $newref = '-';
+            last;
+        }
+        if (not $newalt) {
+            $newalt = '-';
+            last;
+        }
+    }
+    until (substr($newref,0,1) ne substr ($newalt,0,1)) {
+        substr ($newref,0,1) = '';
+        substr ($newalt,0,1) = '';
+        $newstart++;
+        if (not $newref) {
+            $newref = '-';
+            last;
+        }
+        if (not $newalt) {
+            $newalt = '-';
+            last;
+        }
+    }
+    return ($newstart, $newend, $newref, $newalt);
+}
+
 
 
 sub md_split{
@@ -143,6 +210,7 @@ sub revcom{#&revcom($ref_seq);
 	#获取字符串序列的反向互补序列，以字符串形式返回。ATTCCC->GGGAAT
 	my $seq=shift;
 	$seq=~tr/ATCGatcg/TAGCtagc/;
+	$seq=~tr/RYMKSWHDBVN/YRKMSWDHVBN/;
 	$seq=reverse $seq;
 	return $seq;
 }

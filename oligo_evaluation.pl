@@ -69,12 +69,12 @@ $outdir||="./";
 $outdir=AbsolutePath("dir",$outdir);
 my $merge_len = 100;
 my $Wind_GC = 8;
-my $MAX_hairpin_tm = 55; ## 55 from experience
+my $MAX_hairpin_tm = 60; ##  from experience
 my $Max_Dimer_tm = 55;
-my $Max_SNP_num = 1;
-my $Max_poly_total = 12;
-my $Max_poly_G = 3;
-my $Max_poly_ATC = 5; 
+my $Max_SNP_ratio = 0.071; ## 1/14
+my $Max_poly_ratio = 0.8;
+my $Max_poly_G = 5;
+my $Max_poly_ATC = 8; 
 my $MAX_endA = 4;
 my $MAX_end_stability=9;
 my $MAX_poly = 20;
@@ -106,9 +106,11 @@ while (<P>){
 	$_=~s/\s+$//;
 	my ($id0, $seq)=split /\s+/, $_;
 	my ($oligo_seq0, $oligo_seq_snp0) = split /:/, $seq;
+	$oligo_seq0=uc $oligo_seq0;
 	if(!defined $oligo_seq_snp0){
 		$oligo_seq_snp0=$oligo_seq0;
 	}
+	$oligo_seq_snp0=uc $oligo_seq_snp0;
 	if(!defined $oligo_seq0){
 		print $_,"\n";
 		die;
@@ -151,6 +153,7 @@ while (<P>){
 	my $is_all_filter=1;
 	for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
 		my ($id, $ori, $off, $oligo_seq, $oligo_seq_snp)=@{$olen_oligo{$id0}->[$i]};
+		my $len = length($oligo_seq);
 		print L $id,"\n";
 		my $ftype;
 		## filter endA and end stability
@@ -189,19 +192,19 @@ while (<P>){
 		my $hairpin_tm = `$ntthal -a HAIRPIN -s1 $oligo_seq -r`;
 		chomp $hairpin_tm;
 		if(!defined $NoFilter && $hairpin_tm > $MAX_hairpin_tm){
-			print F join("\t", $id, $oligo_seq, "Hairpin:".$hairpin_tm),"\n";
+			print F join("\t", $id, $oligo_seq, "Hairpin", $hairpin_tm),"\n";
 			next;
 		}
 		my $END_tm = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq -r`;
 		chomp $END_tm;
 		if(!defined $NoFilter && $END_tm > $Max_Dimer_tm){
-			print F join("\t", $id, $oligo_seq, "END Dimer:".$END_tm),"\n";
+			print F join("\t", $id, $oligo_seq, "END_Dimer",$END_tm),"\n";
 			next;
 		}
 		my $ANY_tm = `$ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq -r`;
 		chomp $ANY_tm;
 		if(!defined $NoFilter && $ANY_tm > $Max_Dimer_tm){
-			print F join("\t", $id, $oligo_seq, "ANY Dimer:".$ANY_tm),"\n";
+			print F join("\t", $id, $oligo_seq, "ANY_Dimer",$ANY_tm),"\n";
 			next;
 		}
 		
@@ -209,8 +212,8 @@ while (<P>){
 		my ($SNP_num, $SNP_info)=&SNP_check($oligo_seq_snp);
 		$SNP_info=$SNP_num==0? "NA":$SNP_info;
 #		$SNP_info.=",".$oligo_seq_snp;
-		if(!defined $NoFilter && $SNP_num > $Max_SNP_num){
-			print F join("\t", $id, $oligo_seq, "SNP:".$SNP_info),"\n";
+		if(!defined $NoFilter && $SNP_num/$len > $Max_SNP_ratio){
+			print F join("\t", $id, $oligo_seq, "SNP",$SNP_info),"\n";
 			next;
 		}
 	
@@ -218,12 +221,11 @@ while (<P>){
 		my ($total, $max_len, $max_base, $poly_info)=&poly_check($oligo_seq);
 		$poly_info = "NA" if($total==0);
 		if(!defined $NoFilter && $total>0){
-			if($total > $Max_poly_total || ($max_base eq "G" && $max_len>$Max_poly_G) || ($max_base ne "G" && $max_len>$Max_poly_ATC)){
-				print F join("\t", $id, $oligo_seq, "Poly:".$poly_info),"\n";
+			if($total/$len > $Max_poly_ratio || ($max_base eq "G" && $max_len>$Max_poly_G) || ($max_base ne "G" && $max_len>$Max_poly_ATC)){
+				print F join("\t", $id, $oligo_seq, "Poly",$poly_info),"\n";
 				next;
 			}
 		}
-		my $len = length($oligo_seq);
 		push @{$evalue{$id}},($oligo_seq, $len, $Tm, sprintf("%.3f",$GC), sprintf("%.2f",$hairpin_tm), sprintf("%.2f",$END_tm), sprintf("%.2f",$ANY_tm),$nendA,$dG_end3, $SNP_info, $poly_info);
 		$is_all_filter=0;
 	}
@@ -235,10 +237,19 @@ while (<P>){
 		my $mseq = substr($oligo_seq0, $off);
 		print PN ">$id0\n";
 		print PN $mseq,"\n";
+		if(defined $revcom){
+			my $mseqL = substr($oligo_seq0, 0, $len_map); ##
+			print PN ">$id0\_L\n";
+			print PN $mseqL,"\n";
+		}
 	}
 	
 }
 close(PN);
+if(!defined $NoFilter){
+	close(F);
+}
+
 exit(0) if(scalar keys %evalue==0);
 foreach my $id(keys %evalue){
 	print L "Final: $id\n";
@@ -286,120 +297,114 @@ if(!defined $NoSpecificity){
 		my $bound_num = 0;
 		my %lowtm;
 		foreach my $dname(keys %{$mapping{$id0}}){
-			my $map_num = scalar @{$mapping{$id0}{$dname}};
-			for (my $i=0; $i<$map_num; $i++){
-				my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0}{$dname}->[$i]};
-				#filter lowtm
-#				my $map_form=&map_form_standard($is_reverse, $cigar, $md);
-				my $map_form=join(",", $is_reverse, $cigar, $md);
-				next if(exists $lowtm{$map_form});## filter bound regions whose map info are same with where bound tm too low 
-				my $strand=$is_reverse? "-": "+";
-				if(defined $detail){
-					print Detail "\nOriginal:",join("\t",$id0, $is_reverse, $flag, $chr, $pos, $score),"\n";
-				}
-				######## specificity
-				my $len = length($oligo_seq);
-				my $extend = 20;
-				
-				### get seq
-				my ($start, $end);
-				my $off = $len-$len_map;
-				if($is_reverse){# "-"
-					$start = $pos-$extend;
-					$end = $pos+$len+$extend;
-				}else{
-					$start = $pos-$off-$extend;
-					$end = $pos-$off-1+$len+$extend;
-				}
-				#print join("\t", $pos, $is_reverse, $start, $end),"\n";
-				$start=$start>1? $start: 1;
-				my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
-				my @seq_info = split /\n/, $seq_info;
-				shift @seq_info;
-				my $seq = join("",@seq_info);
-				if($seq!~/[ATCGatcg]+/){ ## seq is NNN...NNN, false mapping, because bwa will convert N to one of ATCG randomly
-					print "Warn: extract aligned region sequence failed\n";
-					print join("\t", $chr, $start, $end, $fdatabase),"\n";
-					next;
-				}
-				$seq=uc($seq);
-				$seq=&revcom($seq)if(!$is_reverse);
-				### ntthal
-				my $result = `$ntthal -a ANY -s1 $oligo_seq -s2 $seq`;
-				if(defined $detail){
-					print Detail "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
-					print Detail $result;
-				}
-			
-				### get tm 
-				my ($dG, $tm) = $result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
-				next if($dG eq ""); ## map to NNNN region, invalid
-				if($tm<$min_tm_spec && $map_form ne "Fail"){
-					$lowtm{$map_form}=1;
-					next;
-				}
-				my @line = split /\n/, $result;
-				shift @line;	
-				if(!defined $line[1]){ ## just print and return
-					print join("\t",$oligo_seq, $chr, $pos, $is_reverse, $fdatabase),"\n";
-					print "$SAMTOOLS faidx $fdatabase $chr:$start-$end\n";
-					print "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
-					return (-1,-1,-1,-1);
-				}
-				## match visual
-				my ($mvisual, $pos3, $pos5)=&map_visual_from_ntthal(\@line, $is_reverse, $start, $end);
-				my ($end_match3) = &end_match_length($mvisual);
-				my $mvisualr=reverse $mvisual;
-				my ($end_match5) = &end_match_length($mvisualr);
-				next if($end_match3 eq "Fail" || $end_match5 eq "Fail");#oligo end is not covered by template 
-				if(defined $detail){
-					print Detail "ntthal map:"; 
-					print Detail join("\t", ($mvisual, $pos3, $pos5, $end_match3, $end_match5)),"\n";
-				}
-				next if(!defined $probe && !defined $revcom && $end_match3<0);
-				$bound_num++;
-#				if(!defined $NoFilter && $bound_num>$Max_Bound_Num){
-#					for(my $x=0; $x<@{$olen_oligo{$id0}}; $x++){
-#						my ($idt, undef, undef, $seqt) = @{$olen_oligo{$id0}->[$x]};
-#						##here, Bound contain regions where end_match3<0 when defined $probe or $revcom; it maybe imprecise and will filter some oligos fit for oligo, but the effect should be very small when parameter $Max_Bound_Num is very big
-#						print F join("\t", $idt, $seqt, "Bound_Too_More"),"\n";
-#						delete $evalue{$idt};
-#					}
-#					last;
-#				}
-				if(defined $detail){
-					print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
-				}
-				if(defined $probe || (!defined $probe && $end_match3>0)){
-					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
-					$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
-				}
-				## other len's oligos and revcom
-				for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
-					my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
-					next if(!exists $evalue{$idn});
-					my $posn = $pos3;
-					my $end_matchn=$end_match3;
-					my $seqn=$seq;
-					my $strandn=$strand;
-					my $mvisualn=$mvisual;
-					if($ori eq "-"){
-						$mvisualn=reverse($mvisual);
-						$seqn=&revcom($seq);
-						$posn = $pos5;
-						$end_matchn=$end_match5;
-						$strandn=$strand eq "+"? "-": "+";
-					}
-					my $tmn = `$ntthal -a ANY -s1 $pseqn -s2 $seqn -r`;
-					chomp $tmn;
-					next if($tmn<$min_tm_spec);
-					my ($mvn, $ematchn) = &map_visual_trim($mvisualn, $off, $end_matchn); 
-					next if(!defined $probe && $ematchn<0);
+			my @id0=($id0, $id0."_L");
+			foreach my $id0t(@id0){
+				my $map_num = scalar @{$mapping{$id0t}{$dname}};
+				for (my $i=0; $i<$map_num; $i++){
+					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
+					#filter lowtm
+#					my $map_form=&map_form_standard($is_reverse, $cigar, $md);
+					my $map_form=join(",", $is_reverse, $cigar, $md);
+					next if(exists $lowtm{$map_form});## filter bound regions whose map info are same with where bound tm too low 
+					my $strand=$is_reverse? "-": "+";
 					if(defined $detail){
-						print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
+						print Detail "\nOriginal:",join("\t",$id0t, $is_reverse, $flag, $chr, $pos, $score),"\n";
 					}
-					print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
-					$bound{$idn}{$strandn."/".$chr."/".$posn.":".$mvn}=$tmn;
+					######## specificity
+					my $len = length($oligo_seq);
+					my $extend = 40;
+					
+					### get seq
+					my ($start, $end);
+					my $off = $len-$len_map;
+					if($is_reverse){# "-"
+						$start = $pos-$extend;
+						$end = $pos+$len+$extend;
+					}else{
+						$start = $pos-$off-$extend;
+						$end = $pos-$off-1+$len+$extend;
+					}
+					#print join("\t", $pos, $is_reverse, $start, $end),"\n";
+					$start=$start>1? $start: 1;
+					my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
+					my @seq_info = split /\n/, $seq_info;
+					shift @seq_info;
+					my $seq = join("",@seq_info);
+					if($seq!~/[ATCGatcg]+/){ ## seq is NNN...NNN, false mapping, because bwa will convert N to one of ATCG randomly
+						print "Warn: extract aligned region sequence failed\n";
+						print join("\t", $chr, $start, $end, $fdatabase),"\n";
+						next;
+					}
+					$seq=uc($seq);
+					$seq=&revcom($seq)if(!$is_reverse);
+					### ntthal
+					my $result = `$ntthal -a ANY -s1 $oligo_seq -s2 $seq`;
+					if(defined $detail){
+						print Detail "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
+						print Detail $result;
+					}
+				
+					### get tm 
+					my ($dG, $tm) = $result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
+					next if($dG eq ""); ## map to NNNN region, invalid
+					if($tm<$min_tm_spec && $map_form=~/H/){
+						$lowtm{$map_form}=1;
+						next;
+					}
+					my @line = split /\n/, $result;
+					shift @line;	
+					if(!defined $line[1]){ ## just print and return
+						print join("\t",$oligo_seq, $chr, $pos, $is_reverse, $fdatabase),"\n";
+						print "$SAMTOOLS faidx $fdatabase $chr:$start-$end\n";
+						print "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
+						return (-1,-1,-1,-1);
+					}
+					## match visual
+					my ($mvisual, $pos3, $pos5)=&map_visual_from_ntthal(\@line, $is_reverse, $start, $end);
+					my ($end_match3) = &end_match_length($mvisual);
+					my $mvisualr=reverse $mvisual;
+					my ($end_match5) = &end_match_length($mvisualr);
+					next if($end_match3 eq "Fail" || $end_match5 eq "Fail");#oligo end is not covered by template 
+					if(defined $detail){
+						print Detail "ntthal map:"; 
+						print Detail join("\t", ($mvisual, $pos3, $pos5, $end_match3, $end_match5)),"\n";
+					}
+					next if(!defined $probe && !defined $revcom && $end_match3<0);
+					$bound_num++;
+					if(defined $detail){
+						print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
+					}
+					if(defined $probe || (!defined $probe && $end_match3>0)){
+						print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
+						$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
+					}
+					## other len's oligos and revcom
+					for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
+						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
+						next if(!exists $evalue{$idn});
+						my $posn = $pos3;
+						my $end_matchn=$end_match3;
+						my $seqn=$seq;
+						my $strandn=$strand;
+						my $mvisualn=$mvisual;
+						if($ori eq "-"){
+							$mvisualn=reverse($mvisual);
+							$seqn=&revcom($seq);
+							$posn = $pos5;
+							$end_matchn=$end_match5;
+							$strandn=$strand eq "+"? "-": "+";
+						}
+						my $tmn = `$ntthal -a ANY -s1 $pseqn -s2 $seqn -r`;
+						chomp $tmn;
+						next if($tmn<$min_tm_spec);
+						my ($mvn, $ematchn) = &map_visual_trim($mvisualn, $off, $end_matchn); 
+						next if(!defined $probe && $ematchn<0);
+						if(defined $detail){
+							print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
+						}
+						print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
+						$bound{$idn}{$strandn."/".$chr."/".$posn.":".$mvn}=$tmn;
+					}
 				}
 			}
 		}
@@ -410,9 +415,6 @@ if(!defined $NoSpecificity){
 	}
 }
 
-if(!defined $NoFilter){
-	close(F);
-}
 
 #&SHSHOW_TIME("Output:");
 ### output
@@ -557,7 +559,7 @@ Usage:
   -d  <files>            Input database files separated by ",", [$fdatabases]
   -k  <str>              Key of output file, forced
 
-  --Revcom               evalue revcom oligos
+  --Revcom               also evalue revcom oligos
   --Probe                design probe and will consider mapping region where oligo 3end not matched exactly when caculate specificity
   -olen   <int,int,int>  evalue other length's oligos, <min,max,scale> of length, optional
   -opttm     <int>       optimal tm of oligo, [$opt_tm]

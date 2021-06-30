@@ -153,22 +153,18 @@ if($step==2){
 	if(defined $regions){
 		$rregion=$regions;
 	}else{
-		$rregion=&caculate_rregion($dis_range, $pos_range, $type, $min_len, $max_len);
+		$rregion=&caculate_rregion($dis_range, $pos_range, $type, $min_len, $max_len, $probe);
 	}
 	print "region range to design oligos: ", $rregion,"\n";
 	
 	### design oligo
-	my $FR="FR";
-	if($ftype eq "SNP" && ($type eq "face-to-face" || $type eq "Nested")){
-			$FR="R";
-	}
 	my $range_len=join(",", $min_len, $max_len, $scale_len);
 	if(defined $probe){
 		my $minl=&min($min_len, $min_len_probe);
 		my $maxl=&max($max_len, $max_len_probe);
 		$range_len=join(",", $minl, $maxl, $scale_len);
 	}
-	my $dcmd = "perl $Bin/oligo_design.pl -i $ftemplate -d $fdatabase -fr $FR -k $fkey -ptype $type -opttm $opt_tm -rlen $range_len -rregion $rregion -stm $stm -para $para_num -od $odir";
+	my $dcmd = "perl $Bin/oligo_design.pl -i $ftemplate -d $fdatabase -k $fkey -ptype $type -opttm $opt_tm -rlen $range_len -regions $rregion -stm $stm -para $para_num -od $odir";
 	if(defined $ftemplate_snp){
 		$dcmd .= " -is $ftemplate_snp";
 	}
@@ -272,7 +268,7 @@ sub template_database_check{
 }
 
 sub caculate_rregion{
-	my ($dis_range, $pos_range, $type, $minl, $maxl)=@_;
+	my ($dis_range, $pos_range, $type, $minl, $maxl, $probe)=@_;
 	## caculate -rregion parameter
 	my ($bmind, $bmaxd, $mind, $maxd)=split /,/, $dis_range;
 	my @region; ##  two-dimensional array, @{region[1]} is regions of revcom template sequence
@@ -281,7 +277,10 @@ sub caculate_rregion{
 	my $step0 = int(($bmaxd-$bmind)/$choose_num+0.5); ## max step for distance range $dis_range
 	if(defined $pos_range){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
-		push @region, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1);
+		push @region, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1, "R");
+		if(defined $probe){
+			push @region, (1,20,1, "F"); ## oligos for probe
+		}
 		if($type eq "face-to-face"){
 			$min = $mind-$maxp-2*$alen;
 			$max = $maxd-$minp-2*$alen;
@@ -299,7 +298,7 @@ sub caculate_rregion{
 			die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! Please narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
 		}
 		$min=$min<$maxp? $maxp: $min;
-		push @region, ($min, $max, int(($max-$min)/$pnum)+1);
+		push @region, ($min, $max, int(($max-$min)/$pnum)+1, "R");
 	}else{
 		if($ctype eq "Single"){## usually is generic:Region
 			$min = 1;
@@ -309,7 +308,7 @@ sub caculate_rregion{
 			$max = $min+$step0*$pnum*10; ## region is also limited when Full-covered considering running time
 			print "Warn: Region of templates to design oligos is $min-$max, it will not cover the whole templates if templates length are more than $max, then you can magnify -pnum $pnum or -rdis $dis_range!\n";
 		}
-		push @region, ($min, $max, int(($max-$min)/$pnum+0.5));
+		push @region, ($min, $max, int(($max-$min)/$pnum+0.5), "FR");
 	}
 	my $range_region = join(",", @region);
 	return ($range_region);
