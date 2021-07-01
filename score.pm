@@ -34,14 +34,15 @@ sub bound_score{
 	return $sbound;
 }
 
+#Primer: AAA=>10,AAAA=>8,AAAAA=>6,
 sub poly_score{
 	my ($info, $len, $type)=@_;
 	return 1 if($info eq "NA");
 	my @polys = split /,/, $info;
 	my $score=1;
 	my @dprobe=($len*0.4, $len*0.5, 0, $len*0.5);
-	my @dprimer=(10,$len,0,$len);
-	my @polylen=(0,2,0,6);
+	my @dprimer=(15,$len,0,$len);
+	my @polylen=(0,2.8,0,8);
 	for(my $i=0; $i<@polys; $i++){
 		my ($d3, $t, $l)=$polys[$i]=~/(\d+)(\w)(\d+)/;
 		my $s;

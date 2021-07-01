@@ -116,6 +116,7 @@ while(<F>){
 $/="\n";
 close(F);
 open(O,">$outdir/$fkey.primer.score") or die $!;
+print O "##Score: scores of length, tm, self-complementary, end3 A num, end3 stability, snp, poly, bounding\n";
 my %oligo_info;
 my %oligo_pos;
 my %oligo_score;
@@ -151,7 +152,7 @@ while(<P>){
 		$tid=~s/-[UD]$//;
 	}
 	@{$oligo_pos{$tid}{$strand}{$id}}=($dis, $pos3, $pos5);
-	print O join("\t", $id, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo),"\n";
+	print O join("\t", $id, $chr, $strand, $pos5, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo),"\n";
 }
 close(P);
 close(O);
@@ -248,13 +249,9 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 	
 	my %primer_eff;
 	my $outnum=0;
-	print Dumper @condv;
 	for(my $i=0; $i<@condv; $i++){
-		print "####", join("\t", $i, $outnum, @{$condv[$i]}),"\n";
 		## get candidate primer1
 		my @primer1 = &get_candidate($condv[$i], $oligo_pos{$tid});
-		print "###Primer1:\n";
-		print Dumper @primer1;
 		my %score_pair;
 		my %score_pair_info;
 		my %pair_info;
@@ -285,8 +282,6 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			my @condv2=($sd, $pform, $pmin.",".$pmax);
 			
 			my @primer2=&get_candidate(\@condv2, $oligo_pos{$tid});
-			print "#Primer2:\n";
-			print Dumper @primer2;
 			foreach my $p2(@primer2){
 				my ($chr, $pos32, $pos52, $strand2, $dis2, $seq2, $len2, $tm2)=@{$oligo_info{$p2}};
 				my ($score2, $score_info2)=@{$oligo_score{$p2}};
@@ -418,7 +413,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				print O join("\t", @opos2, $size, @oinfo2),"\n";
 			}
 			$n++;
-
+			
 			foreach my $t(@{$target{"tem"}{$tid}}){
 				$success{$t}=1;
 			}
@@ -664,8 +659,6 @@ sub get_candidate{
 			push @final, $oligo[$i];
 		}
 
-		print ">>>",join("\t", $cond[$i], $value[$i]),"\n";
-		print Dumper @final;
 	}
 	return @final;
 }
@@ -689,12 +682,12 @@ sub get_position_info{
 	my $dis = $pos3t; #dis to target
 	my ($pos3, $pos5, $strand);
 	if($strandt eq "+"){
-		$pos3=$start+$pos3t-1;
-		$pos5=$start+$pos5t-1;
+		$pos3=$start+$pos3t;
+		$pos5=$start+$pos5t;
 		$strand = $strandp;
 	}else{
-		$pos3=$end-$pos3t+1;
-		$pos5=$end-$pos5t+1;
+		$pos3=$end-$pos3t;
+		$pos5=$end-$pos5t;
 		$strand = $strandp eq "+"? "-": "+";
 	}
 	return ($tid, $dis, $tidt, $pos3, $pos5, $strand);

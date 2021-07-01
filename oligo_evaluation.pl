@@ -297,7 +297,10 @@ if(!defined $NoSpecificity){
 		my $bound_num = 0;
 		my %lowtm;
 		foreach my $dname(keys %{$mapping{$id0}}){
-			my @id0=($id0, $id0."_L");
+			my @id0=($id0);
+			if(defined $revcom){
+				push @id0, $id0."_L";
+			}
 			foreach my $id0t(@id0){
 				my $map_num = scalar @{$mapping{$id0t}{$dname}};
 				for (my $i=0; $i<$map_num; $i++){
@@ -347,8 +350,10 @@ if(!defined $NoSpecificity){
 					### get tm 
 					my ($dG, $tm) = $result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
 					next if($dG eq ""); ## map to NNNN region, invalid
-					if($tm<$min_tm_spec && $map_form=~/H/){
-						$lowtm{$map_form}=1;
+					if($tm<$min_tm_spec){
+						if($map_form=~/H/){
+							$lowtm{$map_form}=1;
+						}
 						next;
 					}
 					my @line = split /\n/, $result;
@@ -370,14 +375,12 @@ if(!defined $NoSpecificity){
 						print Detail join("\t", ($mvisual, $pos3, $pos5, $end_match3, $end_match5)),"\n";
 					}
 					next if(!defined $probe && !defined $revcom && $end_match3<0);
-					$bound_num++;
 					if(defined $detail){
 						print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
 					}
-					if(defined $probe || (!defined $probe && $end_match3>0)){
-						print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
-						$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
-					}
+					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
+					$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
+					$bound_num++;
 					## other len's oligos and revcom
 					for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
 						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
