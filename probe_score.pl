@@ -21,6 +21,7 @@ my ($foligo,$fkey,$outdir);
 my $min_len=20;
 my $max_len=36;
 my $opt_tm=70;
+my $NoFilter;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$foligo,
@@ -28,6 +29,7 @@ GetOptions(
 				"minl:s"=>\$min_len,
 				"opttm:s"=>\$opt_tm,
 				"k:s"=>\$fkey,
+				"NoFilter:s"=>\$NoFilter,
 				"od:s"=>\$outdir,
 				) or &USAGE;
 &USAGE unless ($foligo and $fkey);
@@ -41,6 +43,7 @@ my @len = ($min_len,$max_len-$dlen*0.5,$min_len, $max_len+1);
 my @tm = ($opt_tm-1, $opt_tm+1, $opt_tm-5, $opt_tm+5);
 my @self = (-50, 40, -50, 55); ## self tm
 my @CGd = (0.1, 1, 0, 1);
+my @G5 = (0, 0, 0, 0.5);
 my $max_self_tm=$self[3];
 my $max_bound_num=100;
 
@@ -48,7 +51,7 @@ my $fulls=10;
 open(F,">$outdir/$fkey.probe.filter") or die $!;
 open(O, ">$outdir/$fkey.probe.score") or die $!;
 #$slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd
-print O "##ScoreInfo: scores of length, tm, self-complementary, snp, poly, bounding, CG content diff\n";
+print O "##ScoreInfo: scores of length, tm, self-complementary, CG content diff, 5endG, snp, poly, bounding\n";
 print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTM\tGC\tHairpin\tEND\tANY\tSNP\tPoly\tBoundNum\tBoundTM\tBoundInfo\n";
 open(P, $foligo) or die $!;
 while(<P>){
@@ -56,16 +59,16 @@ while(<P>){
 	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, undef, undef, $snp, $poly, $bnum, $btm)=split /\t/, $_;
 	
 	## filter
-	if($tm<$opt_tm-5 || $tm>$opt_tm+5){
+	if(!defined $NoFilter && ($tm<$opt_tm-8 || $tm>$opt_tm+8)){
 		print F "TM\t$_\n";
 		next;
 	}
 	my ($is_G5, $CGd) = &G_content($seq);
-	if($is_G5){
+	if(!defined $NoFilter && $is_G5){
 		print F "5endG\t$_\n";
 		next;
 	}
-	if($CGd<=0){
+	if(!defined $NoFilter && $CGd<=0){
 		print F "C<G\t$_\n";
 		next;
 	}
@@ -81,13 +84,14 @@ while(<P>){
 	my $ssnp = int(&SNP_score($snp, $len, "Probe")*$fulls +0.5);
 	my $spoly = int(&poly_score($poly, $len, "Probe")*$fulls +0.5);
 	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
+	my $sG5=int(&score_single($is_G5, $fulls, @G5)+0.5);
 	#specificity: bound
 	my $sbound=&bound_score($bnum, $btm, $fulls, "Tm");
-	my @score = ($slen, $stm, $sself, $sCGd, $ssnp, $spoly, $sbound);
-	my @weight =(0.5,   3,     1,      1,    2,    2,      0.5);
+	my @score = ($slen, $stm, $sself, $sCGd, $sG5, $ssnp, $spoly, $sbound);
+	my @weight =(0.5,   2,     1,      1,    1,    2,    2,      0.5);
 	my $sadd=0;
 	for(my $i=0; $i<@score; $i++){
-		$score[$i]=$score[$i]<0? 0: $score[$i];
+#		$score[$i]=$score[$i]<0? 0: $score[$i];
 		$sadd+=$weight[$i]*$score[$i];
 	}
 	my $score_info=join(",", @score);
@@ -137,6 +141,7 @@ Usage:
   -i  <file>   Input oligo evaluation file, forced
   -k  <str>	   Key of output file, forced
 
+  --NoFilter    Not filter any probes
   -minl  <int>  min len of probe, [$min_len]
   -maxl  <int>  max len of probe, [$max_len]
   -opttm <int>  opt tm of probe, [$opt_tm]

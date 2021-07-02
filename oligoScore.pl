@@ -31,7 +31,7 @@ my $min_len_probe=18;
 my $max_len_probe=36;
 my $scale_len=2;
 my $pcr_size=600;
-my $pnum = 50; ## position num for one oligo, its candidate oligos num is roughly: pnum*(maxl-minl)/scalel.
+my $pnum = 20; ## position num for one oligo, its candidate oligos num is roughly: pnum*(maxl-minl)/scalel.
 my $choose_num = 10; ## for a primer, at least $choose_num primers can be selected as its pair with the best dis.
 my $rfloat = 0.2;
 my $dis_aver = 500;
@@ -182,12 +182,19 @@ if($step==3){
 	my $odir="$outdir/design/";
 	### probe score
 	if(defined $probe){
-		&Run("perl $Bin/probe_score.pl -i $odir/$fkey.oligo.evaluation.out -k $fkey -minl $min_len_probe -maxl $max_len_probe -opttm $opt_tm_probe -od $odir", $sh);
+		my $cmd = "perl $Bin/probe_score.pl -i $odir/$fkey.oligo.evaluation.out -k $fkey -minl $min_len_probe -maxl $max_len_probe -opttm $opt_tm_probe -od $odir";
+		if(defined $NoFilter){
+			$cmd .= " --NoFilter";
+		}
+		&Run($cmd, $sh);
 	}
 	
 	### primer score and select
 	my $score_dis_range = $score_dis.",".$dis_range;
 	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd $dis_range -ct $ctype -od $outdir";
+	if(defined $NoFilter){
+		$cmd .= " --NoFilter";
+	}
 	if(defined $probe){
 		$cmd .= " -ip $odir/$fkey.probe.score";
 	}
@@ -277,7 +284,9 @@ sub caculate_rregion{
 	my $step0 = int(($bmaxd-$bmind)/$choose_num+0.5); ## max step for distance range $dis_range
 	if(defined $pos_range){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
-		push @region, ($minp, $maxp, int(($maxp-$minp)/$pnum)+1, "R");
+		my $step=int(($maxp-$minp)/$pnum+0.5);
+		$step=$step>=1? $step: 1;
+		push @region, ($minp, $maxp, $step, "R");
 		if(defined $probe){
 			push @region, (1,20,1, "F"); ## oligos for probe
 		}
@@ -298,7 +307,9 @@ sub caculate_rregion{
 			die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! Please narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
 		}
 		$min=$min<$maxp? $maxp: $min;
-		push @region, ($min, $max, int(($max-$min)/$pnum)+1, "R");
+		$step=int(($max-$min)/$pnum+0.5);
+		$step=$step>=1? $step: 1;
+		push @region, ($min, $max, $step, "R");
 	}else{
 		if($ctype eq "Single"){## usually is generic:Region
 			$min = 1;
@@ -374,7 +385,7 @@ Usage:
   -id        <file>   Input database file to check specificity, [$fdatabase] 
   -p         <str>    prefix of output file, forced
   --probe             design probe when -type "face-to-face", optional
-  --NoFilter          Not filter any primers
+  --NoFilter          Not filter any oligos
   --homology_check    check homologous sequence of template sequence when design for NGS primers, optional
   --dimer_check       check cross dimers among selected primers, optional
 

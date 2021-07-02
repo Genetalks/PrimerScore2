@@ -29,7 +29,9 @@ my $range_pos;
 my $ptype = "face-to-face";
 my $ctype = "Single";
 my $onum = 3;
+my $max_probe_num=3;
 my $PCRsize=600;
+my $NoFilter;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -37,12 +39,14 @@ GetOptions(
 				"ib:s"=>\$fbound,
 				"ip:s"=>\$fprobe,
 				"k:s"=>\$fkey,
+				"NoFilter:s"=>\$NoFilter,
 				"maxl:s"=>\$max_len,
 				"minl:s"=>\$min_len,
 				"opttm:s"=>\$opt_tm,
 				"PCRsize:s"=>\$PCRsize,
 				"tp:s"=>\$ptype,
 				"on:s"=>\$onum,
+				"pn:s"=>\$max_probe_num,
 				"rd:s"=>\$range_dis,
 				"rp:s"=>\$range_pos,
 				"ct:s"=>\$ctype,
@@ -70,7 +74,6 @@ my @lendif=(0,3,0,8); ## tm diff between F and R primer
 my @tmdif=(0,1,0,2); ## tm diff between F and R primer
 my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(10,10,10,10,20);
 my $fulls=10;
-my $max_probe_num=3;
 my @rdis=split /,/, $range_dis;
 my @rpos;
 if(defined $range_pos){
@@ -126,8 +129,8 @@ while(<P>){
 	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo)=split /\t/, $_;
 	my ($tid, $dis, $chr, $pos3, $pos5, $strand)=&get_position_info($id, $len, \%tempos);
 	@{$oligo_info{$id}}=($chr, $pos3, $pos5, $strand, $dis, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum."|".$btm);
-	next if($len>$max_len || $len<$min_len);
-	next if($tm<$opt_tm-5 || $tm>$opt_tm+5);
+	next if(!defined $NoFilter && ($len>$max_len || $len<$min_len));
+	next if(!defined $NoFilter && ($tm<$opt_tm-5 || $tm>$opt_tm+5));
 
 	## score
 	my $snendA=int(&score_single($nendA, $fulls, @nendA)+0.5);
@@ -429,7 +432,7 @@ close(O);
 
 ## check failed target
 open(O, ">$outdir/$fkey.design.status") or die $!;
-print O "## If Failed, you can try turning the -maxl/-maxlp up or choosing --Nofilter!\n";
+print O "## If Failed, you can try turning -maxl/-maxlp up or -opttm/-opttmp down, or choosing --Nofilter!\n";
 print O "#TargetID\tPrimerID\tStatus\n";
 foreach my $t(sort {$a cmp $b} keys %{$target{"id"}}){
 	if(exists $success{$t}){
@@ -729,6 +732,7 @@ Usage:
   -k   <str>	Key of output file, forced
   -tp  <str>    primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
 
+  --NoFilter    Not filter any primers
   -minl      <int>  min len of primer, [$min_len]
   -maxl      <int>  max len of primer, [$max_len]
   -opttm     <int>  opt tm of primer, [$opt_tm]
@@ -739,6 +743,7 @@ Usage:
   	 -ds  <int>		distance when -ct "Full-covered", [500]
 	 -rf  <float>	distance float ratio when -ct "Full-covered", [0.2]
 	 -on  <int>     output num when -ct is "Single",[$onum]
+	 -pn  <int>     output probe num when design probe,[$max_probe_num]
 
   -od <dir>	   Dir of output file, default ./
   -h		   Help

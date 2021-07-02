@@ -2,7 +2,9 @@ sub bound_score{
 	my ($bnum, $bvalue, $fulls, $type)=@_;
 	#bvalue: tm, Eff
 	my $sbound;
-	if($bnum==1){
+	if($bnum==0){## too low tm
+		return $fulls*(-1);
+	}elsif($bnum==1){
 		$sbound=$fulls;
 	}else{
 		my @value=split /,/, $bvalue;
@@ -17,10 +19,7 @@ sub bound_score{
 			$enum = &score_single($bnum, 0.3, @bnum);
 			$etotal = $evalue+$enum;
 		}else{ #Eff
-			#my @bnum = (1,5,1,100); #bound number
-			#my @bnum = (1,1,1,5); #bound number
 			@bvalue = (0,0.001,0,0.1);
-			#@bvalue = (0,0.001,0,0.1);
 			if(!defined $value[1]){
 				print STDERR join("\t", $bnum, $bvalue),"\n";
 			}
