@@ -103,17 +103,22 @@ while(<I>){
 		@rregion = (1, $tlen, 1, "FR");
 	}
 	for(my $r=0; $r<@rregion; $r+=4){
-		my ($min_dis, $max_dis) = ($rregion[$r], $rregion[$r+1]);
+		my ($min_dis, $max_dis, $step, $fr) = ($rregion[$r], $rregion[$r+1], $rregion[$r+2], $rregion[$r+3]);
+		if($max_dis eq "Len"){
+			$max_dis=$tlen;
+			my $num=($tlen-$min_dis)/$step;
+			if($num>2000){
+				print "Warn: Template length is too long for step $step, it will creat too many candidate oligos and consume too long time.\n";
+			}
+		}
 		my $min_p = $min_dis-$dstart>0? $min_dis-$dstart: 0; ## dstart=1
 		my $max_p = $max_dis-$dend<$tlen? $max_dis-$dend: $tlen;
 		if($max_p < $min_p){
 			print "Wrong: max position $max_p < min position $min_p! ($min_dis, $max_dis, $dstart, $dend) Maybe dend (XE:i:$dend) is too large, or -rregion range $regions is too narrow!\n";
 			die;
 		}
-		my $sdis = $rregion[$r+2];
-		my $fr=$rregion[$r+3];
 		my $pori = $fr=~/F/? "F": "R"; ## FR
-		for(my $p=$min_p; $p<=$max_p; $p+=$sdis){
+		for(my $p=$min_p; $p<=$max_p; $p+=$step){
 			$n++;
 			my $dn=int($n/1000);
 			my $dir = "$outdir/split_$dn";
@@ -122,7 +127,7 @@ while(<I>){
 			open(P, ">$dir/$fkey.oligo.list_$fn") or die $!;
 			for(my $l=$max_len; $l>=$min_len; $l-=$scale_len){
 				next if($p+$l>$tlen);
-				my ($oligo, $start, $end)=&get_oligo($p, $l, $seq, $pori); ## $p is the start of primer
+				my ($oligo, $start, $end)=&get_oligo($p, $l, $seq, $pori); ## $p is the start of primer, the min position on template
 				next if($oligo=~/N/ || $oligo=~/n/);
 				my $id_new = $id."-".$pori."-".$start."_".$end; ##oligos of different length are evalued in oligo_evaluation.pl
 				if(exists $record{$id_new}){
@@ -296,11 +301,11 @@ Usage:
   -opttm    <int>       optimal tm, [$opt_tm]
   -opttmp   <int>       optimal tm of probe, [$opt_tm_probe]
   -rlen     <str>       oligo len ranges(start,end,scale), start <= end, [$range_len]
-  -regions  <str>     interested regions of candidate oligos walking on template, format is "start,end,step,strand,start2,end2,step2,strand2...", strand(F: forward, R: reverse, FR: both forward and reverse), (1,len,1,FR) when not given, optional
+  -regions  <str>     interested regions of candidate oligos walking on template(the min pos on template of oligo), format is "start,end,step,strand,start2,end2,step2,strand2...", strand(F: forward, R: reverse, FR: both forward and reverse), "Len" is total length, (1,Len,1,FR) when not given, optional
   		                Example: 
 			               sanger sequence oligo: 100,150,2,R,400,500,5,R
-			               ARMS PCR oligo: 1,1,1,R,40,140,2,R
-			               ARMS PCR oligo(probe): 1,1,1,R,1,20,F,40,140,2,R
+			               ARMS PCR oligo: 0,0,1,R,40,140,2,R
+			               ARMS PCR oligo(probe): 0,0,1,R,1,20,F,40,140,2,R
   -stm     <int>	min tm to be High_tm in specifity, [$stm]
   -para    <int>	parallel num, [$para_num]
   -od <dir>	Dir of output file, default ./

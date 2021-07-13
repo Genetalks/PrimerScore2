@@ -147,8 +147,8 @@ if($step==1){
 }
 
 ### oligo design
+my $odir="$outdir/design/";
 if($step==2){
-	my $odir="$outdir/design/";
 	my $rregion;
 	if(defined $regions){
 		$rregion=$regions;
@@ -179,10 +179,9 @@ if($step==2){
 }
 
 if($step==3){
-	my $odir="$outdir/design/";
 	### probe score
 	if(defined $probe){
-		my $cmd = "perl $Bin/probe_score.pl -i $odir/$fkey.oligo.evaluation.out -k $fkey -minl $min_len_probe -maxl $max_len_probe -opttm $opt_tm_probe -od $odir";
+		my $cmd = "perl $Bin/probe_score.pl -i $odir/$fkey.oligo.evaluation.out -k $fkey -minl $min_len_probe -maxl $max_len_probe -opttm $opt_tm_probe -od $outdir";
 		if(defined $NoFilter){
 			$cmd .= " --NoFilter";
 		}
@@ -191,15 +190,15 @@ if($step==3){
 	
 	### primer score and select
 	my $score_dis_range = $score_dis.",".$dis_range;
-	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd $dis_range -ct $ctype -od $outdir";
+	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd=$dis_range -ct $ctype -od $outdir";
 	if(defined $NoFilter){
 		$cmd .= " --NoFilter";
 	}
 	if(defined $probe){
-		$cmd .= " -ip $odir/$fkey.probe.score";
+		$cmd .= " -ip $outdir/$fkey.probe.score";
 	}
 	if(defined $pos_range){
-		$cmd .= " -rp $pos_range";
+		$cmd .= " -rp=$pos_range";
 	}
 	if($ctype eq "Full-covered"){
 		$cmd .= " -ds $dis_aver -rf $rfloat";
@@ -290,36 +289,38 @@ sub caculate_rregion{
 		if(defined $probe){
 			push @region, (1,20,1, "F"); ## oligos for probe
 		}
+		my $ori="R";
 		if($type eq "face-to-face"){
 			$min = $mind-$maxp-2*$alen;
 			$max = $maxd-$minp-2*$alen;
 		}elsif($type eq "back-to-back"){
 			$min = $minp+$alen-$maxd;
 			$max = $maxp+$alen-$mind;
+			$ori="F";
 		}elsif($type eq "Nested"){
-			$min = $maxp+$mind;
-			$max = $maxp+$maxd;
+			$min = $minp+$alen-$maxd-$alen; #start on template of primer 
+			$max = $maxp+$alen-$mind-$alen;
 		}else{
 			die "Wrong type when defined -srpos, must be one of (face-to-face, back-to-back, Nested)!\n";
 		}
-		my $posnum = int(($max-$min+1)/$step0);
-		if($posnum > $pnum*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
-			die "Step size $step0 in region $min-$max produces too many primers, which will take too long to design! Please narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
+		if($ori eq "R"){
+			$min=$min<$maxp? $maxp: $min;
 		}
-		$min=$min<$maxp? $maxp: $min;
 		$step=int(($max-$min)/$pnum+0.5);
 		$step=$step>=1? $step: 1;
-		push @region, ($min, $max, $step, "R");
+		push @region, ($min, $max, $step, $ori);
+		if($step > $step0*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
+			print "Warn: Step size $step is too big to choose primers as its pairs within optimal distance $bmind-$bmaxd! You can narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
+		}
 	}else{
 		if($ctype eq "Single"){## usually is generic:Region
 			$min = 1;
 			$max = $min+$step0*$pnum;
 		}elsif($ctype eq "Full-covered"){
 			$min = 1;
-			$max = $min+$step0*$pnum*10; ## region is also limited when Full-covered considering running time
-			print "Warn: Region of templates to design oligos is $min-$max, it will not cover the whole templates if templates length are more than $max, then you can magnify -pnum $pnum or -rdis $dis_range!\n";
+			$max="Len"; ## total length of template
 		}
-		push @region, ($min, $max, int(($max-$min)/$pnum+0.5), "FR");
+		push @region, ($min, $max, $step0, "FR");
 	}
 	my $range_region = join(",", @region);
 	return ($range_region);
@@ -373,8 +374,8 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
       back-to-back:  x <---| P2           dis_range:-50,-40,-60,-30
                            P1 |---> x     (No overlap between p1 and p2: dis < 0)
 
-            Nested: P2 --->|   x          dis_range(P2-P1):10,15,5,30
-                      P1 --->| x
+            Nested: P2 --->|   x          dis_range(P2-P1):-15,-10,-30,-3
+                      P1 --->| x                (dis < 0)
 
 Usage:
   Options:

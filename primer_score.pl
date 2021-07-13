@@ -29,7 +29,7 @@ my $range_pos;
 my $ptype = "face-to-face";
 my $ctype = "Single";
 my $onum = 3;
-my $max_probe_num=3;
+my $max_probe_num=6;
 my $PCRsize=600;
 my $NoFilter;
 GetOptions(
@@ -72,7 +72,7 @@ my $end_len=10;
 my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
 my @lendif=(0,3,0,8); ## tm diff between F and R primer
 my @tmdif=(0,1,0,2); ## tm diff between F and R primer
-my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(10,10,10,10,20);
+my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(25,15,10,20,30);
 my $fulls=10;
 my @rdis=split /,/, $range_dis;
 my @rpos;
@@ -203,6 +203,8 @@ if(defined $range_pos){
 }
 if($ptype=~/face-to-face/){
 	push @title, "ProductSize";
+}else{
+	push @title, "DisBetweenPairs";
 }
 push @title, ("ScoreTotal\tScorePair\tScoreOligo");
 push @title, ("Tm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo");
@@ -231,7 +233,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			}else{
 				$pos3_bmax = $pos5+$max_best_dis_primer_probe;
 				$pos3_bmin = $pos5+1;
-				$pos3_max = $pos5+$max_dis_primer_probe;
+				$pos3_max = $pos5+$max_dis_primer_probe; ## loose region
 				$pos3_min = $pos5+1;
 			}
 			if(!defined $range_pos){##SNP
@@ -246,12 +248,12 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		if(defined $range_pos){ ## SNP
 			@condv=(["+", "Dis", $rpos[-2].",".$rpos[-1]], ["-", "Dis", $rpos[-2].",".$rpos[-1]]);
 		}else{ ## input file is fasta
-			@condv=(["+", "No"], ["-", "No"]);
+			@condv=(["+", "No", 0]);
 		}
 	}
 	
 	my %primer_eff;
-	my $outnum=0;
+	my $pbnum=0;
 	for(my $i=0; $i<@condv; $i++){
 		## get candidate primer1
 		my @primer1 = &get_candidate($condv[$i], $oligo_pos{$tid});
@@ -261,7 +263,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		my %pos_pair;
 		my %probe_final;
 		foreach my $p1(@primer1){
-			my ($chr, $pos3, $pos5, $strand, $dis, $seq, $len, $tm)=@{$oligo_info{$p1}};
+			my ($chr, $pos3, $pos5, $strand, $dis_tg, $seq, $len, $tm)=@{$oligo_info{$p1}};
 			my ($score, $score_info)=@{$oligo_score{$p1}};
 			#score for pos
 			my $spos = $fulls_pos;
@@ -270,7 +272,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my ($bmin, $bmax)=split /,/, $condv[$i][3];
 				$spos=int(&score_single($pos3, $fulls_pos, ($bmin, $bmax, $min, $max))+0.5);
 			}elsif($condv[$i][1] eq "Dis"){ #SNP
-				$spos=int(&score_single($dis, $fulls_pos, @rpos)+0.5);
+				$spos=int(&score_single($dis_tg, $fulls_pos, @rpos)+0.5);
 			}
 			#candidate p2
 			my ($pos, $pform);
@@ -286,7 +288,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			
 			my @primer2=&get_candidate(\@condv2, $oligo_pos{$tid});
 			foreach my $p2(@primer2){
-				my ($chr, $pos32, $pos52, $strand2, $dis2, $seq2, $len2, $tm2)=@{$oligo_info{$p2}};
+				my ($chr, $pos32, $pos52, $strand2, $dis_tg2, $seq2, $len2, $tm2)=@{$oligo_info{$p2}};
 				my ($score2, $score_info2)=@{$oligo_score{$p2}};
 				# score for tm diff 
 				my $tmdif=abs($tm2-$tm);
@@ -303,6 +305,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 					$dis=$strand eq "+"? $pos52-$pos5: $pos5-$pos52;
 				}
 				my $sdis=int(&score_single($dis, $fulls_dis, @rdis)+0.5);
+				
 				# specificity, product 
 				my %prod;
 				my ($pnum) = &caculate_product($p1, $p2, \%bound, $ptype, \%prod, \%primer_eff);
@@ -367,7 +370,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		}
 	
 		##output
-		my @mk=("A","B","C");
+		my @mk=("A","B","C","D","E","F","G");
 		my $n=0;
 		foreach my $pair (@final){
 			my ($size, $aprod, $apdr)=@{$pair_info{$pair}};
@@ -378,10 +381,16 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			my ($score, $score_info)=@{$oligo_score{$p1}};
 			my ($score2, $score_info2)=@{$oligo_score{$p2}};
 			my ($target)=$tid;
-			my $UD=$strand eq "+"? "U":"D";
-			$UD=$condv[$i][1] eq "Pos3"? "B".($i+1): $UD; ##Probe i
-			my $p1_new = $target."-".$UD."-".$mk[$n]."-P1";
-			my $p2_new = $target."-".$UD."-".$mk[$n]."-P2";
+			my $pname;
+			if($ctype eq "Single"){
+				my $UD=$strand eq "+"? "U":"D";
+				$UD=defined $fprobe? "B".($pbnum+1): $UD; ##Probe i
+				$pname=$target."-".$UD."-".$mk[$n];
+			}else{
+				$pname=$target."-".($n+1);
+			}
+			my $p1_new=$pname."-P1";
+			my $p2_new=$pname."-P2";
 				
 			my ($pdnum, $pdeffs, $pdinfos)=&get_highest_bound($aprod, 3);
 			my @opos=($chr, $pos5, $strand, $p1_new, $seq, $len);
@@ -395,7 +404,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			}
 			if(defined $fprobe){#probe
 				my $pb=$condv[$i][4];
-				my $pb_new = $target."-".$UD."-Probe";
+				my $pb_new = $target."-"."B".($pbnum+1)."-Probe";
 				my ($pbs, $pbsi)=@{$probe{$tid}{$pb}};
 				my ($chrp, $pos3p, $pos5p, $strandp, $disp, $seqp, $lenp, @infop)=@{$oligo_info{$pb}};
 				my ($spdr, $apdr)=@{$probe_final{$pair}};
@@ -415,16 +424,16 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			}else{
 				print O join("\t", @opos2, $size, @oinfo2),"\n";
 			}
-			$n++;
 			
 			foreach my $t(@{$target{"tem"}{$tid}}){
 				$success{$t}=1;
 			}
+			$n++;
 		}
 		if($n>0){
-			$outnum++;
+			$pbnum++;
 		}
-		last if($outnum==$max_probe_num);
+		last if($pbnum==$max_probe_num);
 	}
 }
 close(O);
@@ -502,7 +511,7 @@ sub caculate_product{
 				my ($ixpos, $dmin, $dmax);
 				if($ptype eq "Nested"){
 					$ixpos=0; #pos3
-					$dmin=0;
+					$dmin=$rdis[-2];
 					$dmax=$PCRsize-$min_len;
 				}elsif($ptype eq "back-to-back"){
 					$ixpos=1; #pos5
@@ -620,11 +629,11 @@ sub primer2_scope{
 	}else{ ## Nested: Dis from pos3
 		$sd=$strand;
 		if($strand eq "+"){
+			$pmin=$pos+$dis_min; #dis <0
+			$pmax=$pos+$dis_max;
+		}else{
 			$pmin=$pos-$dis_max;
 			$pmax=$pos-$dis_min;
-		}else{
-			$pmin=$pos+$dis_min;
-			$pmax=$pos+$dis_max;
 		}
 	}
 	return ($sd, $pmin, $pmax);
@@ -720,8 +729,8 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
                            P1 |---> x     (No overlap between p1 and p2: dis < 0)
                      _______________
 
-            Nested: P2 --->|   x          dis_range(P2-P1):10,15,1,30
-                      P1 --->| x
+            Nested: P2 --->|   x          dis_range(P2-P1):-15,-10,-30,-3
+                      P1 --->| x                   (dis < 0)
 
 Usage:
   Options:

@@ -115,55 +115,6 @@ sub poly_check{
 	return ($total, $maxl, $maxb, join(",", @polys));
 }
 
-#calculate a poly factor according to poly len、num and position
-sub get_poly_value{
-	my ($seq)=@_;
-	$seq = reverse $seq;
-	my @unit = split //, $seq;
-	
-	my $min_plen = 3; # min poly length
-	my @polys;
-	my $last = $unit[0];
-	my $poly = $unit[0];
-	my $dis = 0; #dis to the 3 end
-	for(my $i=1; $i<@unit; $i++){
-		if($unit[$i] eq $last){
-			$poly.=$unit[$i];
-		}else{
-			if(length($poly)>=$min_plen){
-				push @polys, [$poly, $dis];
-			}
-			$dis = $i;
-			$last = $unit[$i];
-			$poly=$last;
-		}
-	}
-	if(length($poly)>=$min_plen){
-		push @polys, [$poly, $dis];
-	}
-	
-	my $value1 = 0; ## end poly impact
-	my $pslen = 0;
-	my $psnum = 0;
-	for(my $i=0; $i<@polys; $i++){
-		my $l = length($polys[$i][0]);
-		my $d = $polys[$i][1];
-		$pslen+=$l;
-		$psnum++;
-		if($i==0){
-			#$value1+=($l-$min_plen+1)*(4-$d)*3; # end poly impact
-			$value1+=($l-$min_plen+1)*(6-$d)*2; # end poly impact
-		}
-	}
-	$value1 = $value1>=0? $value1: 0;
-
-	## other impact
-	my $value2 = 0.2*$pslen*(6-$psnum);
-	$value2 = $value2>=0? $value2: 0;
-	my $value = $value1 + $value2;
-	return $value;
-}
-
 sub get_end3_detaG{
 	my ($primer, $endlen)=@_;
 	my $len = length $primer;

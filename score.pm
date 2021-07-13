@@ -40,21 +40,75 @@ sub poly_score{
 	my @polys = split /,/, $info;
 	my $score=1;
 	my @dprobe=($len*0.4, $len*0.5, 0, $len*0.5);
-	my @dprimer=(15,$len,0,$len);
-	my @polylen=(0,2.8,0,8);
+	my @dprimer=(8,$len,0,$len);
+	my @polyleno=(0,2.5,0,6);
+	my @polylenG=(0,2.5,0,4);
 	for(my $i=0; $i<@polys; $i++){
 		my ($d3, $t, $l)=$polys[$i]=~/(\d+)(\w)(\d+)/;
 		my $s;
+		my @polylen=@polyleno;
+		if($t eq "G"){
+			@polylen=@polylenG;
+		}
+		$slen = (1-&score_single($l,1,@polylen));
 		if($type eq "Probe"){
 			my $d5=$len-$d3-1;
 			my $de=$d5>$d3?$d3:$d5;
-			$s = &score_single($de, 1, @dprobe)*&score_single($l,1,@polylen);
+			$sdis = (3 - &score_single($de, 2, @dprobe));
 		}else{
-			$s = &score_single($d3, 1, @dprimer)*&score_single($l,1,@polylen);
+			$sdis = (3 - &score_single($d3, 2, @dprimer));
 		}
-		$score*=$s;
+		$score-=$sdis*$slen;
 	}
 	return $score;
+}
+
+sub get_poly_value{
+	my ($seq)=@_;
+	$seq = reverse $seq;
+	my @unit = split //, $seq;
+	
+	my $min_plen = 3; # min poly length
+	my @polys;
+	my $last = $unit[0];
+	my $poly = $unit[0];
+	my $dis = 0; #dis to the 3 end
+	for(my $i=1; $i<@unit; $i++){
+		if($unit[$i] eq $last){
+			$poly.=$unit[$i];
+		}else{
+			if(length($poly)>=$min_plen){
+				push @polys, [$poly, $dis];
+			}
+			$dis = $i;
+			$last = $unit[$i];
+			$poly=$last;
+		}
+	}
+	if(length($poly)>=$min_plen){
+		push @polys, [$poly, $dis];
+	}
+	
+	my $value1 = 0; ## end poly impact
+	my $pslen = 0;
+	my $psnum = 0;
+	for(my $i=0; $i<@polys; $i++){
+		my $l = length($polys[$i][0]);
+		my $d = $polys[$i][1];
+		$pslen+=$l;
+		$psnum++;
+		if($i==0){
+			#$value1+=($l-$min_plen+1)*(4-$d)*3; # end poly impact
+			$value1+=($l-$min_plen+1)*(6-$d)*2; # end poly impact
+		}
+	}
+	$value1 = $value1>=0? $value1: 0;
+
+	## other impact
+	my $value2 = 0.2*$pslen*(6-$psnum);
+	$value2 = $value2>=0? $value2: 0;
+	my $value = $value1 + $value2;
+	return $value;
 }
 
 
