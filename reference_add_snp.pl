@@ -5,7 +5,7 @@ use Getopt::Long;
 use Data::Dumper;
 use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
-require "$Bin/add_poly.pm";
+require "$Bin/snp.pm";
 require "$Bin/common.pm";
 
 my $BEGIN_TIME=time();
@@ -48,20 +48,25 @@ while(<R>){
 }
 close(R);
 
-&SHOW_TIME("read in vcf file and add poly info");
-open(V, "zcat $fvcf|") or die $!;
+&SHOW_TIME("read in vcf file and add snp info");
+if($fvcf=~/.gz/){
+	open(V, "zcat $fvcf|") or die $!;
+}else{
+	open(V, $fvcf) or die $!;
+}
 $/="\n";
 while(<V>){
 	chomp;
 	next if(/^$/ || /^#/);
 	my ($c, $p, undef, $ref, $alt)=split /\s+/, $_;
 	$c=~s/chr//;
-	&sequence_convert_poly($seq{$c}, $p, $ref, $alt);
+	next if(!exists $seq{$c});
+	&sequence_convert_snp($seq{$c}, $p, $ref, $alt);
 }
 close(V);
 
 my $L=60;
-open(O, ">$outdir/$fkey.add_poly.fasta") or die $!;
+open(O, ">$outdir/$fkey.add_snp.fasta") or die $!;
 foreach my $c (@chr){
 	print O ">$c\n";
 	$c=~s/chr//;
@@ -69,6 +74,14 @@ foreach my $c (@chr){
 	for(my $i=0; $i<$len; $i+=$L){
 		my $e = $i+$L-1;
 		$e= $e >($len-1)? $len-1: $e;
+#		for(my $j=$i; $j<=$e;$j++){
+#			if(!defined $seq{$c}->[$j]){
+#				print join("\t",$i,$e,$j),"\n";
+#				print join("", @{$seq{$c}}[$i..$e]),"\n";
+#				die;
+#			}
+#
+#		}
 		print O join("", @{$seq{$c}}[$i..$e]),"\n";
 	}
 }

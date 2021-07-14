@@ -7,7 +7,7 @@ use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
 require "$Bin/path.pm";
 require "$Bin/common.pm";
-require "$Bin/add_poly.pm";
+require "$Bin/snp.pm";
 my $BEGIN_TIME=time();
 my $version="2.0";
 #######################################################################################
@@ -278,7 +278,7 @@ sub seq_snp_add_target{
 	foreach my $id(keys %target){
 		my ($s, $e, $c, $r, $a)=@{$target{$id}};
 		if($c eq $chr && $s<=$end && $e>=$start){
-			&sequence_convert_poly(\@unit, $s-$start+1, $r, $a); ## convert @unit directly
+			&sequence_convert_snp(\@unit, $s-$start+1, $r, $a); ## convert @unit directly
 		}
 	}
 	my $seq_new = join("", @unit);

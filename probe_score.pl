@@ -57,7 +57,6 @@ open(P, $foligo) or die $!;
 while(<P>){
 	chomp;
 	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, undef, undef, $snp, $poly, $bnum, $btm)=split /\t/, $_;
-	
 	## filter
 	if(!defined $NoFilter && ($tm<$opt_tm-8 || $tm>$opt_tm+8)){
 		print F "TM\t$_\n";
@@ -81,7 +80,8 @@ while(<P>){
 	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
 	my $self = &max($hairpin, $END, $ANY);
 	my $sself=int(&score_single($self, $fulls, @self)+0.5);
-	my $ssnp = int(&SNP_score($snp, $len, "Probe")*$fulls +0.5);
+	my ($snpv)=split /:/, $snp;	
+	my $ssnp = int(&SNP_score($snpv, $len, "Probe")*$fulls +0.5);
 	my $spoly = int(&poly_score($poly, $len, "Probe")*$fulls +0.5);
 	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
 	my $sG5=int(&score_single($is_G5, $fulls, @G5)+0.5);

@@ -4,6 +4,9 @@ my @atcg=("A/G", "C/T", "A/C", "G/T", "C/G", "A/T", "A/C/T", "C/G/T", "A/C/G", "
 sub snp_to_degenerate{
 	my ($info)=@_;
 	$info=~s/,$//;
+	if($info=~/N/){
+		return "N";
+	}
 	my @snp=split /,/, $info;
 	foreach my $b(@snp){
 		if($b!~/[ATCGatcg]/){
@@ -26,6 +29,40 @@ sub degenerate_to_snp{
 	return $hash{$v};
 }
 
+sub SNP_parse{
+	my ($seq)=@_;
+	$seq = reverse $seq;
+	my @u=split //, $seq;
+	my @snp;
+	my %snp;
+	for(my $i=0; $i<@dg; $i++){
+		$snp{$dg[$i]}=1;
+	}
+
+	for(my $i=0; $i<@u; $i++){
+		if(exists $snp{$u[$i]}){
+			push @snp, $i."S1";
+		}elsif($u[$i] eq "E"){
+			my $l=1;
+			while(1){
+				if($u[$i+1] eq "E"){
+					$l++;
+					$i++;
+				}else{
+					last;
+				}
+			}
+			push @snp, $i."D".$l;
+		}elsif($u[$i]=~/IJL/){
+			my $l=ord($u[$i])-ord('I')+1;
+			push @snp, $i."I".$l;
+		}
+	}
+	return (scalar @snp, join(",", @snp));
+}
+
+
+
 ### add snp/indel info to sequence, convert as following:
 #G       A         ==> R(degenerate)
 #G       A,T       ==> D(degenerate)
@@ -36,39 +73,41 @@ sub degenerate_to_snp{
 #G       GATTTT    ==> L
 #G       GA,GAAA   ==> L
 ## aseq: addr of sequence array
-## p: poly(snp or indel) position, count from 1
+## p: polym(snp or indel) position, count from 1
 ## ref: ref base, ref in vcf
 ## alt: alt base, alt in vcf
-sub sequence_convert_poly{
+sub sequence_convert_snp{
 	my ($aseq, $p, $ref, $alt)=@_;
 	my @Ins=("I", "J", "L", "L");
-
+	my $seqlen = scalar(@{$aseq});
+	
 	my $type=&mutant_type($ref, $alt);
 	my @types = split /,/, $type;
-	my ($poly, $len, $off)=("S", 0, 0);
+	my ($polym, $len, $off)=("S", 0, 0);
 	my $num=0;
+	#choose the longest mutant
 	foreach my $tp(@types){##usually D will not be with S and I.
 		$num++;
 		my ($t, $l, $o)=split /_/, $tp;
-		$poly=$t;
 		if($l>$len){
+			$polym=$t;
 			$len=$l;
 			$off=$o;
 		}
 	}
-	if($p-1>=0){
-		if($poly eq "S"){
+	if($p-1>=0 && $p-1<=$seqlen-1){ ## the pos is on the sequence 
+		if($polym eq "S"){
 			$alt=~s/<[xX]>//;
 			my $dg=&snp_to_degenerate($ref.",".$alt);
 			$aseq->[$p-1]=$dg;
-		}elsif($poly eq "I"){
+		}elsif($polym eq "I"){
 			my $ix=($len-1)>=3? 3: ($len-1);
 			$aseq->[$p-1]=$Ins[$ix];
 		}
 	}
-	if($poly eq "D"){
+	if($polym eq "D"){
 		for(my $i=$p+$off; $i<($p+$off+$len); $i++){
-			if($i-1>=0){
+			if($i-1>=0 && $i-1<=$seqlen-1){
 				$aseq->[$i-1]="E";
 			}
 		}

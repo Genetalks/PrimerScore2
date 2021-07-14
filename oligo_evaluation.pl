@@ -8,6 +8,7 @@ use File::Basename qw(basename dirname);
 require "$Bin/path.pm";
 require "$Bin/common.pm";
 require "$Bin/self_lib.pm";
+require "$Bin/snp.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -209,8 +210,8 @@ while (<P>){
 		}
 		
 		## filter SNP
-		my ($SNP_num, $SNP_info)=&SNP_check($oligo_seq_snp);
-		$SNP_info=$SNP_num==0? "NA":$SNP_info;
+		my ($SNP_num, $SNP_info)=&SNP_parse($oligo_seq_snp);
+		$SNP_info=$SNP_num==0? "NA":$SNP_info.":".$oligo_seq_snp;
 #		$SNP_info.=",".$oligo_seq_snp;
 		if(!defined $NoFilter && $SNP_num/$len > $Max_SNP_ratio){
 			print F join("\t", $id, $oligo_seq, "SNP",$SNP_info),"\n";
@@ -428,7 +429,10 @@ if(!defined $nohead){
 
 foreach my $id (sort {$a cmp $b} keys %evalue){
 	## get bounds info of the max tm
-	my ($bnum, $btms, $binfos)=&get_highest_bound($bound{$id}, 3);
+	my ($bnum, $btms, $binfos)=(0,"NA","NA");
+	if(exists $bound{$id}){## when tm too low, not exists
+		($bnum, $btms, $binfos)=&get_highest_bound($bound{$id}, 3);
+	}
 	print O join("\t",$id, @{$evalue{$id}}, $bnum, $btms, $binfos), "\n";
 }
 close(O);
@@ -476,33 +480,6 @@ sub map_form_standard{
 		}
 	}
 	return $form;
-}
-
-sub SNP_check{
-	my ($seq)=@_;
-	$seq = reverse $seq;
-	my @u=split //, $seq;
-	my @snp;
-	for(my $i=0; $i<@u; $i++){
-		if($u[$i] eq "S"){
-			push @snp, $i."S1";
-		}elsif($u[$i] eq "D"){
-			my $l=1;
-			while(1){
-				if($u[$i+1] eq "D"){
-					$l++;
-					$i++;
-				}else{
-					last;
-				}
-			}
-			push @snp, $i."D".$l;
-		}elsif($u[$i]=~/IJKL/){
-			my $l=ord($u[$i])-ord('I')+1;
-			push @snp, $i."I".$l;
-		}
-	}
-	return (scalar @snp, join(",", @snp));
 }
 
 sub get_3end1_mismatch{

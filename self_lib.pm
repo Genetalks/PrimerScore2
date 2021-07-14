@@ -181,13 +181,13 @@ sub score_single{
 	return $s;
 }
 
-1;
 ## eg:(off=6)  
 ##:  #|||**-||||^^^|||||||||||||             =>      ||||^^^||||||||||||| 
 ##:  ||*||||^^|||----------||||||||||||      =>      ####||||||||||||
 ##:  #######||*|||||||||||  (off=4)          =>      ###||*|||||||||||
 sub map_visual_trim{
 	my ($mv, $off, $end3_match)=@_;
+	#($mv, $off, $end3_match)=("######|*|||||^^|||**-||||||||||||*|*|||||", 14,5);	
 	if($off ==0){
 		return($mv, $end3_match);
 	}
@@ -195,21 +195,31 @@ sub map_visual_trim{
 	my @unit=split //, $mv;
 	my $ntrim=0;
 	while($ntrim<$off){
-		if($unit[0] ne "-" && $unit[0] ne "^"){
+		if($unit[0] ne "-"){
 			shift @unit;
 			$ntrim++;
 		}else{
 			shift @unit;
 		}
 	}
-
-	#rm indel 
-	while($unit[0] eq "-" || $unit[0] eq "^"){
+	#print "trim:", join("", @unit),"\n";
+	#rm del 
+	while($unit[0] eq "-"){
 		shift @unit;
 	}
-	my $mvsub = join("", @unit);
-	
+	#print "rm del:", join("", @unit),"\n";
+
+	# insert convert
+	if($unit[0] eq "^"){
+		for(my $i=0; $i<@unit; $i++){
+			last if($unit[$i] ne "^");
+			$unit[$i] ="#";
+		}
+	}
+	#print "insert:", join("", @unit),"\n";
+	#die;
 	##
+	my $mvsub = join("", @unit);
 	if($unit[0] eq "#"){ ## no need adjust
 		return($mvsub, $end3_match);
 	}
@@ -245,7 +255,7 @@ sub map_visual_trim{
 	my $mvaf = substr($mvsub, $irm+1);
 	my $mvbf ="";
 	for(my $i=0; $i<=$irm;$i++){
-		if($unit[$i] eq "*" || $unit[$i] eq "|"){
+		if($unit[$i] eq "*" || $unit[$i] eq "|" || $unit[$i] eq "^"){
 			$mvbf .= "#";
 		}
 	}
@@ -550,3 +560,4 @@ sub get_match_cigar_from_ntthal{
 }
 
 
+1;

@@ -139,7 +139,8 @@ while(<P>){
 	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
 	my $self = &max($hairpin, $END, $ANY);
 	my $sself=int(&score_single($self, $fulls, @self)+0.5);
-	my $ssnp = int(&SNP_score($snp, $len, "Primer")*$fulls +0.5);
+	my ($snpv)=split /:/, $snp; 
+	my $ssnp = int(&SNP_score($snpv, $len, "Primer")*$fulls +0.5);
 	my $spoly = int(&poly_score($poly, $len, "Primer")*$fulls +0.5);
 	my $sbound=&bound_score($bnum, $btm, $fulls, "Tm");
 	my @score = ($slen, $stm, $sself,$snendA, $senddG, $ssnp, $spoly, $sbound);
