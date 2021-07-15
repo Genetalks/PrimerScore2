@@ -314,18 +314,20 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my $sprod = &bound_score($pnum, join(",",@effs), $fulls_prod, "Eff");
 				
 				# score pair
-				my $stotal = $score+$score2+$spos+$slend+$stmd+$sdis+$sprod;
+				my $stotal=$score+$score2;
 				if(defined $fprobe){#Probe
 					# probe num on products
 					my %pdr;
 					my $pb=$condv[$i][4];
 					my ($pdnum)= &probe_bounds_on_products($pb, \%bound, \%prod, \%pdr); #my ($id, $abound, $aprod, $aresult)=@_;
 					my @pdeffs = sort{$b<=>$a} values %pdr;
-					my $spdr = &bound_score($pdnum, join(",", @pdeffs), $fulls_prod, "Eff");
-					
-					$stotal+=$probe{$tid}{$pb}->[0]+$spdr;
+					my $spdr = &bound_score($pdnum, join(",", @pdeffs), $fulls_prod, "Eff"); ## probe specificity
+					$sprod=($sprod*1+$spdr*2)/3; ## specificity weight is primer:probe=1:2
+					$stotal+=$probe{$tid}{$pb}->[0];
 					@{$probe_final{$p1.",".$p2}}=($spdr, \%pdr);
 				}
+				$stotal +=$spos+$slend+$stmd+$sdis+$sprod;
+
 				$score_pair{$p1.",".$p2}=$stotal;
 				@{$score_pair_info{$p1.",".$p2}}=($spos, $sdis, $slend, $stmd, $sprod);
 				$pos_pair{$p1.",".$p2}=$pos3;
