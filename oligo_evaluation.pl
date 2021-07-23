@@ -37,11 +37,14 @@ my $probe;
 my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $olens;
 my $revcom;
+my $dieBound;
+my $Max_Bound_Sum=10000;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$foligo,
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
+				"DieBound:s"=>\$dieBound,
 				"Revcom:s"=>\$revcom,
 				"Probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
@@ -269,6 +272,7 @@ if(!defined $NoSpecificity){
 	my %mapping;
 	my $fa_oligo = "$outdir/$fkey.oligo.fa";
 	my @fdatabase=split /,/, $fdatabases;	
+	my $sum=0;
 	foreach my $fdatabase(@fdatabase){
 		if(!-e "$fdatabase\.ann"){
 			`bwa index $fdatabase`;
@@ -287,9 +291,13 @@ if(!defined $NoSpecificity){
 			my ($H3)=&get_3end1_mismatch($is_reverse, $cigar);
 			#print "H3:", join("\t", $H3,$id, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
 			next if(!defined $probe && !defined $revcom && $H3>1);
+			$sum++;
 			push @{$mapping{$id}{$dname}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
 		}
 		close(I);
+	}
+	if(defined $dieBound && $sum>$Max_Bound_Sum){
+		die "Die: Bound to too many ($sum) non-target regions!\n";
 	}
 	### evaluate
 	open(O, ">$outdir/$fkey.bound.info") or die $!;
@@ -536,12 +544,13 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 Usage:
   Options:
   -p  <file>             Input oligo list file, forced
-  -d  <files>            Input database files separated by ",", [$fdatabases]
+  -d  <files>            Input database files separated by "," to evalue specificity, [$fdatabases]
   -k  <str>              Key of output file, forced
 
-  --Revcom               also evalue revcom oligos
-  --Probe                design probe and will consider mapping region where oligo 3end not matched exactly when caculate specificity
-  -olen   <int,int,int>  evalue other length's oligos, <min,max,scale> of length, optional
+  --DieBound             Interrupt when total bound targets number > $Max_Bound_Sum out of consideration for running time.
+  --Revcom               Also evalue revcom oligos
+  --Probe                Design probe and will consider mapping region where oligo 3end not matched exactly when caculate specificity
+  -olen   <int,int,int>  Evalue other length's oligos, <min,max,scale> of length, optional
   -opttm     <int>       optimal tm of oligo, [$opt_tm]
   -opttmp    <int>       optimal tm of probe, [$opt_tm_probe]
   -maplen    <int>      length to map with bwa, [$len_map]

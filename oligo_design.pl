@@ -33,7 +33,6 @@ GetOptions(
 				"i:s"=>\$ftem,
 				"is:s"=>\$ftem_snp,
 				"d:s"=>\$fdatabases,
-				"r:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
 				"Probe:s"=>\$probe,
 				"NoSpecificity:s"=>\$NoSpecificity,
@@ -156,7 +155,7 @@ while(<I>){
 			my $f="$dir/$fkey.oligo.list_$fn";
 			my $fname = basename($f);
 			my $olens=join(",", $min_len, $max_len, $scale_len); 
-			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
+			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead --DieBound -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
 			if($fr eq "FR"){
 				$cmd .= " --Revcom";
 			}
@@ -289,7 +288,7 @@ Usage:
   Options:
   -i  	<file>   	Input template fa file, forced
   -is  	<file>   	Input template add snp fa file, optional
-  -d    <files>     Input database files separated by ",", [$fdatabases]
+  -d  <files>       Input database files separated by "," to evalue specificity, [$fdatabases]
   -k  	<str>		Key of output file, forced
 
   --Probe                design probe

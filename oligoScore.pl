@@ -19,7 +19,7 @@ our ($VCF_dbSNP, $REF_HG19, $REF_HG19_SNP, $BLAT);
 my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer);
 my $fref = $REF_HG19;
 my $fref_snp;
-my $fdatabase = $REF_HG19;
+my $fdatabases = $REF_HG19;
 my $step = 1;
 my $para_num = 10;
 my $stm = 45;
@@ -29,8 +29,8 @@ my $min_len=18;
 my $max_len=28;
 my $min_len_probe=18;
 my $max_len_probe=36;
-my $scale_len=2;
-my $pcr_size=600;
+my $scale_len=1;
+my $pcr_size=1000;
 my $pnum = 20; ## position num for one oligo, its candidate oligos num is roughly: pnum*(maxl-minl)/scalel.
 my $choose_num = 10; ## for a primer, at least $choose_num primers can be selected as its pair with the best dis.
 my $rfloat = 0.2;
@@ -49,7 +49,7 @@ GetOptions(
 				"ComeFromRefer:s"=>\$ComeFromRefer,
 				"ir:s"=>\$fref,
 				"is:s"=>\$fref_snp,
-				"id:s"=>\$fdatabase,
+				"id:s"=>\$fdatabases,
 				"p:s"=>\$fkey,
 				"dimer_check:s"=>\$dimer_check,
 				"homology_check:s"=>\$homology_check,
@@ -82,13 +82,17 @@ GetOptions(
 				"step:s"=>\$step,
 				"od:s"=>\$outdir,
 				) or &USAGE;
-&USAGE unless ($ftarget and $fdatabase and $fkey);
+&USAGE unless ($ftarget and $fdatabases and $fkey);
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
 $ftarget=AbsolutePath("file", $ftarget);
 $fref=AbsolutePath("file", $fref);
-$fdatabase=AbsolutePath("file", $fdatabase);
+my @fdb=split /,/, $fdatabases;
+for(my $i=0; $i<@fdb; $i++){
+	$fdb[$i]=AbsolutePath("file",$fdb[$i]);
+}
+$fdatabases=join(",", @fdb);
 
 my ($score_dis, $score_pos)=(10,10);
 my $sh;
@@ -103,7 +107,7 @@ if($head=~/^>/){
 	$ftype = "fasta";
 	$ftemplate = $ftarget;
 	if(!defined $ComeFromRefer){
-		$fdatabase.=",".$ftemplate;
+		$fdatabases.=",".$ftemplate;
 	}
 }else{
 	$ftype = "SNP";
@@ -141,7 +145,7 @@ if($ftype eq "SNP"){
 ### homology check
 if($step==1){
 	if(defined $homology_check){
-		&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fdatabase -k $fkey -od $outdir/homology_check", $sh);
+		&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fdatabases -k $fkey -od $outdir/homology_check", $sh);
 	}
 	$step++;
 }
@@ -164,7 +168,7 @@ if($step==2){
 		my $maxl=&max($max_len, $max_len_probe);
 		$range_len=join(",", $minl, $maxl, $scale_len);
 	}
-	my $dcmd = "perl $Bin/oligo_design.pl -i $ftemplate -d $fdatabase -k $fkey -ptype $type -opttm $opt_tm -rlen $range_len -regions $rregion -stm $stm -para $para_num -od $odir";
+	my $dcmd = "perl $Bin/oligo_design.pl -i $ftemplate -d $fdatabases -k $fkey -ptype $type -opttm $opt_tm -rlen $range_len -regions $rregion -stm $stm -para $para_num -od $odir";
 	if(defined $ftemplate_snp){
 		$dcmd .= " -is $ftemplate_snp";
 	}
@@ -226,7 +230,7 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # sub function
 # ------------------------------------------------------------------
 sub template_database_check{
-	my ($ftemplate, $fdatabase, $outdir, $fkey)=@_;
+	my ($ftemplate, $fdatabases, $outdir, $fkey)=@_;
 	my $fpsl = "$outdir/$fkey.psl";
 	if(!-e $fpsl){
 		&Run("$BLAT $fref $ftemplate $fpsl", $sh);
@@ -374,7 +378,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
       back-to-back:  x <---| P2           dis_range:-50,-40,-60,-30
                            P1 |---> x     (No overlap between p1 and p2: dis < 0)
 
-            Nested: P2 --->|   x          dis_range(P2-P1):-15,-10,-30,-3
+            Nested: P2 --->|   x          dis_range(P2-P1):-15,-10,-30,-5
                       P1 --->| x                (dis < 0)
 
 Usage:
@@ -383,7 +387,7 @@ Usage:
    --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
   -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
   -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
-  -id        <file>   Input database file to check specificity, [$fdatabase] 
+  -id       <files>   Input database files separated by "," to check specificity, [$fdatabases]
   -p         <str>    prefix of output file, forced
   --probe             design probe when -type "face-to-face", optional
   --NoFilter          Not filter any oligos
@@ -400,7 +404,7 @@ Usage:
   -scalel   <str>     candidate oligo length scale, [$scale_len]
   -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it is SNP file
   -rdis     <str>     distance range between pair primers, that is product size range when -type is "face-to-face", (opt_min, opt_max, min, max) separted by ",", [$dis_range]
-  -regions  <str>     interested regions of candidate primers walking on template, format is "start,end,scale,start2,end2,scale2...", if not given, will caculate automatically, optional
+  -regions  <str>     interested regions of candidate primers walking on template, format is "start,end,scale,fr,start2,end2,scale2,fr2...", if not given, will caculate automatically, fr:F/R/FR, optional
 
   ### 
   -type   <str>     primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
