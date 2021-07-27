@@ -84,6 +84,7 @@ my $min_end_match=-1;
 my %tlength;
 my %tempos;
 my %target;
+&SHOW_TIME("#Read in template file");
 open(F, $ftm) or die $!;
 $/=">";
 while(<F>){
@@ -124,6 +125,7 @@ my %oligo_info;
 my %oligo_pos;
 my %oligo_score;
 open(P, $foligo) or die $!;
+&SHOW_TIME("#Primer Score");
 while(<P>){
 	chomp;
 	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo)=split /\t/, $_;
@@ -162,6 +164,7 @@ close(P);
 close(O);
 
 my %bound;
+&SHOW_TIME("#Read in Bound file");
 open(B, $fbound) or die $!;
 while(<B>){
 	chomp;
@@ -175,6 +178,7 @@ close(B);
 
 my %probe;
 if(defined $fprobe){
+	&SHOW_TIME("#Read in Probe file");
 	open(B, $fprobe) or die $!;
 	while(<B>){
 		chomp;
@@ -212,6 +216,7 @@ push @title, ("Tm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP
 print O join("\t", @title),"\n";
 
 my %success;
+&SHOW_TIME("#Primer Pair Score and Select");
 foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 	#primer conditions
 	my @condv;
@@ -468,7 +473,7 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 #my $prob=$dis."/".join(",", $chr, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1), $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
 sub probe_bounds_on_products{
 	my ($id, $abound, $aprod, $aresult)=@_;
-	my %bd=%{$abound};
+	my %bdid=%{$abound->{$id}};
 	my $n=0;
 	foreach my $prod(keys %{$aprod}){
 		my ($dis, $info)=split /\//, $prod;
@@ -477,11 +482,11 @@ sub probe_bounds_on_products{
 		my ($sd2, $pos2)=$sdpos2=~/([+-])(\d+)/;
 		my @sd = ($sd, $sd2);
 		my @pos= ($pos, $pos2);
-		next if(!exists $bd{$id}{$chr});
+		next if(!exists $bdid{$chr});
 		for(my $i=0; $i<2; $i++){
 			my ($sd0, $pos0)=($sd[$i], $pos[$i]);
-			next if(!exists $bd{$id}{$chr}{$sd0});
-			my @bds=@{$bd{$id}{$chr}{$sd0}};
+			next if(!exists $bdid{$chr}{$sd0});
+			my @bds=@{$bdid{$chr}{$sd0}};
 			for(my $i=0; $i<@bds; $i++){
 				my ($pos3, $pos5, $tm, $end_match, $mvisual)=@{$bds[$i]};
 				if(($sd0 eq "+" && $pos5>$pos0-10 && $pos5<$pos0+$PCRsize) || ($sd0 eq "-" && $pos5<$pos0+10 && $pos5>$pos0-$PCRsize)){
@@ -500,11 +505,12 @@ sub probe_bounds_on_products{
 #push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual];
 sub caculate_product{
 	my ($p1, $p2, $abound, $ptype, $aprod, $aeff)=@_;
-	my %bd=%{$abound};
+	my %bdp1=%{$abound->{$p1}};
+	my %bdp2=%{$abound->{$p2}};
 	my $prodn=0;
-	foreach my $chr(keys %{$bd{$p1}}){
-		foreach my $sd(keys %{$bd{$p1}{$chr}}){
-			my @bds=@{$bd{$p1}{$chr}{$sd}};
+	foreach my $chr(keys %bdp1){
+		foreach my $sd(keys %{$bdp1{$chr}}){
+			my @bds=@{$bdp1{$chr}{$sd}};
 			for(my $i=0; $i<@bds; $i++){
 				my ($tm1, $end_match1, $mvisual1)=@{$bds[$i]}[2..4];
 ##              Nested      face-to-face         back-to-back
@@ -527,8 +533,8 @@ sub caculate_product{
 				}
 				my $pos=$bds[$i][$ixpos];
 				my ($sd2, $pmin, $pmax)=&primer2_scope($ptype,$sd,$pos,$dmin,$dmax);
-				next if(!exists $bd{$p2}{$chr}{$sd2});
-				my @bds2=@{$bd{$p2}{$chr}{$sd2}};
+				next if(!exists $bdp2{$chr}{$sd2});
+				my @bds2=@{$bdp2{$chr}{$sd2}};
 				for(my $j=0; $j<@bds2; $j++){
 					my ($tm2, $end_match2, $mvisual2)=@{$bds2[$j]}[2..4];
 					my $pos2 = $bds2[$j][$ixpos];

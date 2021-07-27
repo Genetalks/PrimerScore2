@@ -86,9 +86,9 @@ while(<P>){
 	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
 	my $sG5=int(&score_single($is_G5, $fulls, @G5)+0.5);
 	#specificity: bound
-	my $sbound=&bound_score($bnum, $btm, $fulls, "Tm");
+	my $sbound=&bound_score($bnum, $btm, $fulls, "Probe_Tm");
 	my @score = ($slen, $stm, $sself, $sCGd, $sG5, $ssnp, $spoly, $sbound);
-	my @weight =(0.5,   2,     1,      1,    1,    2,    2,      0.5);
+	my @weight =(0.5,   2,     1,      1,    1,    1.5,    1,      2);
 	my $sadd=0;
 	for(my $i=0; $i<@score; $i++){
 #		$score[$i]=$score[$i]<0? 0: $score[$i];

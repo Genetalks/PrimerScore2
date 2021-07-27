@@ -12,11 +12,17 @@ sub bound_score{
 			return $fulls;
 		}
 		my (@bvalue, $evalue, $enum, $etotal);
-		if($type eq "Tm"){
+		if($type eq "Primer_Tm"){
 			my @bnum = (1,5,1,100); #bound number
 			@bvalue = (0,$value[0]*0.65,0,$value[0]); #bound sec value
 			$evalue = &score_single($value[1], 0.7, @bvalue);
 			$enum = &score_single($bnum, 0.3, @bnum);
+			$etotal = $evalue+$enum;
+		}elsif($type eq "Probe_Tm"){
+			my @bnum = (1,5,1,100); #bound number
+			@bvalue = (0,$value[0]*0.65,0,$value[0]); #bound sec value
+			$evalue = &score_single($value[1], 0.9, @bvalue);
+			$enum = &score_single($bnum, 0.1, @bnum);
 			$etotal = $evalue+$enum;
 		}else{ #Eff
 			@bvalue = (0,0.001,0,0.1);
@@ -39,10 +45,10 @@ sub poly_score{
 	return 1 if($info eq "NA");
 	my @polys = split /,/, $info;
 	my $score=1;
-	my @dprobe=($len*0.4, $len*0.5, 0, $len*0.5);
+	my @dprobe=($len*0.3, $len*0.5, 0, $len*0.5);
 	my @dprimer=(8,$len,0,$len);
-	my @polyleno=(0,2.5,0,6);
-	my @polylenG=(0,2.5,0,4);
+	my @polyleno=(0,2.5,0,8);
+	my @polylenG=(0,2.5,0,5);
 	for(my $i=0; $i<@polys; $i++){
 		my ($d3, $t, $l)=$polys[$i]=~/(\d+)(\w)(\d+)/;
 		my $s;
@@ -54,9 +60,9 @@ sub poly_score{
 		if($type eq "Probe"){
 			my $d5=$len-$d3-1;
 			my $de=$d5>$d3?$d3:$d5;
-			$sdis = (3 - &score_single($de, 2, @dprobe));
+			$sdis = (2 - &score_single($de, 1, @dprobe));
 		}else{
-			$sdis = (3 - &score_single($d3, 2, @dprimer));
+			$sdis = (2 - &score_single($d3, 1, @dprimer));
 		}
 		$score-=$sdis*$slen;
 	}
