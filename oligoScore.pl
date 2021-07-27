@@ -383,13 +383,13 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 Usage:
   Options:
-  -it        <file>   Input target file(SNP file or template fasta file), forced
+  -it        <file>   Input target file(SNP file or template fasta file with no non-ATCGatcg), forced
    --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
   -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
   -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
   -id       <files>   Input database files separated by "," to check specificity, [$fdatabases]
   -p         <str>    prefix of output file, forced
-  --probe             design probe when -type "face-to-face", optional
+  --probe             Design probe when -type "face-to-face", optional
   --NoFilter          Not filter any oligos
   --homology_check    check homologous sequence of template sequence when design for NGS primers, optional
   --dimer_check       check cross dimers among selected primers, optional

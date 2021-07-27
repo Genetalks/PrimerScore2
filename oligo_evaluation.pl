@@ -82,7 +82,7 @@ my $Max_poly_ATC = 8;
 my $MAX_endA = 4;
 my $MAX_end_stability=9;
 my $MAX_poly = 20;
-my $Max_Bound_Num = 500; ## too high tm aligns will be filtered
+my $Max_Bound_Num = 800; ## too high tm aligns will be filtered
 my $MIN_tm = $opt_tm-5;
 my $MAX_tm = defined $opt_tm_probe? $opt_tm_probe+5: $opt_tm+5;
 my $MIN_gc = 0.2;
@@ -250,9 +250,6 @@ while (<P>){
 	
 }
 close(PN);
-if(!defined $NoFilter){
-	close(F);
-}
 
 exit(0) if(scalar keys %evalue==0);
 foreach my $id(keys %evalue){
@@ -303,14 +300,15 @@ if(!defined $NoSpecificity){
 	open(O, ">$outdir/$fkey.bound.info") or die $!;
 	foreach my $id0 (sort {$a cmp $b} keys %olen_oligo){
 		my ($id,undef, undef, $oligo_seq)=@{$olen_oligo{$id0}->[0]};
-		my $bound_num = 0;
 		my %lowtm;
+		my $filter_by_bound=0;
 		foreach my $dname(keys %{$mapping{$id0}}){
 			my @id0=($id0);
 			if(defined $revcom){
 				push @id0, $id0."_L";
 			}
 			foreach my $id0t(@id0){
+				my $bound_num = 0;
 				my $map_num = scalar @{$mapping{$id0t}{$dname}};
 				for (my $i=0; $i<$map_num; $i++){
 					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
@@ -390,6 +388,17 @@ if(!defined $NoSpecificity){
 					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
 					$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
 					$bound_num++;
+					if(!defined $NoFilter && $bound_num>$Max_Bound_Num){
+						print F join("\t",  $id, $oligo_seq, "BoundTooMore", $bound_num."+"),"\n";
+						delete $evalue{$id};
+						$filter_by_bound=1;
+						for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
+							my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
+							print F join("\t",  $idn, $pseqn, "BoundTooMore", $bound_num."+"),"\n";
+							delete $evalue{$idn};
+						}
+						last;
+					}
 					## other len's oligos and revcom
 					for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
 						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
@@ -418,6 +427,7 @@ if(!defined $NoSpecificity){
 						$bound{$idn}{$strandn."/".$chr."/".$posn.":".$mvn}=$tmn;
 					}
 				}
+				last if($filter_by_bound==1);
 			}
 		}
 	}
@@ -427,6 +437,9 @@ if(!defined $NoSpecificity){
 	}
 }
 
+if(!defined $NoFilter){
+	close(F);
+}
 
 #&SHSHOW_TIME("Output:");
 ### output

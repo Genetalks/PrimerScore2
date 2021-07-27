@@ -127,7 +127,7 @@ while(<I>){
 			for(my $l=$max_len; $l>=$min_len; $l-=$scale_len){
 				next if($p+$l>$tlen);
 				my ($oligo, $start, $end)=&get_oligo($p, $l, $seq, $pori); ## $p is the start of primer, the min position on template
-				next if($oligo=~/N/ || $oligo=~/n/);
+				next if($oligo!~/[ATCGatcg]/); ##must be filted because primer3 oligotm/ntthal can not caculate TM
 				my $id_new = $id."-".$pori."-".$start."_".$end; ##oligos of different length are evalued in oligo_evaluation.pl
 				if(exists $record{$id_new}){
 					print "Warn: repeat id new! $id_new $id,$p,$l,$n!\n";
@@ -286,15 +286,15 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 Usage:
   Options:
-  -i  	<file>   	Input template fa file, forced
+  -i  	<file>   	Input template fa file(Not contain non-ATCGatcg base), forced
   -is  	<file>   	Input template add snp fa file, optional
   -d  <files>       Input database files separated by "," to evalue specificity, [$fdatabases]
   -k  	<str>		Key of output file, forced
 
-  --Probe                design probe
+  --Probe           Design probe
+  --NoFilter        Not filter any oligos
+  --FilterRepeat	Filter oligos with repeat region(lowercase in fdatabases) more than 40%
   --NoSpecificity   not evalue specificity
-  --FilterRepeat	filter oligos with repeat region(lowercase in fdatabases) more than 40%
-  --NoFilter             Not filter any oligos
 
   -ptype     <str>       oligo type, "face-to-face", "back-to-back", "Nested", [$ptype]
   -opttm    <int>       optimal tm, [$opt_tm]

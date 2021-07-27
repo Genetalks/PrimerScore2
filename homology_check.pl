@@ -40,6 +40,7 @@ our $BLAT;
 
 my @frefs=split /,/, $fref;
 foreach my $fref(@frefs){
+	$fref=AbsolutePath("file", $fref);
 	my $name = basename($fref);
 	`ln -s $fref $outdir/$name`;
 	my $sh = "$BLAT -noHead $fref $ftemplate $outdir/$name.psl";
