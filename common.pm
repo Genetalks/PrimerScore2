@@ -1,3 +1,4 @@
+
 sub convert_StartEndRefAlt{ ## copy from annovar
 	my ($start, $ref, $alt)=@_;
 	my ($head, $newstart, $newend, $newref, $newalt);
@@ -162,6 +163,20 @@ sub GC_stat{
         my $GC3 = ($stat{3}{'G'}+$stat{3}{'C'})/$GC3_num;
         return ($GC, $GC5, $GC3);
 }
+
+sub GC_stat_array{
+	my @u=@_;
+	my $total = 0;
+	my $gc = 0;
+	foreach $b (@u){
+		$total++;
+		if($b eq 'G' || $b eq 'C' || $b eq "g" || $b eq "c"){
+			$gc++;
+		}
+	}
+	return($gc/$total);
+}
+
 
 sub GC{
 	my ($s)=@_;

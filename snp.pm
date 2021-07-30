@@ -1,4 +1,5 @@
 
+our @Ins=("I", "J", "L", "L");
 my @dg  =("R",   "Y",   "M",   "K",   "S",   "W",   "H",     "B",     "V",     "D",     "N");
 my @atcg=("A/G", "C/T", "A/C", "G/T", "C/G", "A/T", "A/C/T", "C/G/T", "A/C/G", "A/G/T", "A/C/G/T");
 sub snp_to_degenerate{
@@ -8,8 +9,9 @@ sub snp_to_degenerate{
 		return "N";
 	}
 	my @snp=split /,/, $info;
-	foreach my $b(@snp){
-		if($b!~/[ATCGatcg]/){
+	for(my $i=0; $i<@snp; $i++){
+		$snp[$i]=uc($snp[$i]);
+		if($snp[$i]!~/[ATCGatcg]/){
 			die "Wrong snps:", $info,"\n";
 		}
 	}
@@ -78,7 +80,6 @@ sub SNP_parse{
 ## alt: alt base, alt in vcf
 sub sequence_convert_snp{
 	my ($aseq, $p, $ref, $alt)=@_;
-	my @Ins=("I", "J", "L", "L");
 	my $seqlen = scalar(@{$aseq});
 	
 	my $type=&mutant_type($ref, $alt);

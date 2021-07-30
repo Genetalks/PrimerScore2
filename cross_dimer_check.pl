@@ -50,6 +50,7 @@ for(my $j=0; $j<@group; $j++){
 	for(my $k=$j+1; $k<@group; $k++){
 		my $seq = $seq{$group[$k]};
 		my $dimer_result = `$ntthal -path $primer3_config -a END1 -s1 $primer_seq -s2 $seq`;
+		next if(!defined $dimer_result);
 		my ($dG, $tm) = $dimer_result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
 		next if(!defined $tm || $tm<-30);
 		print O "#Dimer\t",join("\t",$group[$j], $group[$k], $dG, $tm),"\n";
