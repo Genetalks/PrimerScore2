@@ -24,14 +24,15 @@ my $max_len=30;
 my $opt_tm=60;
 my $rfloat = 0.2;
 my $dis = 500;
-my $range_dis="10,15,1,30"; ## dis score, pair dis range(best_min, best_max, min, max)
+my $range_dis="100,150,70,200"; ## dis score, pair dis range(best_min, best_max, min, max)
 my $range_pos;
 my $ptype = "face-to-face";
 my $ctype = "Single";
 my $onum = 3;
 my $max_probe_num=6;
-my $PCRsize=600;
+my $PCRsize=1000;
 my $NoFilter;
+my $min_eff=0.01;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -52,6 +53,7 @@ GetOptions(
 				"ct:s"=>\$ctype,
 				"ds:s"=>\$dis,
 				"rf:s"=>\$rfloat,
+				"mine:s"=>\$min_eff,
 				"od:s"=>\$outdir,
 				) or &USAGE;
 &USAGE unless ($foligo and $fkey);
@@ -67,7 +69,6 @@ my @tm = ($opt_tm-1, $opt_tm+1, $opt_tm-5, $opt_tm+5);
 my @self = (-50, 40, -50, 55); ## self tm
 my $max_best_dis_primer_probe=3;
 my $max_dis_primer_probe=20;
-my $min_eff=0.01;
 my $end_len=10;
 my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
 my @lendif=(0,3,0,8); ## tm diff between F and R primer
@@ -723,7 +724,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 
 -rd: distance range of pair primers, (best_min, best_max, min, max) separted by ",", example:
-      face-to-face: |---> P1 x            dis_range: 180,220,150,250
+      face-to-face: |---> P1 x            dis_range: 100,150,70,200
          (SNP)               x  P2 <---|  
 
       face-to-face: P1 |--->        x     dis_range:100,150,70,200
@@ -762,6 +763,7 @@ Usage:
 	 -rf  <float>	distance float ratio when -ct "Full-covered", [0.2]
 	 -on  <int>     output num when -ct is "Single",[$onum]
 	 -pn  <int>     output probe num when design probe,[$max_probe_num]
+  -mine      <float> min efficiency to consider a product, [$min_eff]
 
   -od <dir>	   Dir of output file, default ./
   -h		   Help

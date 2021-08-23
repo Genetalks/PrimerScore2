@@ -12,7 +12,7 @@ sub snp_to_degenerate{
 	for(my $i=0; $i<@snp; $i++){
 		$snp[$i]=uc($snp[$i]);
 		if($snp[$i]!~/[ATCGatcg]/){
-			die "Wrong snps:", $info,"\n";
+			return "Error";
 		}
 	}
 	my @snps=sort{ord($a) <=>ord($b)} @snp;
@@ -100,6 +100,9 @@ sub sequence_convert_snp{
 		if($polym eq "S"){
 			$alt=~s/<[xX]>//;
 			my $dg=&snp_to_degenerate($ref.",".$alt);
+			if($dg eq "Error"){
+				return;
+			}
 			$aseq->[$p-1]=$dg;
 		}elsif($polym eq "I"){
 			my $ix=($len-1)>=3? 3: ($len-1);

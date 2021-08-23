@@ -76,7 +76,7 @@ sub window_ratio{
 		if($type eq "CLW_mismatch"){
 			$r = &mismatch_ratio(@info[$i..($i+$wd-1)]);
 		}elsif($type eq "GC"){
-			$r = &GC_stat_array(@info[$i..($i+$wd-1)]);
+			$r = &GC_array(@info[$i..($i+$wd-1)]);
 		}
 		push @ratio, $r;
 	}

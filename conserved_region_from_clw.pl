@@ -157,6 +157,9 @@ for(my $i=0; $i<$regionn; $i++){
 					$dseq.="E";
 				}else{
 					my $dbase = &snp_to_degenerate(join(",",keys %base));
+					if($dbase eq "Error"){
+						die "Wrong snp: ", join(",",keys %base), "\n";
+					}
 					$dseq.=$dbase;
 				}
 			}

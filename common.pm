@@ -164,7 +164,7 @@ sub GC_stat{
         return ($GC, $GC5, $GC3);
 }
 
-sub GC_stat_array{
+sub GC_array{
 	my @u=@_;
 	my $total = 0;
 	my $gc = 0;
@@ -195,19 +195,20 @@ sub GC{
 sub GC_info_stat{
     my ($p, $Wind_GC)=@_;
     my @u = split //, $p;
-
+	my $high_GC=0.8;
+	my $low_GC=0.2;
+	my ($high_len, $low_len)=(0,0);
 	my $GC = &GC($p);
-	my ($GC5, $GC3);
 	my $min_GC=1;
 	my $max_GC=0;
 	for(my $i=0; $i<@u-$Wind_GC+1; $i++){
 		my @sub = @u[$i..$i+$Wind_GC-1];
-		my $sub_gc = &GC(@sub);
-		if($i==0){
-			$GC5 = $sub_gc;
+		my $sub_gc = &GC_array(@sub);
+		if($sub_gc>=$high_GC){
+			$high_len++;
 		}
-		if($i==@u-$Wind_GC){
-			$GC3 = $sub_gc;
+		if($sub_gc<=$low_GC){
+			$low_len++;
 		}
 		if($sub_gc>$max_GC){
 			$max_GC = $sub_gc;
@@ -217,9 +218,8 @@ sub GC_info_stat{
 		}
 	}
 	$GC = sprintf "%0.2f", $GC;
-    return ($GC, $GC5, $GC3, $max_GC-$min_GC);
+    return ($GC, $high_len, $low_len, $max_GC, $min_GC);
 }
-
 
 sub revcom{#&revcom($ref_seq);
 	#获取字符串序列的反向互补序列，以字符串形式返回。ATTCCC->GGGAAT

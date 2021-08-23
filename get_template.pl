@@ -75,12 +75,19 @@ while (<T>){
 	if($ftype eq "VCF"){
 		#13      19685715        rs564281463     G       GA      100     PASS    AC=2263;AF=0.451877;AN=5008;
 		($chr, $s, $id, $ref, $alt)=split;
+#		$e=$s+length($ref)-1;
 		($s, $e, $ref, $alt) = &convert_StartEndRefAlt($s, $ref, $alt);
 	}else{
 		($chr, $s, $e, $ref, $alt, $info)=split;
 		#10      43609948        43609948        T       C       ID=COSM966;GENE=RET;STRAND=+;CDS=c.1900T>C;AA=p.C634R;CNT=13;SOURCE=50Gene
 		($id)=$info=~/ID=(\S+?);/;
 	}
+	if(!defined $s || !defined $e || $e-$s>100){
+		print "Wrong: ref base $ref($chr:$s-$e) is not right! Target: $_\n";
+		$check_success=0;
+		next;
+	}
+
 	## check ref base
 	if($ref ne "-"){
 		my $rinfo = `$SAMTOOLS faidx $fref $chr:$s-$e`;
@@ -90,6 +97,7 @@ while (<T>){
 		if($ref ne $seq){
 			print "Wrong: ref base $ref($chr:$s-$e $seq) is not right!\n";
 			$check_success=0;
+			next;
 		}
 	}
 
