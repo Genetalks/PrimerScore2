@@ -43,9 +43,11 @@ my $onum = 3;
 my ($dimer_check, $homology_check, $SNP_check);
 my $probe;
 my ($regions, $regions_rev);
+my $ftype;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
+				"ft:s"=>\$ftype,
 				"ComeFromRefer:s"=>\$ComeFromRefer,
 				"ir:s"=>\$fref,
 				"is:s"=>\$fref_snp,
@@ -100,7 +102,6 @@ open($sh, ">$outdir/$fkey.sh") or die $!;
 
 ### get template file
 my ($ftemplate, $ftemplate_snp);
-my $ftype;
 my $head = `head -1 $ftarget`;
 chomp $head;
 if($head=~/^>/){
@@ -110,15 +111,17 @@ if($head=~/^>/){
 		$fdatabases.=",".$ftemplate;
 	}
 }else{
-	$ftype = "SNP";
 	my @unit = split /\s+/, $head;
 	my $cnum = scalar @unit;
 	if($cnum == 1 && $head=~/rs\d+/){
 		&Run("perl $Bin/extract_by_id.pl -i $VCF_dbSNP -l $ftarget -k $fkey.SNP -c 2 -od $outdir", $sh);
 		&Run("less $outdir/$fkey.SNP.extract|awk '{print \"chr\"\$_}' > $outdir/$fkey.target.txt", $sh);
 		$ftarget = "$outdir/$fkey.target.txt";
-	}elsif($cnum < 5){
-		die "Wrong input target file: $ftarget\n";
+		$ftype = "SNP";
+	}
+
+	if(!defined $ftype){
+		die "Please designate -ft(targe file type)!\n";
 	}
 }
 
@@ -139,6 +142,36 @@ if($ftype eq "SNP"){
 	&Run($cmd, $sh);
 	$ftemplate = "$outdir/$fkey.template.fa";
 	$ftemplate_snp = "$outdir/$fkey.template_snp.fa";
+}elsif($ftype eq "Bed"){
+	open(I, $ftarget) or die $!;
+	$ftemplate = "$outdir/$fkey.template.fa";
+	$ftemplate_snp = "$outdir/$fkey.template_snp.fa";
+	open(T, ">$ftemplate") or die $!;
+	open(TS, ">$ftemplate_snp") or die $!;
+	while(<I>){
+		chomp;
+		next if(/^$/);
+		my ($c, $s, $e, $id)=split /\s+/, $_;
+		if(!defined $id){
+			$id=join(",", $c, $s, $e);
+		}
+		my $info=`samtools faidx $fref $c:$s-$e`;
+		my (undef, @line)=split /\n/, $info;
+		print T ">$id\n";
+		print T join("", @line),"\n";
+
+		if(defined $fref_snp){
+			my $info=`samtools faidx $fref_snp $c:$s-$e`;
+			my (undef, @line)=split /\n/, $info;
+			print TS ">$id\n";
+			print TS join("", @line),"\n";
+		}else{
+			print TS ">$id\n";
+			print TS join("", @line),"\n";
+		}
+	}
+	close(T);
+	close(TS);
 }
 
 
@@ -385,6 +418,7 @@ Usage:
   Options:
   -it        <file>   Input target file(SNP file or template fasta file with no non-ATCGatcg), forced
    --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
+   -ft       <str>    file type, SNP or Fasta or Bed, optional
   -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
   -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
   -id       <files>   Input database files separated by "," to check specificity, [$fdatabases]

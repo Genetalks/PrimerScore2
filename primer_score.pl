@@ -457,7 +457,7 @@ foreach my $t(sort {$a cmp $b} keys %{$target{"id"}}){
 		print O join("\t", $t, $target{"id"}{$t}, "Successful"),"\n";
 	}else{
 		print O join("\t", $t, $target{"id"}{$t}, "Failed"),"\n";
-		print "Warn: $t design failed! you can try turning the -maxl/-maxlp up or turn the -opttm/-opttmp down, or amplify -regions!\n";
+		print "Warn: $t design failed! you can try turning up the -pnum, or check file $outdir/design/$fkey.oligo.filter.list and adjust the -maxl/-maxlp/-minl/-minp or -opttm/-opttmp!\n";
 	}
 }
 close(O);
