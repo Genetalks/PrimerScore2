@@ -46,7 +46,7 @@ sub SNP_parse{
 			push @snp, $i."S1";
 		}elsif($u[$i] eq "E"){
 			my $l=1;
-			while(1){
+			while($i+1<@u){
 				if($u[$i+1] eq "E"){
 					$l++;
 					$i++;

@@ -155,7 +155,7 @@ while(<I>){
 			my $f="$dir/$fkey.oligo.list_$fn";
 			my $fname = basename($f);
 			my $olens=join(",", $min_len, $max_len, $scale_len); 
-			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead --DieBound -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
+			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead --KillBwaTimeout -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
 			if($fr eq "FR"){
 				$cmd .= " --Revcom";
 			}
@@ -177,18 +177,18 @@ while(<I>){
 close(PT);
 close (SH);
 
-Run("parallel -j $para_num  < $outdir/$fkey.oligo.evalue.sh", 1);
+Run("parallel -j $para_num  < $outdir/$fkey.oligo.evalue.sh");
 
 ##cat
 my @dirs = glob("$outdir/split_*");
 foreach my $dir (@dirs){
-	Run("cat $dir/*.evaluation.out > $dir/evaluation.out", 1);
-	Run("cat $dir/*.bound.info > $dir/bound.info", 1);
-	Run("cat $dir/*.filter.list > $dir/filter.list", 1);
+	Run("cat $dir/*.evaluation.out > $dir/evaluation.out");
+	Run("cat $dir/*.bound.info > $dir/bound.info");
+	Run("cat $dir/*.filter.list > $dir/filter.list");
 }
-Run("cat $outdir/*/evaluation.out >$outdir/$fkey.oligo.evaluation.out", 1);
-Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info", 1);
-Run("cat $outdir/*/filter.list >$outdir/$fkey.oligo.filter.list", 1);
+Run("cat $outdir/*/evaluation.out >$outdir/$fkey.oligo.evaluation.out");
+Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info");
+Run("cat $outdir/*/filter.list >$outdir/$fkey.oligo.filter.list");
 
 
 
@@ -266,16 +266,6 @@ sub get_oligo{
 #	}
 #}
 #
-
-sub Run{
-    my ($cmd, $nodie)=@_;
-
-    my $ret = system($cmd);
-    if (!$nodie && $ret) {
-        die "Run $cmd failed!\n";
-    }
-}
-
 
 
 sub USAGE {#

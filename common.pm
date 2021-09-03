@@ -1,3 +1,41 @@
+## return: -1:timeout; 1:finished
+sub Run_monitor_timeout{
+	my ($time, $cmd, $sh)=@_;
+	if(defined $sh){
+		print $sh $cmd,"\n";
+		print "###", $cmd,"\n";
+	}
+
+	eval {
+        local $SIG{ALRM} = sub { die "alarm\n" };
+        alarm $time;
+		$? = `$cmd`;
+        alarm 0;
+    };
+    if ($@) { # timed out
+        die unless $@ eq "alarm\n";
+		print "Run time out! $cmd\n";
+		return -1;
+    }else { # didn't timeout
+		return 1;
+    }
+}
+
+sub Run{
+    my ($cmd, $sh, $nodie)=@_;
+	if(defined $sh){
+		print $sh $cmd,"\n";
+		print "###", $cmd,"\n";
+	}
+    my $ret = system($cmd);
+    if ($ret) {
+        print STDERR "Run $cmd failed!\n";
+		if(!defined $nodie){
+			die;
+		}
+    }
+}
+
 
 sub convert_StartEndRefAlt{ ## copy from annovar
 	my ($start, $ref, $alt)=@_;

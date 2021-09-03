@@ -14,20 +14,19 @@ my $BEGIN_TIME=time();
 my $version="1.0.0";
 #######################################################################################
 
-# ------------------------------------------------------------------
-# GetOptions
-# ------------------------------------------------------------------
-my ($foligo, $fkey,$detail,$outdir);
-my $NoSpecificity;
-my $min_tm_spec = 45; #when caculate specificity
-my $nohead;
-my $thread = 3;
 our $PATH_PRIMER3;
 our $REF_HG19;
 our $SAMTOOLS;
 our $BWA;
+# ------------------------------------------------------------------
+# GetOptions
+# ------------------------------------------------------------------
+my ($foligo, $fkey,$detail,$outdir);
+my ($NoSpecificity, $KillBwaTimeout, $NoFilter);
+my $min_tm_spec = 45; #when caculate specificity
+my $nohead;
+my $thread = 1;
 my $fdatabases = $REF_HG19;
-my $NoFilter;
 my $len_map=20; ##bwa result is the most when 20bp
 my $opt_tm = 60;
 my $opt_tm_probe=70;
@@ -37,17 +36,17 @@ my $probe;
 my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $olens;
 my $revcom;
-my $dieBound;
-my $Max_Bound_Sum=10000;
+my $max_time=120;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$foligo,
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
-				"DieBound:s"=>\$dieBound,
 				"Revcom:s"=>\$revcom,
 				"Probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
+				"KillBwaTimeout:s"=>\$KillBwaTimeout,
+				"maxtime:s"=>\$max_time,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"nohead:s"=>\$nohead,
 				"maplen:s"=>\$len_map,
@@ -119,12 +118,14 @@ while (<P>){
 		print $_,"\n";
 		die;
 	}
-	push @{$olen_oligo{$id0}}, [$id0."_F_0","+", 0, $oligo_seq0, $oligo_seq_snp0];
+	my $id0new=defined $olens? $id0."_F_0": $id0;
+	push @{$olen_oligo{$id0}}, [$id0new,"+", 0, $oligo_seq0, $oligo_seq_snp0];
 	my ($oligo_seq0r, $oligo_seq_snp0r);
 	if(defined $revcom){
 		$oligo_seq0r=&revcom($oligo_seq0);
 		$oligo_seq_snp0r=&revcom($oligo_seq_snp0);
-		push @{$olen_oligo{$id0}}, [$id0."_R_0", "-", 0, $oligo_seq0r, $oligo_seq_snp0r];
+		my $id0newR=defined $olens? $id0."_F_0": $id0;
+		push @{$olen_oligo{$id0}}, [$id0newR, "-", 0, $oligo_seq0r, $oligo_seq_snp0r];
 	}
 	if(defined $olens){
 		my ($min, $max, $scale)=split /,/, $olens;
@@ -275,8 +276,27 @@ if(!defined $NoSpecificity){
 			`bwa index $fdatabase`;
 		}
 		my $dname = basename($fdatabase);
-		Run("$BWA mem -D 0 -k 9 -t $thread -c 5000000 -y 100000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo |samtools view -bS - >$fa_oligo\_$dname.bam");
-	#	Run("bwa mem -D 0 -k 9 -t 4 -c 5000000 -y 100000 -T 12 -B 1 -O 2,2 -L 1,1 -h 200 -a  $fdatabase $fa_oligo > $fa_oligo.sam");
+		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo |samtools     view -bS - >$fa_oligo\_$dname.bam";
+		if(defined $KillBwaTimeout){
+			my $ret = &Run_monitor_timeout($max_time, $cmd);
+			if($ret==-1){## time out
+				open(I, $fa_oligo) or die $!;
+				$/=">";
+				while(<I>){
+					chomp;
+					next if(/^$/);
+					my ($id0, $seq)=split /\n/, $_; 
+					for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
+						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
+						print F join("\t",  $idn, $pseqn, "BwaTimeout", $max_time),"\n";
+					}
+				}
+				close(I);
+				$/="\n";
+			}
+		}else{
+			&Run($cmd);
+		}
 		### read in sam
 		open (I, "samtools view $fa_oligo\_$dname.bam|") or die $!;
 		while (<I>){
@@ -292,9 +312,6 @@ if(!defined $NoSpecificity){
 			push @{$mapping{$id}{$dname}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
 		}
 		close(I);
-	}
-	if(defined $dieBound && $sum>$Max_Bound_Sum){
-		die "Die: Bound to too many ($sum) non-target regions!\n";
 	}
 	### evaluate
 	open(O, ">$outdir/$fkey.bound.info") or die $!;
@@ -517,19 +534,6 @@ sub get_3end1_mismatch{
 	return $H3;
 }
 
-sub Run{
-    my ($cmd, $log_fh)=@_;
-
-    if (defined $log_fh) {
-        print $log_fh $cmd,"\n";
-    }
-    print STDERR $cmd, "\n";
-    my $ret = system($cmd);
-    if ($ret) {
-        die "Run $cmd failed!\n";
-    }
-}
-
 sub explain_bam_flag_unmap{
 	my ($flag)=@_;
 	my $flag_bin=sprintf("%b", $flag);
@@ -560,7 +564,6 @@ Usage:
   -d  <files>            Input database files separated by "," to evalue specificity, [$fdatabases]
   -k  <str>              Key of output file, forced
 
-  --DieBound             Interrupt when total bound targets number > $Max_Bound_Sum out of consideration for running time.
   --Revcom               Also evalue revcom oligos
   --Probe                Design probe and will consider mapping region where oligo 3end not matched exactly when caculate specificity
   -olen   <int,int,int>  Evalue other length's oligos, <min,max,scale> of length, optional
@@ -580,7 +583,10 @@ Usage:
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
+
   --NoFilter             Not filter any oligos
+  --KillBwaTimeout       Kill bwa when running time is out of time
+   -maxtime  <int>       max bwa running time when --KillBwaTimeout, [$max_time]
   --NoSpecificity        Not evalue specificity
   --Detail              Output Detail Info to xxx.evaluation.detail, optional
   -od        <dir>      Dir of output file, default ./

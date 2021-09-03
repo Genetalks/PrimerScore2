@@ -363,18 +363,6 @@ sub caculate_rregion{
 	return ($range_region);
 }
 
-sub Run{
-    my ($cmd, $sh, $nodie)=@_;
-	if(defined $sh){
-		print $sh $cmd,"\n";
-		print "###", $cmd,"\n";
-	}
-    my $ret = system($cmd);
-    if (!defined $nodie && $ret) {
-        die "Run $cmd failed!\n";
-    }
-}
-
 sub USAGE {#
 	my $usage=<<"USAGE";
 Program:
