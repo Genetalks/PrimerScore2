@@ -390,8 +390,8 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
       face-to-face: |---> P1 x            dis_range:100,150,70,200(qPCR); 530,570,500,600(Sanger)
          (SNP)               x  P2 <---|  
 
-      face-to-face: P1 |--->        x     dis_range:100,150,70,200(qPCR)
-        (Region)     x        <---| P2    
+      face-to-face: P1 |--->              dis_range:100,150,70,200(qPCR)
+        (Region)              <---| P2    
 
       back-to-back:  x <---| P2           dis_range:5,10,0,15
                       P1 |---> x          (Overlap between p1 and p2: dis > 0)

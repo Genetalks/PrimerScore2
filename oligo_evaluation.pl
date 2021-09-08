@@ -276,7 +276,7 @@ if(!defined $NoSpecificity){
 			`bwa index $fdatabase`;
 		}
 		my $dname = basename($fdatabase);
-		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo |samtools     view -bS - >$fa_oligo\_$dname.bam";
+		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo |samtools view -bS - >$fa_oligo\_$dname.bam";
 		if(defined $KillBwaTimeout){
 			my $ret = &Run_monitor_timeout($max_time, $cmd);
 			if($ret==-1){## time out

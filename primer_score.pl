@@ -514,15 +514,17 @@ sub caculate_product{
 			my @bds=@{$bdp1{$chr}{$sd}};
 			for(my $i=0; $i<@bds; $i++){
 				my ($tm1, $end_match1, $mvisual1)=@{$bds[$i]}[2..4];
-##              Nested      face-to-face         back-to-back
-##P1			-->|          |-->                    |-->
-##P2min			-->|           <--|             <--|...  
-##P2max			  ...-->|        ...<--|                 ...<--|   
+##                Nested		 face-to-face         back-to-back
+##P1			 	  -->| 		   |-->                    |-->
+##P2min		  -->|...      		    <--|             <--|...  
+##P2max			      -->| 		       ...<--|                 ...<--|   
 				my ($ixpos, $dmin, $dmax);
 				if($ptype eq "Nested"){
 					$ixpos=0; #pos3
-					$dmin=$rdis[-2];
-					$dmax=$PCRsize-$min_len;
+					#$dmin=$rdis[-2];
+					#$dmax=$PCRsize-$min_len;
+					$dmin=-1*$PCRsize;
+					$dmax=0;
 				}elsif($ptype eq "back-to-back"){
 					$ixpos=1; #pos5
 					$dmin=-1*$PCRsize+2*$min_len; #min_len: primer min len
@@ -556,7 +558,10 @@ sub caculate_product{
 							$eff2=&efficiency($tm2, $mvisual2);
 							$aeff->{$b2}=$eff2;
 						}
-						my $dis=abs($pos2-$pos);
+						my $dis=$pos2-$pos;
+						if($ptype eq "Nested" && $sd eq "-"){## Nested dis>0 when strand is -
+							$dis=$pos-$pos2;
+						}
 						my @rsize=($rdis[-2],$rdis[-1], $dmin, $dmax);
 						my $eff_dis=&score_single($dis, 1, @rsize);
 						my $eff=$eff1*$eff2*$eff_dis;
