@@ -1,17 +1,25 @@
 ## return: -1:timeout; 1:finished
-sub Run_monitor_timeout{
+sub Run_monitor_timeout0{
 	my ($time, $cmd, $sh)=@_;
+	print "###", $cmd,"\n";
 	if(defined $sh){
 		print $sh $cmd,"\n";
-		print "###", $cmd,"\n";
 	}
-
+	my $pid;
 	eval {
-        local $SIG{ALRM} = sub { die "alarm\n" };
+		##正在调用的子程序pid为$pid+1, 好像是中间多一步调用: sh -c; 偶尔可能需要+2
+        local $SIG{ALRM} = sub {my $pidn=$pid+1; `kill -9 $pidn`; die "alarm\n"; };
         alarm $time;
-		$? = `$cmd`;
+		$pid=fork;
+		if(not $pid){
+			exec($cmd);
+		}
+#		print "pid: ", $pid,"\n";
+		waitpid($pid,0);
+#		$? = `$cmd`; ##这种形式和system，子程序不会中断
         alarm 0;
     };
+	#print "\$\$+28: ", $$+28,"\n"; ## current pid 应该是主程序的pid，通常子程序的pid为$$+28
     if ($@) { # timed out
         die unless $@ eq "alarm\n";
 		print "Run time out! $cmd\n";
@@ -21,11 +29,23 @@ sub Run_monitor_timeout{
     }
 }
 
-sub Run{
-    my ($cmd, $sh, $nodie)=@_;
+## 超时中断，但无法判断是否超时中断
+sub Run_monitor_timeout{
+	my ($time, $cmd, $sh)=@_;
+	print "###", $cmd,"\n";
 	if(defined $sh){
 		print $sh $cmd,"\n";
-		print "###", $cmd,"\n";
+	}
+	## 可以实现中断退出，但中断与否返回值retval都是0，无法判断是否超时中断。
+	my $retval = system("ulimit -t $time; $cmd");
+}
+	
+
+sub Run{
+    my ($cmd, $sh, $nodie)=@_;
+	print "###", $cmd,"\n";
+	if(defined $sh){
+		print $sh $cmd,"\n";
 	}
     my $ret = system($cmd);
     if ($ret) {

@@ -276,10 +276,13 @@ if(!defined $NoSpecificity){
 			`bwa index $fdatabase`;
 		}
 		my $dname = basename($fdatabase);
-		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo |samtools view -bS - >$fa_oligo\_$dname.bam";
+		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
 		if(defined $KillBwaTimeout){
-			my $ret = &Run_monitor_timeout($max_time, $cmd);
-			if($ret==-1){## time out
+			&Run_monitor_timeout($max_time, $cmd);
+			open(I, "$fa_oligo\_$dname.sam.log") or die $!;
+			my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
+			chomp $ret;
+			if($ret eq "Killed"){## time out
 				open(I, $fa_oligo) or die $!;
 				$/=">";
 				while(<I>){
@@ -288,10 +291,11 @@ if(!defined $NoSpecificity){
 					my ($id0, $seq)=split /\n/, $_; 
 					for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
 						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
-						print F join("\t",  $idn, $pseqn, "BwaTimeout", $max_time),"\n";
+						print F join("\t",  $idn, $pseqn, "BwaTimeout", $max_time."s"),"\n";
 					}
 				}
 				close(I);
+				exit(1);
 				$/="\n";
 			}
 		}else{
