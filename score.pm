@@ -140,5 +140,37 @@ sub SNP_score{
 	}
 	return $score;
 }
+## 打分
+## score:满分
+sub score_single{
+	my ($v, $score, $minb, $maxb, $min, $max)=@_;
+	if(!defined $v){
+		print STDERR join("\t", $v, $score, $minb, $maxb, $min, $max),"\n";
+	}
+	return $score if($v eq "NULL");
+	if(!defined $minb){
+		print STDERR join("\t", $v, $score, $minb, $maxb, $min, $max),"\n";
+	}
+	my $disl = $minb - $min;
+	my $disr = $max - $maxb;
+	if($disl<0 || $disr<0){
+		print "Wrong Score set: $minb, $maxb, $min, $max\n";
+		die;
+	}
+
+	my $s;
+	if($v<$minb){
+		$disl=$disl==0? 0.1: $disl;
+		$s = $score * (1 - ($minb-$v)/$disl);
+	}elsif($v<=$maxb){
+		$s = $score;
+	}else{
+		$disr= $disr==0? 0.1: $disr;
+		$s = $score * (1 - ($v-$maxb)/$disr);
+	}
+	return $s;
+}
+
+
 
 1;

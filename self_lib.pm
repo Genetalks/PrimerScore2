@@ -1,22 +1,3 @@
-sub get_highest_bound{
-	my ($abound, $maxn)=@_;
-	my %bound=%{$abound};
-	my @binfo=sort{$bound{$b} <=> $bound{$a}} keys %bound;
-	my $bnum = scalar @binfo;
-	my $n=0;
-	my @bvalue;
-	my @binfos;
-	foreach $binfo(@binfo){
-		push @binfos, $binfo;
-		push @bvalue, sprintf("%.2f",$bound{$binfo});
-		$n++;
-		last if($n==$maxn);
-	}
-	my $binfos=join(";", @binfos);
-	my $bvalues=join(",", @bvalue);
-	return ($bnum, $bvalues, $binfos);
-}
-
 #my @rank_end=(3,   5,   8); #  PCR efficiency when dis of mismatch pos to 3end <= @rank_end
 #my @eff_end =(0.1, 0.4, 0.8 );
 #my $max_end3_eff = $rank_end[-1];
@@ -149,37 +130,6 @@ sub get_end_A{
 }
 
 
-
-## 打分
-## score:满分
-sub score_single{
-	my ($v, $score, $minb, $maxb, $min, $max)=@_;
-	if(!defined $v){
-		print STDERR join("\t", $v, $score, $minb, $maxb, $min, $max),"\n";
-	}
-	return $score if($v eq "NULL");
-	if(!defined $minb){
-		print STDERR join("\t", $v, $score, $minb, $maxb, $min, $max),"\n";
-	}
-	my $disl = $minb - $min;
-	my $disr = $max - $maxb;
-	if($disl<0 || $disr<0){
-		print "Wrong Score set: $minb, $maxb, $min, $max\n";
-		die;
-	}
-
-	my $s;
-	if($v<$minb){
-		$disl=$disl==0? 0.1: $disl;
-		$s = $score * (1 - ($minb-$v)/$disl);
-	}elsif($v<=$maxb){
-		$s = $score;
-	}else{
-		$disr= $disr==0? 0.1: $disr;
-		$s = $score * (1 - ($v-$maxb)/$disr);
-	}
-	return $s;
-}
 
 ## eg:(off=6)  
 ##:  #|||**-||||^^^|||||||||||||             =>      ||||^^^||||||||||||| 

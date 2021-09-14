@@ -10,6 +10,7 @@ require "$Bin/score.pm";
 require "$Bin/self_lib.pm";
 require "$Bin/average.pm";
 require "$Bin/math.pm";
+require "$Bin/product.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -259,7 +260,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		}
 	}
 	
-	my %primer_eff;
+	my %record;
 	my $pbnum=0;
 	for(my $i=0; $i<@condv; $i++){
 		## get candidate primer1
@@ -315,8 +316,18 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				
 				# specificity, product 
 				my %prod;
-				my ($pnum) = &caculate_product($p1, $p2, \%bound, $ptype, \%prod, \%primer_eff);
-				my @effs = sort{$b<=>$a} values %prod;
+				if(!exists $bound{$p2}){
+					print "Warn: $p2 No bound info!\n";
+					next;
+				}
+				&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff ); ## 1<-->2
+				$record{"pro"}{$p1}{$p2}=1;
+				&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff );## 1<-->1
+				$record{"pro"}{$p1}{$p1}=1;
+				&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff );## 2<-->2
+				$record{"pro"}{$p2}{$p2}=1;
+				my @effs = sort{$b<=>$a} values %{$prod{$tid}{$tid}};
+				my $pnum=scalar @effs;
 				my $sprod = &bound_score($pnum, join(",",@effs), $fulls_prod, "Eff");
 				
 				# score pair
@@ -325,12 +336,12 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 					# probe num on products
 					my %pdr;
 					my $pb=$condv[$i][4];
-					my ($pdnum)= &probe_bounds_on_products($pb, \%bound, \%prod, \%pdr); #my ($id, $abound, $aprod, $aresult)=@_;
-					my @pdeffs = sort{$b<=>$a} values %pdr;
+					my ($pdnum)= &probe_bounds_on_products($pb, $bound{$pb}, $prod{$tid}{$tid}, \%pdr, $PCRsize, $opt_tm+10); #my ($id, $abound, $aprod, $aresult)=@_;
+					my @pdeffs = sort{$b<=>$a} values %{$pdr{$pb}};
 					my $spdr = &bound_score($pdnum, join(",", @pdeffs), $fulls_prod, "Eff"); ## probe specificity
 					$sprod=($sprod*1+$spdr*2)/3; ## specificity weight is primer:probe=1:2
 					$stotal+=$probe{$tid}{$pb}->[0];
-					@{$probe_final{$p1.",".$p2}}=($spdr, \%pdr);
+					@{$probe_final{$p1.",".$p2}}=($spdr, $pdr{$pb});
 				}
 				$stotal +=$spos+$slend+$stmd+$sdis+$sprod;
 
@@ -340,7 +351,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 
 				#my $prob=join(",", $chr, $eff_dis, $sd, $pos, $eff1,$tm1, $mvisual1, $sd2, $pos2, $eff2, $tm2, $mvisual2);
 				my $effs_info;
-				@{$pair_info{$p1.",".$p2}}=($dis, \%prod);
+				@{$pair_info{$p1.",".$p2}}=($dis, $prod{$tid}{$tid});
 			}
 		}
 		next if(scalar keys %score_pair==0);
@@ -382,7 +393,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		my @mk=("A","B","C","D","E","F","G");
 		my $n=0;
 		foreach my $pair (@final){
-			my ($size, $aprod, $apdr)=@{$pair_info{$pair}};
+			my ($size, $aprod)=@{$pair_info{$pair}};
 			my $stotal=$score_pair{$pair};
 			my ($p1, $p2)=split /,/, $pair;
 			my ($chr, $pos3, $pos5, $strand, $dis, $seq, $len, @info)=@{$oligo_info{$p1}};
@@ -398,10 +409,11 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			}else{
 				$pname=$target."-".($n+1);
 			}
-			my $p1_new=$pname."-P1";
-			my $p2_new=$pname."-P2";
-				
-			my ($pdnum, $pdeffs, $pdinfos)=&get_highest_bound($aprod, 3);
+			my $p1_new=$pname."-1";
+			my $p2_new=$pname."-2";
+			my ($pdnum, $apdeffs, $apdinfos)=&get_highest_bound($aprod, 3);
+			my $pdeffs=join(",", @{$apdeffs});
+			my $pdinfos=join(";", @{$apdinfos});
 			my @opos=($chr, $pos5, $strand, $p1_new, $seq, $len);
 			my @oinfo=($stotal, join(",", @{$score_pair_info{$pair}}), $score."|".$score_info, @info, $pdnum, $pdeffs, $pdinfos);
 			my @opos2=($chr2, $pos52, $strand2, $p2_new, $seq2, $len2);
@@ -413,11 +425,13 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			}
 			if(defined $fprobe){#probe
 				my $pb=$condv[$i][4];
-				my $pb_new = $target."-"."B".($pbnum+1)."-Probe";
+				my $pb_new = $target."-"."B".($pbnum+1)."-P";
 				my ($pbs, $pbsi)=@{$probe{$tid}{$pb}};
 				my ($chrp, $pos3p, $pos5p, $strandp, $disp, $seqp, $lenp, @infop)=@{$oligo_info{$pb}};
 				my ($spdr, $apdr)=@{$probe_final{$pair}};
-				my ($pdpnum, $pdpeffs, $pdpinfos)=&get_highest_bound($apdr, 3);
+				my ($pdpnum, $apdpeffs, $apdpinfos)=&get_highest_bound($apdr, 3);
+				my $pdpeffs=join(",", @{$apdpeffs});
+				my $pdpinfos=join(";", @{$apdpinfos});
 				$infop[6]=0; ##end stability
 
 				my @oposp=($chrp, $pos5p, $strandp, $pb_new, $seqp, $lenp);
@@ -470,190 +484,6 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 # sub function
 # ------------------------------------------------------------------
-
-#my $prob=$dis."/".join(",", $chr, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1), $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
-sub probe_bounds_on_products{
-	my ($id, $abound, $aprod, $aresult)=@_;
-	my %bdid=%{$abound->{$id}};
-	my $n=0;
-	foreach my $prod(keys %{$aprod}){
-		my ($dis, $info)=split /\//, $prod;
-		my ($chr, $sdpos, $mv, $tm, $sdpos2, $mv2, $tm2)=split /,/, $info;
-		my ($sd, $pos)=$sdpos=~/([+-])(\d+)/;
-		my ($sd2, $pos2)=$sdpos2=~/([+-])(\d+)/;
-		my @sd = ($sd, $sd2);
-		my @pos= ($pos, $pos2);
-		next if(!exists $bdid{$chr});
-		for(my $i=0; $i<2; $i++){
-			my ($sd0, $pos0)=($sd[$i], $pos[$i]);
-			next if(!exists $bdid{$chr}{$sd0});
-			my @bds=@{$bdid{$chr}{$sd0}};
-			for(my $i=0; $i<@bds; $i++){
-				my ($pos3, $pos5, $tm, $end_match, $mvisual)=@{$bds[$i]};
-				if(($sd0 eq "+" && $pos5>$pos0-10 && $pos5<$pos0+$PCRsize) || ($sd0 eq "-" && $pos5<$pos0+10 && $pos5>$pos0-$PCRsize)){
-					my $dis=abs($pos5-$pos0);
-					my $eff=&efficiency_probe($tm, $dis);
-					my $bpd=$dis."/".join(",", $chr, $sd.$pos5,$mvisual,sprintf("%.2f",$tm));
-					$aresult->{$bpd}=$eff;
-					$n++;
-				}
-			}
-		}
-	}
-	return $n;
-}
-
-#push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual];
-sub caculate_product{
-	my ($p1, $p2, $abound, $ptype, $aprod, $aeff)=@_;
-	my %bdp1=%{$abound->{$p1}};
-	my %bdp2=%{$abound->{$p2}};
-	my $prodn=0;
-	foreach my $chr(keys %bdp1){
-		foreach my $sd(keys %{$bdp1{$chr}}){
-			my @bds=@{$bdp1{$chr}{$sd}};
-			for(my $i=0; $i<@bds; $i++){
-				my ($tm1, $end_match1, $mvisual1)=@{$bds[$i]}[2..4];
-##                Nested		 face-to-face         back-to-back
-##P1			 	  -->| 		   |-->                    |-->
-##P2min		  -->|...      		    <--|             <--|...  
-##P2max			      -->| 		       ...<--|                 ...<--|   
-				my ($ixpos, $dmin, $dmax);
-				if($ptype eq "Nested"){
-					$ixpos=0; #pos3
-					#$dmin=$rdis[-2];
-					#$dmax=$PCRsize-$min_len;
-					$dmin=-1*$PCRsize;
-					$dmax=0;
-				}elsif($ptype eq "back-to-back"){
-					$ixpos=1; #pos5
-					$dmin=-1*$PCRsize+2*$min_len; #min_len: primer min len
-					$dmax=$PCRsize;
-				}else{ ##face-to-face
-					$ixpos=1; #pos5
-					$dmin=30;
-					$dmax=$PCRsize;
-				}
-				my $pos=$bds[$i][$ixpos];
-				my ($sd2, $pmin, $pmax)=&primer2_scope($ptype,$sd,$pos,$dmin,$dmax);
-				next if(!exists $bdp2{$chr}{$sd2});
-				my @bds2=@{$bdp2{$chr}{$sd2}};
-				for(my $j=0; $j<@bds2; $j++){
-					my ($tm2, $end_match2, $mvisual2)=@{$bds2[$j]}[2..4];
-					my $pos2 = $bds2[$j][$ixpos];
-					if($pos2>=$pmin && $pos2<=$pmax){
-						##
-						my ($eff1, $eff2);
-						my $b1=join(",", $p1, $chr, $sd, $bds[$i][0]);
-						if(exists $aeff->{$b1}){
-							$eff1=$aeff->{$b1};
-						}else{
-							$eff1=&efficiency($tm1, $mvisual1);
-							$aeff->{$b1}=$eff1;
-						}
-						my $b2=join(",", $p2, $chr, $sd2, $bds2[$j][0]);
-						if(exists $aeff->{$b2}){
-							$eff2=$aeff->{$b2};
-						}else{
-							$eff2=&efficiency($tm2, $mvisual2);
-							$aeff->{$b2}=$eff2;
-						}
-						my $dis=$pos2-$pos;
-						if($ptype eq "Nested" && $sd eq "-"){## Nested dis>0 when strand is -
-							$dis=$pos-$pos2;
-						}
-						my @rsize=($rdis[-2],$rdis[-1], $dmin, $dmax);
-						my $eff_dis=&score_single($dis, 1, @rsize);
-						my $eff=$eff1*$eff2*$eff_dis;
-						my $prob=$dis."/".join(",", $chr, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1), $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
-						next if($eff<$min_eff);
-						$aprod->{$prob}=$eff;
-						$prodn++;
-					}
-				}
-			}
-		}
-	}
-	return ($prodn);
-}
-
-sub efficiency_probe{
-	my ($tm, $dis)=@_;
-	# tm eff
-	my $opt=$opt_tm+10;
-	my @etm=($opt-1, $opt+100, 45, $opt+100); 
-	my $eff_tm = &score_single($tm, 1, @etm);
-	$eff_tm = $eff_tm>0? $eff_tm: 0;
-	
-	# dis to primer 3end
-	my @dis=(1,10,-5,$PCRsize);
-	my $eff_dis=&score_single($dis, 1, @dis);
-	$eff_dis=$eff_dis>0? $eff_dis: 0;
-	return $eff_tm*$eff_dis;
-}
-
-
-
-sub efficiency{
-	my ($tm, $mvisual)=@_;
-	# tm eff
-	my @etm=($opt_tm-1, $opt_tm+100, 40, $opt_tm+100); 
-	my $eff_tm = &score_single($tm, 1, @etm);
-	$eff_tm = $eff_tm>0? $eff_tm: 0;
-
-	# mismatch pos to 3end
-	my @mis_pos;
-	&get_3end_mismatch($mvisual, \@mis_pos, $end_len);
-	my $eff_end = 1;
-	for(my $i=0; $i<@mis_pos; $i++){
-		$eff_end *= &score_single($mis_pos[$i], 1, @mis_end);
-	}
-	return $eff_tm*$eff_end;
-}
-
-sub get_3end_mismatch{
-	my ($mv, $apos, $max_end)=@_;
-	
-	$mv=~s/\^+/\*\*/; ## Del ==> 2 mismatch
-	$mv=~s/\-+/\*\*/; ## Insert ==> 2 mismatch
-	my @unit = split //, $mv;
-	my $num=0;
-	for(my $i=$#unit; $i>=0; $i--){
-		$num++;
-		if($unit[$i] eq "*" || $unit[$i] eq "#"){
-			push @{$apos}, $num;
-		}
-	}
-}
-
-
-#my ($sd, $pmin, $pmax)=&primer2_scope($type, $strand,$pos, $dis_min, $dis_max);
-sub primer2_scope{
-	my ($type, $strand, $pos, $dis_min, $dis_max)=@_;
-	my ($sd, $pmin, $pmax);
-	if($type ne "Nested"){ ## strand: opposite; Dis: from pos5
-		if($strand eq "+"){
-			$sd="-";
-			$pmin=$pos+$dis_min;
-			$pmax=$pos+$dis_max;
-		}else{
-			$sd="+";
-			$pmin=$pos-$dis_max;
-			$pmax=$pos-$dis_min;
-		}
-	}else{ ## Nested: Dis from pos3
-		$sd=$strand;
-		if($strand eq "+"){
-			$pmin=$pos+$dis_min; #dis <0
-			$pmax=$pos+$dis_max;
-		}else{
-			$pmin=$pos-$dis_max;
-			$pmax=$pos-$dis_min;
-		}
-	}
-	return ($sd, $pmin, $pmax);
-}
-
 #my @primer1 = &get_candidate($tid,$condkey[$i], $condv[$i], \%oligo);
 #@{$oligo_pos{$tid}{$strand}{$id}}=($dis, $pos3, $pos5);
 sub get_candidate{

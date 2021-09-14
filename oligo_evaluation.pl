@@ -9,6 +9,7 @@ require "$Bin/path.pm";
 require "$Bin/common.pm";
 require "$Bin/self_lib.pm";
 require "$Bin/snp.pm";
+require "$Bin/product.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -302,7 +303,7 @@ if(!defined $NoSpecificity){
 			&Run($cmd);
 		}
 		### read in sam
-		open (I, "samtools view $fa_oligo\_$dname.bam|") or die $!;
+		open (I, "samtools view $fa_oligo\_$dname.sam|") or die $!;
 		while (<I>){
 			chomp;
 			my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;
@@ -471,9 +472,15 @@ if(!defined $nohead){
 
 foreach my $id (sort {$a cmp $b} keys %evalue){
 	## get bounds info of the max tm
-	my ($bnum, $btms, $binfos)=(0,"NA","NA");
+	my $bnum=0;
+	my (@btms, @binfos);
 	if(exists $bound{$id}){## when tm too low, not exists
-		($bnum, $btms, $binfos)=&get_highest_bound($bound{$id}, 3);
+		($bnum, @btms, @binfos)=&get_highest_bound($bound{$id}, 3);
+	}
+	my ($btms, $binfos)=("NA", "NA");
+	if(scalar @btms>0){
+		$btms = join(",", @btms);
+		$binfos = join(";", @binfos);
 	}
 	print O join("\t",$id, @{$evalue{$id}}, $bnum, $btms, $binfos), "\n";
 }
