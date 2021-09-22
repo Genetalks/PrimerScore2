@@ -24,22 +24,26 @@ my $PCRsize=1000;
 my $min_eff=0.01;
 my $opt_tm = 60;
 my $opt_tm_probe = 70;
+my $max_prodn=50;
 my $range;
 my $thread = 3;
 my $etype="SinglePlex";
-my $AllEvalue;
+my ($AllEvalue, $OutAllProduct);
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
+				"ib:s"=>\$fbound,
 				"id:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
 				"tp:s"=>\$ptype,
 				"ep:s"=>\$etype,
 				"AllEvalue:s"=>\$AllEvalue,
+				"OutAllProduct:s"=>\$OutAllProduct,
 				"rd:s"=>\$range,
 				"tm:s"=>\$opt_tm,
 				"tmb:s"=>\$opt_tm_probe,
 				"sz:s"=>\$PCRsize,
+				"mp:s"=>\$max_prodn,
 				"me:s"=>\$min_eff,
 				"td:s"=>\$thread,
 				"od:s"=>\$outdir,
@@ -60,17 +64,58 @@ if($ptype eq "face-to-face"){
 }
 my ($mind, $maxd)=split /,/, $range;
 
-### evalue single oligo
-&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm 45 --NoFilter -k $fkey -od $outdir");
+
+my $fevalue;
+my $ftype;
+my $info = `tail -1 $foligo`;
+chomp $info;
+my $col = scalar(split /\s+/, $info);
+my $idx;
+if($col ==2){
+	$ftype="Common";
+	$idx = 0;
+}elsif($col==23){
+	$ftype="Evalue";
+	$idx = 3;
+	$fevalue = $foligo;
+}
+
+if(!defined $fbound){
+	### evalue single oligo
+	if($ftype ne "Common"){
+		die "Wrong file type: must be Common(2column: id seq) when not defined -ib!\n";
+	}
+	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm 45 --NoFilter -k $fkey -od $outdir");
+	$fevalue = "$outdir/$fkey.evaluation.out";
+	$fbound = "$outdir/$fkey.bound.info";
+}else{
+	if($ftype ne "Evalue"){
+		die "Wrong file type: must be Evalue type(24column) when defined -ib!\n";
+	}
+}
+
+my %id;
+open(I, $foligo) or die $!;
+while(<I>){
+	chomp;
+	next if(/^$/ || /^#/);
+	my @unit=split /\s+/, $_;
+	my $id=$unit[$idx];
+	my ($tid, $type)=$id=~/(\S+)-([12LRP])/;
+	$id{$id}=0;
+}
+close(I);
 
 ### evalue combination oligos
 my %bound;
 my %boundm;
 &SHOW_TIME("#Read in Bound file");
-open(B, "$outdir/$fkey.bound.info") or die $!;
+open(B, $fbound) or die $!;
 while(<B>){
 	chomp;
 	my ($id, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
+	next if(!exists $id{$id});
+	$id{$id}=1;
 	my ($tid, $type)=$id=~/(\S+)-([12LRP])/;
 	if(!defined $tid || !defined $type){
 		die "Wrong oligo ID $id: Primer ID must end by -L/R/1/2, eg. xxx-L, xxx-R, xxx-1, xxx-2; Probe ID must end by -P, eg. xxx-P!\n";
@@ -80,6 +125,11 @@ while(<B>){
 	push @{$bound{$type}{$tid}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $tid];
 }
 close(B);
+foreach my $id(keys %id){
+	if($id{$id}==0){
+		print "Warn: $id not exist bound info and cannot evalue its products!\n";
+	}
+}
 
 my %product;
 my %record;
@@ -96,7 +146,8 @@ foreach my $tp1(@tps){
 			foreach my $tid2(keys %{$bound{$tp2}}){
 				next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
 				next if(exists $record{"pro"}{$tid2."-".$tp2}{$tid1."-".$tp1});
-				&caculate_product($tid1, $tid1."-".$tp1, $tid2, $tid2."-".$tp2, $bound{$tp1}{$tid1}, $bound{$tp2}{$tid2}, $ptype,\%product, \%record, $PCRsize, $opt_tm, $mind, $maxd, $min_eff);
+				&caculate_product($tid1, $tid1."-".$tp1, $tid2, $tid2."-".$tp2, $bound{$tp1}{$tid1}, $bound{$tp2}{$tid2}, $ptype,\%product, \%record, $PCRsize, $opt_tm, $mind, $maxd, $min_eff, $max_prodn);
+				$record{"pro"}{$tid1."-".$tp1}{$tid2."-".$tp2}=1;
 			}
 		}
 	}
@@ -106,24 +157,27 @@ my %productp;
 if(exists $bound{"P"}){#Probe
 	foreach my $tid(keys %{$bound{"P"}}){
 		# probe num on products
-		&probe_bounds_on_products($tid."-P", $bound{"P"}{$tid}, $product{$tid}{$tid}, \%productp, $opt_tm_probe); #my ($id, $abound, $aprod, $aresult)=@_;
+		&probe_bounds_on_products($tid."-P", $bound{"P"}{$tid}, $product{$tid}{$tid}, \%productp, $PCRsize, $opt_tm_probe); #my ($id, $abound, $aprod, $aresult)=@_;
 	}
 }
 
 ### output
-open(I, "$outdir/$fkey.evaluation.out") or die $!;
+open(I, $fevalue) or die $!;
 open(O, ">$outdir/$fkey.final.evaluation") or die $!;
 print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
-open(P, ">$outdir/$fkey.final.pair.product") or die $!;
+if(defined $OutAllProduct){
+	open(P, ">$outdir/$fkey.final.pair.product") or die $!;
+}
 while(<I>){
 	chomp;
-	next if(/^$/);
-	my ($id, @info)=split /\t/, $_;
+	next if(/^$/ || /^#/);
+	my (@info)=split /\t/, $_;
+	my $id=$info[$idx];
 	my $sbinfo=pop @info;
 	my $sbeff=pop @info;
 	my $sbnum=pop @info;
 	my $sbd = $sbnum."|".$sbeff;
-	my ($tid,$tp)=$id=~/(\S+)-([12LRP])/;
+	my ($tid,$tp)=$id=~/(\S+)-([12LRP])$/;
 	my ($pnum, $apeff, $apinfos);
 	if($tp ne "P"){
 		($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000);
@@ -139,33 +193,40 @@ while(<I>){
 		$pinfos = join(";", @{$apinfos}[0..2]);
 	}
 	print O join("\t", $id, @info, $sbd, $pnum, $peffs, $pinfos),"\n";
-	print P ">$id\t$pnum\n";
-	my @peff=@{$apeff};
-	my @pinfo=@{$apinfos};
-	for(my $i=0; $i<@{$apeff}; $i++){
-		print P join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+	if(defined $OutAllProduct){
+		if($tp!~/[2R]/){
+			print P ">$id\t$pnum\n";
+			my @peff=@{$apeff};
+			my @pinfo=@{$apinfos};
+			for(my $i=0; $i<@{$apeff}; $i++){
+				print P join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+			}
+		}
 	}
 }
 close(I);
 close(O);
-close(P);
+if(defined $OutAllProduct){
+	close(P);
+}
 
-
-open(C, ">$outdir/$fkey.final.cross.product") or die $!;
-foreach my $tid1(keys %product){
-	foreach my $tid2(keys %{$product{$tid1}}){
-		next if($tid1 eq $tid2);
-		
-		my ($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid1}{$tid2}, 1000000);
-		print C ">$tid1\t$tid2\t$pnum\n";
-		my @peff=@{$apeff};
-		my @pinfo=@{$apinfos};
-		for(my $i=0; $i<@{$apeff}; $i++){
-			print C join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+if($etype eq "MultiPlex"){
+	open(C, ">$outdir/$fkey.final.cross.product") or die $!;
+	foreach my $tid1(keys %product){
+		foreach my $tid2(keys %{$product{$tid1}}){
+			next if($tid1 eq $tid2);
+			
+			my ($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid1}{$tid2}, 1000000);
+			print C ">$tid1\t$tid2\t$pnum\n";
+			my @peff=@{$apeff};
+			my @pinfo=@{$apinfos};
+			for(my $i=0; $i<@{$apeff}; $i++){
+				print C join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+			}
 		}
 	}
+	close(C);
 }
-close(C);
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 #######################################################################################
@@ -179,6 +240,21 @@ sub USAGE {#
 Program:
 Version: $version
 Contact:zeng huaping<huaping.zeng\@genetalks.com> 
+
+	-io: oligo file can be two format as following, ID must like: xxx-L, xxx-R, xxx-P, xxx-1, xxx-2.
+		Common Format:
+		ID1-1   AAAAAAAAAAAA
+		ID1-P   AAAAAAAAAAAAAAAA
+		ID1-2   AAAAAAAAAAAA
+		ID2-1   AAAAAAAAAAAA
+		ID2-P   AAAAAAAAAAAAAAAA
+		ID2-2   AAAAAAAAAAAA
+
+		Evalue Format: xxx.final.result
+		#Chr    Start   Strand  ID      Seq     Len     Dis2Target      ProductSize     ScoreTotal      ScorePair       ScoreOligo      Tm      GC      Hairpin END_Dimer       ANY_Dimer       EndANum EndStability    SNP     Poly    OligoBound      BoundNum        HighestTm       HighestInfo
+		chr1    100379124       -       rs113994132-B1-1        TTTTTCTGTTCCACTCATCATATGAGA     27      0       162     286     25,11,10,20,30  41|3,10,0,7,10,-5,5,0   58.90   0.333   55.89   7.91    20.73   1       -6.7    0D1:TTTTTCTGTTCCACTCATCATATGAGE 22T5    10|58.84,49.32,48.69    1       1.00    162/chr1,P1,-100379124,|||||||||||||||||||||||||||,58.84,P2,+100378962,|||||||||||||||||||||||||||||,59.58
+		chr1    100379097       -       rs113994132-B1-P        CCTTTATAGCCTTTCCTGAAAAATGACATAAGACATGGTA        40      40      0       286     30      63.5|1,3,10,5,10,10,3,7 66.39   0.350   30.67   -18.20  -6.10   2       0       NA      17A5,26T3,35T3  15|65.97,50.26,49.55    1       0.86    27/chr1,-100379097,||||||||||||||||||||||||||||||||||||||||,65.97:chr1,P1,-100379124,|||||||||||||||||||||||||||,58.84,P2,+100378962,|||||||||||||||||||||||||||||,59.58
+
 
 	-rd: distance range between primer pair(P2-P1)
 
@@ -199,12 +275,17 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 Usage:
   Options:
-  -io        <file>   Input oligo file(ID must like: xxx-L, xxx-R, xxx-P, xxx-1, xxx-2), forced
+  -io        <file>   Input oligo file, Common or Evalue format(as shown in the above), forced
+                      when -ib is  given, must be Evalue format.
+                      when -ib not given, must be Common format.
+  -ib        <file>   Input oligo's bounds file, evalue oligos when not given, optional
   -id        <files>  Input database files separated by "," to evalue specificity, [$fdatabases]
   -k         <str>    Key of output file, forced
   -tp        <str>    primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
   -ep        <str>    evalue type, "SinglePlex", "MultiPlex", ["SinglePlex"]
+  -mp        <int>    maximum products number to be caculated, to reduce running time. [$max_prodn]
   --AllEvalue         All Evalue, not only L<->R, contain L<->L and R<->R.
+  --OutAllProduct    Output All Product Info.
   -td        <int>    thread in bwa, [$thread]
   -od        <dir>	  Dir of output file, default ./
 

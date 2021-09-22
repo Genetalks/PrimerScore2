@@ -155,7 +155,7 @@ while(<I>){
 			my $f="$dir/$fkey.oligo.list_$fn";
 			my $fname = basename($f);
 			my $olens=join(",", $min_len, $max_len, $scale_len); 
-			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead --KillBwaTimeout -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
+			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
 			if($fr eq "FR"){
 				$cmd .= " --Revcom";
 			}

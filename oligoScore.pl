@@ -40,7 +40,7 @@ my $pos_range; ## pos range(best_min, best_max, min, max)
 my $type = "face-to-face";
 my $ctype = "Single";
 my $onum = 3;
-my ($dimer_check, $homology_check, $SNP_check);
+my ($homology_check, $multiplex_check);
 my $probe;
 my ($regions, $regions_rev);
 my $ftype;
@@ -53,8 +53,9 @@ GetOptions(
 				"is:s"=>\$fref_snp,
 				"id:s"=>\$fdatabases,
 				"p:s"=>\$fkey,
-				"dimer_check:s"=>\$dimer_check,
-				"homology_check:s"=>\$homology_check,
+				"Probe:s"=>\$probe,
+				"MultiPlex_check:s"=>\$multiplex_check,
+				"Homology_check:s"=>\$homology_check,
 				"NoFilter:s"=>\$NoFilter,
 
 				## oligo design
@@ -72,7 +73,6 @@ GetOptions(
 
 				"type:s"=>\$type,
 				"ctype:s"=>\$ctype,
-				"probe:s"=>\$probe,
 				"ds:s"=>\$dis_aver,
 				"rf:s"=>\$rfloat,
 				"on:s"=>\$onum,
@@ -248,8 +248,9 @@ if($step==3){
 
 if($step==4){
 	### primers dimer check
-	if(defined $dimer_check){
-		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey -od $outdir/dimer_check", $sh);
+	if(defined $multiplex_check){
+		&Run("perl $Bin/primer_evaluation.pl -io $outdir/$fkey.final.result -ib $outdir/$fkey.final.bound.info -k $fkey -ep MultiPlex --AllEvalue -od $outdir");
+		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey -od $outdir", $sh);
 	}
 
 	$step++;
@@ -411,10 +412,10 @@ Usage:
   -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
   -id       <files>   Input database files separated by "," to check specificity, [$fdatabases]
   -p         <str>    prefix of output file, forced
-  --probe             Design probe when -type "face-to-face", optional
+  --Probe             Design probe when -type "face-to-face", optional
   --NoFilter          Not filter any oligos
-  --homology_check    check homologous sequence of template sequence when design for NGS primers, optional
-  --dimer_check       check cross dimers among selected primers, optional
+  --Homology_check    Check homologous sequence of template sequence when design for NGS primers, optional
+  --MultiPlex_check   Check cross products and cross dimers among final primers, optional
 
   ### design parameters
   -opttm    <int>     optimal tm of primer, [$opt_tm]

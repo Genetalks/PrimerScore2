@@ -23,7 +23,7 @@ our $BWA;
 # GetOptions
 # ------------------------------------------------------------------
 my ($foligo, $fkey,$detail,$outdir);
-my ($NoSpecificity, $KillBwaTimeout, $NoFilter);
+my ($NoSpecificity,$NoFilter);
 my $min_tm_spec = 45; #when caculate specificity
 my $nohead;
 my $thread = 1;
@@ -46,7 +46,6 @@ GetOptions(
 				"Revcom:s"=>\$revcom,
 				"Probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
-				"KillBwaTimeout:s"=>\$KillBwaTimeout,
 				"maxtime:s"=>\$max_time,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"nohead:s"=>\$nohead,
@@ -94,9 +93,7 @@ my $ntthal = "$PATH_PRIMER3/src/ntthal -mv $mv -dv $dv -n $dNTP -d $dna";
 
 ## creat oligo.fa
 open(PN, ">$outdir/$fkey.oligo.fa") or die $!;
-if(!defined $NoFilter){
-	open(F, ">$outdir/$fkey.filter.list") or die $!;
-}
+open(F, ">$outdir/$fkey.filter.list") or die $!;
 open(L, ">$outdir/$fkey.oligo.list") or die $!;
 my %evalue;
 my %map;
@@ -125,7 +122,7 @@ while (<P>){
 	if(defined $revcom){
 		$oligo_seq0r=&revcom($oligo_seq0);
 		$oligo_seq_snp0r=&revcom($oligo_seq_snp0);
-		my $id0newR=defined $olens? $id0."_F_0": $id0;
+		my $id0newR=defined $olens? $id0."_R_0": $id0;
 		push @{$olen_oligo{$id0}}, [$id0newR, "-", 0, $oligo_seq0r, $oligo_seq_snp0r];
 	}
 	if(defined $olens){
@@ -278,29 +275,26 @@ if(!defined $NoSpecificity){
 		}
 		my $dname = basename($fdatabase);
 		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
-		if(defined $KillBwaTimeout){
-			&Run_monitor_timeout($max_time, $cmd);
-			open(I, "$fa_oligo\_$dname.sam.log") or die $!;
-			my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
-			chomp $ret;
-			if($ret eq "Killed"){## time out
-				open(I, $fa_oligo) or die $!;
-				$/=">";
-				while(<I>){
-					chomp;
-					next if(/^$/);
-					my ($id0, $seq)=split /\n/, $_; 
-					for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
-						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
-						print F join("\t",  $idn, $pseqn, "BwaTimeout", $max_time."s"),"\n";
-					}
+		&Run_monitor_timeout($max_time, $cmd);
+		open(I, "$fa_oligo\_$dname.sam.log") or die $!;
+		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
+		chomp $ret;
+		if($ret eq "Killed"){## time out
+			open(I, $fa_oligo) or die $!;
+			$/=">";
+			while(<I>){
+				chomp;
+				next if(/^$/);
+				my ($id0, $seq)=split /\n/, $_; 
+				for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
+					my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
+					print F join("\t",  $idn, $pseqn, "BwaTimeout", $max_time."s"),"\n";
 				}
-				close(I);
-				exit(1);
-				$/="\n";
 			}
-		}else{
-			&Run($cmd);
+			close(I);
+			print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
+			exit(0); 
+			$/="\n";
 		}
 		### read in sam
 		open (I, "samtools view $fa_oligo\_$dname.sam|") or die $!;
@@ -459,9 +453,7 @@ if(!defined $NoSpecificity){
 	}
 }
 
-if(!defined $NoFilter){
-	close(F);
-}
+close(F);
 
 #&SHSHOW_TIME("Output:");
 ### output
@@ -473,14 +465,14 @@ if(!defined $nohead){
 foreach my $id (sort {$a cmp $b} keys %evalue){
 	## get bounds info of the max tm
 	my $bnum=0;
-	my (@btms, @binfos);
+	my ($abtms, $abinfos);
 	if(exists $bound{$id}){## when tm too low, not exists
-		($bnum, @btms, @binfos)=&get_highest_bound($bound{$id}, 3);
+		($bnum, $abtms, $abinfos)=&get_highest_bound($bound{$id}, 3);
 	}
-	my ($btms, $binfos)=("NA", "NA");
-	if(scalar @btms>0){
-		$btms = join(",", @btms);
-		$binfos = join(";", @binfos);
+	my ($btms, $binfos)=("NA", "NA"); ## all bound tm < min_sepc_tm
+	if(defined $abtms){
+		$btms = join(",", @{$abtms});
+		$binfos = join(";", @{$abinfos});
 	}
 	print O join("\t",$id, @{$evalue{$id}}, $bnum, $btms, $binfos), "\n";
 }
@@ -594,10 +586,9 @@ Usage:
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
+  -maxtime  <int>       max bwa running time, killed when time out, [$max_time]
 
   --NoFilter             Not filter any oligos
-  --KillBwaTimeout       Kill bwa when running time is out of time
-   -maxtime  <int>       max bwa running time when --KillBwaTimeout, [$max_time]
   --NoSpecificity        Not evalue specificity
   --Detail              Output Detail Info to xxx.evaluation.detail, optional
   -od        <dir>      Dir of output file, default ./

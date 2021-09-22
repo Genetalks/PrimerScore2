@@ -43,7 +43,7 @@ while(<I>){
 close(I);
 
 
-open(O,">$outdir/$fkey.dimer.check")or die $!;
+open(O,">$outdir/$fkey.cross.dimer")or die $!;
 for(my $j=0; $j<@group; $j++){
 	my $primer_seq = $seq{$group[$j]};
 	print O ">",$group[$j],"\t",$primer_seq,"\n";

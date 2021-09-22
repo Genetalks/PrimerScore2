@@ -3,7 +3,6 @@ require "$Bin/math.pm";
 
 my $end_len=10;
 my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
-my $Max_prodn=50;
 
 #my $prob=$dis."/".join(",", $chr, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1), $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
 sub probe_bounds_on_products{
@@ -37,7 +36,7 @@ sub probe_bounds_on_products{
 
 #push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual];
 sub caculate_product{
-	my ($tid1, $p1, $tid2, $p2, $abound1, $abound2, $ptype, $aprod, $arecord, $PCRsize, $opt_tm, $mind, $maxd, $min_eff)=@_;
+	my ($tid1, $p1, $tid2, $p2, $abound1, $abound2, $ptype, $aprod, $arecord, $PCRsize, $opt_tm, $mind, $maxd, $min_eff, $Max_prodn)=@_;
 	my %bdp1=%{$abound1};
 	my %bdp2=%{$abound2};
 	my $prodn=0;

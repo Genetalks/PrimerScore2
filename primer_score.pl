@@ -34,6 +34,7 @@ my $max_probe_num=6;
 my $PCRsize=1000;
 my $NoFilter;
 my $min_eff=0.01;
+my $max_prodn=50;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -55,6 +56,7 @@ GetOptions(
 				"ds:s"=>\$dis,
 				"rf:s"=>\$rfloat,
 				"mine:s"=>\$min_eff,
+				"maxp:s"=>\$max_prodn,
 				"od:s"=>\$outdir,
 				) or &USAGE;
 &USAGE unless ($foligo and $fkey);
@@ -174,7 +176,7 @@ while(<B>){
 	next if($end_match<$min_end_match);
 	my $len = length $seq;
 	my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
-	push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual];
+	push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $seq];
 }
 close(B);
 
@@ -218,6 +220,7 @@ push @title, ("Tm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP
 print O join("\t", @title),"\n";
 
 my %success;
+my %output;
 &SHOW_TIME("#Primer Pair Score and Select");
 foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 	#primer conditions
@@ -320,11 +323,11 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 					print "Warn: $p2 No bound info!\n";
 					next;
 				}
-				&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff ); ## 1<-->2
+				&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
 				$record{"pro"}{$p1}{$p2}=1;
-				&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff );## 1<-->1
+				&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
 				$record{"pro"}{$p1}{$p1}=1;
-				&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff );## 2<-->2
+				&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
 				$record{"pro"}{$p2}{$p2}=1;
 				my @effs = sort{$b<=>$a} values %{$prod{$tid}{$tid}};
 				my $pnum=scalar @effs;
@@ -383,7 +386,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				push @final, $pair_sort[$i];
 				$record{$d1.",".$d2}=1;
 				$num++;
-				last if($num==$onum);
+				last if($num==$onum || defined $fprobe); ## probe: only one pair for one probe
 			}
 		}else{
 			@final = &average($dis, $rfloat, \%pos_pair,\%score_pair,"UP"); ##my ($len, $dis, $rfloat, $apos, $ascore,$select)
@@ -404,13 +407,17 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			my $pname;
 			if($ctype eq "Single"){
 				my $UD=$strand eq "+"? "U":"D";
-				$UD=defined $fprobe? "B".($pbnum+1): $UD; ##Probe i
 				$pname=$target."-".$UD."-".$mk[$n];
+				if(defined $fprobe){
+					$pname=$target."-"."B".($pbnum+1);
+				}
 			}else{
 				$pname=$target."-".($n+1);
 			}
 			my $p1_new=$pname."-1";
 			my $p2_new=$pname."-2";
+			$output{$p1_new}=$p1;
+			$output{$p2_new}=$p2;
 			my ($pdnum, $apdeffs, $apdinfos)=&get_highest_bound($aprod, 3);
 			my $pdeffs=join(",", @{$apdeffs});
 			my $pdinfos=join(";", @{$apdinfos});
@@ -426,6 +433,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			if(defined $fprobe){#probe
 				my $pb=$condv[$i][4];
 				my $pb_new = $target."-"."B".($pbnum+1)."-P";
+				$output{$pb_new}=$pb;
 				my ($pbs, $pbsi)=@{$probe{$tid}{$pb}};
 				my ($chrp, $pos3p, $pos5p, $strandp, $disp, $seqp, $lenp, @infop)=@{$oligo_info{$pb}};
 				my ($spdr, $apdr)=@{$probe_final{$pair}};
@@ -461,6 +469,21 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 }
 close(O);
 
+## output final bound info
+open(B, ">$outdir/$fkey.final.bound.info") or die $!;
+foreach my $idn(sort {$a cmp $b} keys %output){
+	my $id=$output{$idn};
+	foreach my $chr(sort {$a cmp $b} keys %{$bound{$id}}){
+		foreach my $strand (sort {$a cmp $b} keys %{$bound{$id}{$chr}}){
+			my @info = @{$bound{$id}{$chr}{$strand}};
+			for(my $i=0; $i<@info; $i++){
+				my ($pos3, $pos5, $tm, $end_match, $mvisual, $seq)=@{$info[$i]};
+				print B join("\t", $idn, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual),"\n";
+			}
+		}
+	}
+}
+close(B);
 
 ## check failed target
 open(O, ">$outdir/$fkey.design.status") or die $!;
@@ -599,6 +622,7 @@ Usage:
 	 -on  <int>     output num when -ct is "Single",[$onum]
 	 -pn  <int>     output probe num when design probe,[$max_probe_num]
   -mine      <float> min efficiency to consider a product, [$min_eff]
+  -maxp      <int>   maximum products number to be caculated, to reduce running time. [$max_prodn]
 
   -od <dir>	   Dir of output file, default ./
   -h		   Help
