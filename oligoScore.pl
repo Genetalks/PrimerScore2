@@ -146,13 +146,13 @@ if($head=~/^>/){
 			die "Wrong input file!\n";
 		}
 	}elsif($cnum==3 || $cnum==4){
-		if($unit[1]=~/^\d+$/ && $unit[2]=~/^\d+$/){
+		if($unit[1]=~/^\d+$/ && $unit[2]=~/^\d+$/ && $unit[2]-$unit[1]>80){
 			$ftype = "Bed";
 		}else{
 			die "Wrong input file!\n";
 		}
-	}elsif($cnum==5){
-		if($unit[1]=~/^\d+$/){ ## SNP
+	}elsif($cnum==5 || $cnum==8){## vcffile is 8col
+		if($unit[1]=~/^\d+$/ && $unit[2]!~/^\d+$/){ ## SNP
 			$ftype = "SNP";
 		}else{
 			die "Wrong input file!\n";
