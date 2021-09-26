@@ -17,8 +17,8 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 my ($foligo,$fbound,$fprobe,$fkey,$outdir);
-our $REF_HG19;
-my $fdatabases = $REF_HG19;
+our $REF_GRCh37;
+my $fdatabases = $REF_GRCh37;
 my $ptype = "face-to-face";
 my $PCRsize=1000;
 my $min_eff=0.01;
@@ -74,7 +74,7 @@ my $idx;
 if($col ==2){
 	$ftype="Common";
 	$idx = 0;
-}elsif($col==23){
+}elsif($col==24){
 	$ftype="Evalue";
 	$idx = 3;
 	$fevalue = $foligo;
@@ -85,7 +85,7 @@ if(!defined $fbound){
 	if($ftype ne "Common"){
 		die "Wrong file type: must be Common(2column: id seq) when not defined -ib!\n";
 	}
-	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm 45 --NoFilter -k $fkey -od $outdir");
+	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm 45 --NoFilter -k $fkey -maxtime 100000000 -od $outdir");
 	$fevalue = "$outdir/$fkey.evaluation.out";
 	$fbound = "$outdir/$fkey.bound.info";
 }else{
@@ -163,8 +163,10 @@ if(exists $bound{"P"}){#Probe
 
 ### output
 open(I, $fevalue) or die $!;
-open(O, ">$outdir/$fkey.final.evaluation") or die $!;
-print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
+if($ftype eq "Common"){
+	open(O, ">$outdir/$fkey.final.result") or die $!;
+	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
+}
 if(defined $OutAllProduct){
 	open(P, ">$outdir/$fkey.final.pair.product") or die $!;
 }
@@ -192,10 +194,16 @@ while(<I>){
 		$peffs = join(",", @{$apeff}[0..2]);
 		$pinfos = join(";", @{$apinfos}[0..2]);
 	}
-	print O join("\t", $id, @info, $sbd, $pnum, $peffs, $pinfos),"\n";
+	if($ftype eq "Common"){
+		print O join("\t", @info, $sbd, $pnum, $peffs, $pinfos),"\n";
+	}
 	if(defined $OutAllProduct){
 		if($tp!~/[2R]/){
-			print P ">$id\t$pnum\n";
+			if($tp eq "P"){
+				print P ">$id\t$pnum\n";
+			}else{
+				print P ">$tid\t$pnum\n";
+			}
 			my @peff=@{$apeff};
 			my @pinfo=@{$apinfos};
 			for(my $i=0; $i<@{$apeff}; $i++){
@@ -205,7 +213,9 @@ while(<I>){
 	}
 }
 close(I);
-close(O);
+if($ftype eq "Common"){
+	close(O);
+}
 if(defined $OutAllProduct){
 	close(P);
 }

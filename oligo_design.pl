@@ -22,8 +22,8 @@ my $stm = 45;
 my $opt_tm=60;
 my $opt_tm_probe=70;
 our $PATH_PRIMER3;
-our $REF_HG19;
-my $fdatabases = $REF_HG19;
+our $REF_GRCh37;
+my $fdatabases = $REF_GRCh37;
 my $probe;
 my $ptype = "face-to-face";
 my $regions; ## regions: start, end, scale

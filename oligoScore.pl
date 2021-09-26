@@ -15,11 +15,11 @@ require "$Bin/math.pm";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-our ($VCF_dbSNP, $REF_HG19, $REF_HG19_SNP, $BLAT);
+our ($VCF_dbSNP, $REF_GRCh37, $REF_GRCh37_SNP, $REF_GRCh38, $REF_GRCh38_SNP, $BLAT);
 my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer);
-my $fref = $REF_HG19;
+my $fref = $REF_GRCh37;
 my $fref_snp;
-my $fdatabases = $REF_HG19;
+my $fdatabases = $REF_GRCh37;
 my $step = 1;
 my $para_num = 10;
 my $stm = 45;
@@ -31,6 +31,8 @@ my $min_len_probe=18;
 my $max_len_probe=36;
 my $scale_len=1;
 my $pcr_size=1000;
+my $min_eff=0.01;
+my $max_prodn=50;
 my $pnum = 20; ## position num for one oligo, its candidate oligos num is roughly: pnum*(maxl-minl)/scalel.
 my $choose_num = 10; ## for a primer, at least $choose_num primers can be selected as its pair with the best dis.
 my $rfloat = 0.2;
@@ -38,23 +40,22 @@ my $dis_aver = 500;
 my $dis_range="100,150,70,200"; ##distance between oligos range(best_min, best_max, min, max), that is product size range when face-to-face
 my $pos_range; ## pos range(best_min, best_max, min, max)
 my $type = "face-to-face";
+my $plex = "SinglePlex";
 my $ctype = "Single";
 my $onum = 3;
 my ($homology_check, $multiplex_check);
 my $probe;
 my ($regions, $regions_rev);
-my $ftype;
+my $thread;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
-				"ft:s"=>\$ftype,
 				"ComeFromRefer:s"=>\$ComeFromRefer,
 				"ir:s"=>\$fref,
 				"is:s"=>\$fref_snp,
 				"id:s"=>\$fdatabases,
 				"p:s"=>\$fkey,
 				"Probe:s"=>\$probe,
-				"MultiPlex_check:s"=>\$multiplex_check,
 				"Homology_check:s"=>\$homology_check,
 				"NoFilter:s"=>\$NoFilter,
 
@@ -72,6 +73,7 @@ GetOptions(
 				"rpos:s"=>\$pos_range,
 
 				"type:s"=>\$type,
+				"ptype:s"=>\$plex,
 				"ctype:s"=>\$ctype,
 				"ds:s"=>\$dis_aver,
 				"rf:s"=>\$rfloat,
@@ -80,11 +82,15 @@ GetOptions(
 				"stm:s"=>\$stm,
 				"pnum:s"=>\$pnum,
 				"size:s"=>\$pcr_size,
+				"meff:s"=>\$min_eff,
+				"mpro:s"=>\$max_prodn,
 				"para:s"=>\$para_num,
+				"thrd:s"=>\$thread,
 				"step:s"=>\$step,
 				"od:s"=>\$outdir,
 				) or &USAGE;
 &USAGE unless ($ftarget and $fdatabases and $fkey);
+
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
@@ -96,11 +102,22 @@ for(my $i=0; $i<@fdb; $i++){
 }
 $fdatabases=join(",", @fdb);
 
+if(!defined $fref_snp){
+	my $fref_name = basename($fref);
+	if($fref_name eq basename($REF_GRCh37)){
+		$fref_snp = $REF_GRCh37_SNP;
+	}elsif($fref_name eq basename($REF_GRCh38)){
+		$fref_snp = $REF_GRCh38_SNP;
+	}
+}
+
+
 my ($score_dis, $score_pos)=(10,10);
 my $sh;
 open($sh, ">$outdir/$fkey.sh") or die $!;
 
-### get template file
+### get file type
+my $ftype;
 my ($ftemplate, $ftemplate_snp);
 my $head = `head -1 $ftarget`;
 chomp $head;
@@ -113,21 +130,42 @@ if($head=~/^>/){
 }else{
 	my @unit = split /\s+/, $head;
 	my $cnum = scalar @unit;
-	if($cnum == 1 && $head=~/rs\d+/){
-		&Run("perl $Bin/extract_by_id.pl -i $VCF_dbSNP -l $ftarget -k $fkey.SNP -c 2 -od $outdir", $sh);
-		&Run("less $outdir/$fkey.SNP.extract|awk '{print \"chr\"\$_}' > $outdir/$fkey.target.txt", $sh);
-		$ftarget = "$outdir/$fkey.target.txt";
-		$ftype = "SNP";
-	}
-
-	if(!defined $ftype){
-		die "Please designate -ft(targe file type)!\n";
+	if($cnum == 1){
+		if($head=~/rs\d+/){
+			&Run("perl $Bin/extract_by_id.pl -i $VCF_dbSNP -l $ftarget -k $fkey.SNP -c 2 -od $outdir", $sh);
+			&Run("less $outdir/$fkey.SNP.extract|awk '{print \"chr\"\$_}' > $outdir/$fkey.target.txt", $sh);
+			$ftarget = "$outdir/$fkey.target.txt";
+			$ftype = "SNP";
+		}else{
+			die "Wrong input file!\n";	
+		}
+	}elsif($cnum==2){
+		if($unit[1]=~/^[a-zA-Z\d]+$/){
+			$ftype = "Primer";
+		}else{
+			die "Wrong input file!\n";
+		}
+	}elsif($cnum==3 || $cnum==4){
+		if($unit[1]=~/^\d+$/ && $unit[2]=~/^\d+$/){
+			$ftype = "Bed";
+		}else{
+			die "Wrong input file!\n";
+		}
+	}elsif($cnum==5){
+		if($unit[1]=~/^\d+$/){ ## SNP
+			$ftype = "SNP";
+		}else{
+			die "Wrong input file!\n";
+		}
+	}else{
+		die "Wrong input file!\n";
 	}
 }
 
+### get template file
+my @rdiss = split /,/, $dis_range;
 if($ftype eq "SNP"){
 	my $extend_len;
-	my @rdiss = split /,/, $dis_range;
 	$extend_len = (int(($rdiss[-1]+$max_len+10)/100)+1) * 100;
 	
 	if(!defined $pos_range){
@@ -172,6 +210,11 @@ if($ftype eq "SNP"){
 	}
 	close(T);
 	close(TS);
+}elsif($ftype eq "Primer"){
+	my $range = join(",", $rdiss[-2], $rdiss[-1]);
+	$thread=defined $thread? $thread: 10;
+	&Run("perl $Bin/primer_evaluation.pl -io $ftarget -id $fdatabases -k $fkey -tp $type -ep $plex --AllEvalue --OutAllProduct -td $thread -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd $range -me $min_eff -mp $max_prodn -od $outdir", $sh);
+	exit();
 }
 
 
@@ -227,7 +270,7 @@ if($step==3){
 	
 	### primer score and select
 	my $score_dis_range = $score_dis.",".$dis_range;
-	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd=$dis_range -ct $ctype -od $outdir";
+	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd=$dis_range -ct $ctype -mine $min_eff -maxp $max_prodn -od $outdir";
 	if(defined $NoFilter){
 		$cmd .= " --NoFilter";
 	}
@@ -247,10 +290,11 @@ if($step==3){
 }
 
 if($step==4){
-	### primers dimer check
-	if(defined $multiplex_check){
-		&Run("perl $Bin/primer_evaluation.pl -io $outdir/$fkey.final.result -ib $outdir/$fkey.final.bound.info -k $fkey -ep MultiPlex --AllEvalue -od $outdir");
-		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey -od $outdir", $sh);
+	### primers multiplex check
+	if($plex eq "MultiPlex"){
+		my $range = join(",", $rdiss[-2], $rdiss[-1]);
+		&Run("perl $Bin/primer_evaluation.pl -io $outdir/$fkey.final.result -ib $outdir/$fkey.final.bound.info -k $fkey -tp $type -ep MultiPlex -mp $max_prodn -AllEvalue -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd=$range -me $min_eff -od $outdir");
+		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey.final -od $outdir", $sh);
 	}
 
 	$step++;
@@ -407,7 +451,6 @@ Usage:
   Options:
   -it        <file>   Input target file(SNP file or template fasta file with no non-ATCGatcg), forced
    --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
-   -ft       <str>    file type, SNP or Fasta or Bed, optional
   -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
   -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
   -id       <files>   Input database files separated by "," to check specificity, [$fdatabases]
@@ -415,9 +458,8 @@ Usage:
   --Probe             Design probe when -type "face-to-face", optional
   --NoFilter          Not filter any oligos
   --Homology_check    Check homologous sequence of template sequence when design for NGS primers, optional
-  --MultiPlex_check   Check cross products and cross dimers among final primers, optional
 
-  ### design parameters
+  ### oligo parameters
   -opttm    <int>     optimal tm of primer, [$opt_tm]
   -opttmp   <int>     optimal tm of probe, [$opt_tm_probe]
   -minl     <int>     minimum length of primer, [$min_len]
@@ -429,22 +471,29 @@ Usage:
   -rdis     <str>     distance range between pair primers, that is product size range when -type is "face-to-face", (opt_min, opt_max, min, max) separted by ",", [$dis_range]
   -regions  <str>     interested regions of candidate primers walking on template, format is "start,end,scale,fr,start2,end2,scale2,fr2...", if not given, will caculate automatically, fr:F/R/FR, optional
 
-  ### 
+  ### design parameters
   -type   <str>     primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
+  -ptype  <str>     plex type, "SinglePlex" or "MultiPlex", [$plex]
   -ctype  <str>     primer covered type, "Single" or "Full-covered", ["Single"]
      -ds  <int>     average distance between adjacent primers when -ctype "Full-covered", [500]
      -rf  <float>   ratio of distance between adjacent primers can float when -ctype "Full-covered", [0.2]
      -on  <int>     output num when -ctype "Single",[$onum]
+  -pnum   <int>     position num of candidate oligos, [$pnum]
+ 
+  ### specificity parameters
+  -stm    <int>     min tm to be High_tm in specifity, [$stm]
+  -size   <int>     max PCR size, [$pcr_size]
+  -mpro   <int>     maximum products number to be caculated, to reduce running time. [$max_prodn]
+  -meff   <float>   min efficiency to consider a product, [$min_eff]
 
-  -stm    <int>      min tm to be High_tm in specifity, [$stm]
-  -pnum   <int>      position num of candidate oligos, [$pnum]
-  -size   <int>      max PCR size, [$pcr_size]
+  ### run parameters
   -para   <int>      parallel num, [$para_num]
+  -thrd   <int>      thread in bwa, [$thread]
   -step   <int>      step, [$step]
                      1: homology check
-					 2: primer pair design 
-					 3: primer pair specificity re-evalue, cross-dimer check
-					 4: probe design
+                     2: creat and evalue candidate oligos 
+                     3: score for probe and primer
+                     4: multiplex check
   -od     <dir>      Dir of output file, default ./
   -h                Help
 

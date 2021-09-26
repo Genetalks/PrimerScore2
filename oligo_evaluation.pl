@@ -16,7 +16,7 @@ my $version="1.0.0";
 #######################################################################################
 
 our $PATH_PRIMER3;
-our $REF_HG19;
+our $REF_GRCh37;
 our $SAMTOOLS;
 our $BWA;
 # ------------------------------------------------------------------
@@ -27,7 +27,7 @@ my ($NoSpecificity,$NoFilter);
 my $min_tm_spec = 45; #when caculate specificity
 my $nohead;
 my $thread = 1;
-my $fdatabases = $REF_HG19;
+my $fdatabases = $REF_GRCh37;
 my $len_map=20; ##bwa result is the most when 20bp
 my $opt_tm = 60;
 my $opt_tm_probe=70;
@@ -586,7 +586,7 @@ Usage:
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
-  -maxtime  <int>       max bwa running time, killed when time out, [$max_time]
+  -maxtime  <int>       max bwa running time, killed when time out, not killed please set 100000000, [$max_time]
 
   --NoFilter             Not filter any oligos
   --NoSpecificity        Not evalue specificity

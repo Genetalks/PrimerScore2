@@ -13,11 +13,11 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-our $REF_HG19;
+our $REF_GRCh37;
 our $SAMTOOLS;
 my ($fIn,$fkey,$outdir);
 my $ftemplate;
-my $fref = $REF_HG19;
+my $fref = $REF_GRCh37;
 my $min_ratio = 0.8;
 my $max_gap_num = 3;
 my $max_gap_len = 20;

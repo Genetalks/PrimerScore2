@@ -15,13 +15,13 @@ my $version="2.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-our $REF_HG19;
-our $REF_HG19_SNP;
+our $REF_GRCh37;
+our $REF_GRCh37_SNP;
 our $SAMTOOLS;
 my ($ftarget,$fkey,$outdir);
 my $Max_Dis = 20;
 my $vcf;
-my $fref = $REF_HG19;
+my $fref = $REF_GRCh37;
 my $fref_snp;
 my $Extend = 200;
 my $UD_devide;
