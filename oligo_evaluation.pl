@@ -13,7 +13,7 @@ require "$Bin/product.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
-#######################################################################################
+######################################################################################
 
 our $PATH_PRIMER3;
 our $REF_GRCh37;
@@ -297,7 +297,7 @@ if(!defined $NoSpecificity){
 			$/="\n";
 		}
 		### read in sam
-		open (I, "samtools view $fa_oligo\_$dname.sam|") or die $!;
+		open (I, "$SAMTOOLS view $fa_oligo\_$dname.sam|") or die $!;
 		while (<I>){
 			chomp;
 			my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;

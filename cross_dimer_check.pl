@@ -113,7 +113,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 Usage:
   Options:
-  -i  <file>   Input primer file, forced
+  -i  <file>   Input primer info file, forced
   -k  <str>	   Key of output file, forced
   -od <dir>	Dir of output file, default ./
   -h		 Help

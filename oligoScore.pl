@@ -15,7 +15,7 @@ require "$Bin/math.pm";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-our ($VCF_dbSNP, $REF_GRCh37, $REF_GRCh37_SNP, $REF_GRCh38, $REF_GRCh38_SNP, $BLAT);
+our ($VCF_dbSNP, $REF_GRCh37, $REF_GRCh37_SNP, $REF_GRCh38, $REF_GRCh38_SNP, $BLAT, $SAMTOOLS);
 my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer);
 my $fref = $REF_GRCh37;
 my $fref_snp;
@@ -46,7 +46,7 @@ my $onum = 3;
 my ($homology_check, $multiplex_check);
 my $probe;
 my ($regions, $regions_rev);
-my $thread;
+my $thread = 3;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"it:s"=>\$ftarget,
@@ -193,13 +193,13 @@ if($ftype eq "SNP"){
 		if(!defined $id){
 			$id=join(",", $c, $s, $e);
 		}
-		my $info=`samtools faidx $fref $c:$s-$e`;
+		my $info=`$SAMTOOLS faidx $fref $c:$s-$e`;
 		my (undef, @line)=split /\n/, $info;
 		print T ">$id\n";
 		print T join("", @line),"\n";
 
 		if(defined $fref_snp){
-			my $info=`samtools faidx $fref_snp $c:$s-$e`;
+			my $info=`$SAMTOOLS faidx $fref_snp $c:$s-$e`;
 			my (undef, @line)=split /\n/, $info;
 			print TS ">$id\n";
 			print TS join("", @line),"\n";
@@ -414,21 +414,17 @@ Program:
 Version: $version
 Contact:zeng huaping<huaping.zeng\@genetalks.com> 
 
-    ############## PrimerScore pipeline  ################
+    ############## OligoScore pipeline  ################
 
     ###input file(target spot file) format:
-     format 1(rdID list):
-		 rs144701072
-		 rs10794507
-		 rs2245135
-		 rs13127915
-		 rs4620658
-     format 2(first 5 columns of vcf format):
+     format 1(first 5 columns of vcf format):
 		 chr14    94847286     rs121912714	T              A
 		 chr15    44859635     rs312262781	CTCAA          C
-		 chr17    40695468     rs104894596	C              T
-		 chr12    102855239    PAH_603T_G	A              C
 		 chr12    102912801    PAH_158G_A	C              T
+	format 2(bed format):
+		chr1	100379097	100379597
+		chr10	50690735	50691035
+	
 
     ###-rdis: distance range of pair primers, (best_min, best_max, min, max) separted by ",", example:
    		
