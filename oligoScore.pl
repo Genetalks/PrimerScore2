@@ -214,6 +214,9 @@ if($ftype eq "SNP"){
 	my $range = join(",", $rdiss[-2], $rdiss[-1]);
 	$thread=defined $thread? $thread: 10;
 	&Run("perl $Bin/primer_evaluation.pl -io $ftarget -id $fdatabases -k $fkey -tp $type -ep $plex --AllEvalue --OutAllProduct -td $thread -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd $range -me $min_eff -mp $max_prodn -od $outdir", $sh);
+	if($plex eq "MultiPlex"){
+		&Run("perl $Bin/cross_dimer_check.pl -i $ftarget -t Primer -k $fkey.final -od $outdir", $sh);
+	}
 	exit();
 }
 

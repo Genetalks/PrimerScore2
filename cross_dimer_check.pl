@@ -14,9 +14,11 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 my ($fIn,$fkey,$outdir);
+my $type = "Result";
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
+				"t:s"=>\$type,
 				"k:s"=>\$fkey,
 				"od:s"=>\$outdir,
 				) or &USAGE;
@@ -30,13 +32,20 @@ our $PATH_PRIMER3;
 my $ntthal = "$PATH_PRIMER3/src/ntthal";
 my $primer3_config = "$PATH_PRIMER3/src/primer3_config/";
 
+my ($ix1, $ix2);
+if($type eq "Result"){
+	($ix1, $ix2)=(3,4);
+}elsif($type eq "Primer"){
+	($ix1, $ix2)=(0,1);
+}
+
 my %seq;
 my @group;
 open(I, $fIn) or die $!;
 while(<I>){
 	chomp;
 	next if(/^$/ || /^#/);
-	my ($id, $seq)=(split /\s+/, $_)[3,4];
+	my ($id, $seq)=(split /\s+/, $_)[$ix1, $ix2];
 	$seq{$id}=$seq;
 	push @group, $id;
 }
@@ -111,9 +120,15 @@ Program:
 Version: $version
 Contact:zeng huaping<huaping.zeng\@genetalks.com> 
 
+	-t "Primer": 2 columns (IDs and Sequences), as following:
+	xxx-1  AAAAAAAAAAAAAAAAA
+	xxx-2  AAAAAAAAAAAAAAAAA
+	xxx-P  AAAAAAAAAAAAAAAAA
+
 Usage:
   Options:
-  -i  <file>   Input primer info file, forced
+  -i  <file>   Input primer file, forced
+  -t  <str>    primer file type, "Result" (xxx.final.result) or "Primer", [$type]
   -k  <str>	   Key of output file, forced
   -od <dir>	Dir of output file, default ./
   -h		 Help
