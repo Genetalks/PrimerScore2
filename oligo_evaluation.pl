@@ -293,6 +293,7 @@ if(!defined $NoSpecificity){
 				chomp;
 				next if(/^$/);
 				my ($id0, $seq)=split /\n/, $_; 
+				next if(!exists $olen_oligo{$id0});	
 				for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
 					my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
 					print F join("\t",  $idn, $pseqn, "BwaTimeout", $max_time."s"),"\n";
@@ -300,7 +301,7 @@ if(!defined $NoSpecificity){
 			}
 			close(I);
 			print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
-			exit(0); 
+			exit(0); ## once time out, all primer is filtered with flag "BwaTimeout", and exit!
 			$/="\n";
 		}
 		### read in sam
@@ -593,7 +594,7 @@ Usage:
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
-  -maxtime  <int>       max bwa running time, killed when time out, not killed please set 100000000, [$max_time]
+  -maxtime  <int>       max bwa running time, killed when time out, not killed please set 10000000000, [$max_time]
 
   --NoFilter             Not filter any oligos
   --NoSpecificity        Not evalue specificity

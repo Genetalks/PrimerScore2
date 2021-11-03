@@ -74,7 +74,7 @@ my $idx;
 if($col ==2){
 	$ftype="Common";
 	$idx = 0;
-}elsif($col==24){
+}elsif($col==24 || $col==23){
 	$ftype="Evalue";
 	$idx = 3;
 	$fevalue = $foligo;
