@@ -217,20 +217,6 @@ sub map_visual_trim{
 }
 
 
-
-#Example: 
-#mv:                               ##|||||||||||||*|||||**-|||
-#SEQ                               TT             A     AT-   ----
-#SEQ                                 TGGGTGGTGCTAC TCTTC   AAT
-#STR                                 ACCCACCACGATG AGAAG   TTA
-#STR     AACCGTCCCAACCCCCAACACACCCCCC             G     AGT   AGGA
-
-#mv:                             ###|||*|*|||**^^^^||||||*||||||||||##
-#SEQ                             ATA   A G   GGTTTC      C          AC---
-#SEQ                                AAT A CCT      AACCCT TAATTCTTGC
-#STR                                TTA T GGA      TTGGGA ATTAAGAACG
-#STR     AACTGAAATCTTCTTCTCTCCGACAGG   G G   AA----      C          ATTCC
-
 sub map_visual_from_ntthal{
 	my ($aline, $is_reverse, $start, $end)=@_;
 	my @line = @{$aline};

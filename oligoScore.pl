@@ -29,7 +29,7 @@ my $min_len=18;
 my $max_len=28;
 my $min_len_probe=18;
 my $max_len_probe=36;
-my $scale_len=1;
+my $scale_len=2;
 my $pcr_size=1000;
 my $min_eff=0.01;
 my $max_prodn=50;
@@ -191,7 +191,7 @@ if($ftype eq "SNP"){
 		next if(/^$/);
 		my ($c, $s, $e, $id)=split /\s+/, $_;
 		if(!defined $id){
-			$id=join(",", $c, $s, $e);
+			$id=join("_", $c, $s, $e);
 		}
 		my $info=`$SAMTOOLS faidx $fref $c:$s-$e`;
 		my (undef, @line)=split /\n/, $info;

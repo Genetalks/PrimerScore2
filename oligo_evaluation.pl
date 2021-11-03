@@ -10,6 +10,7 @@ require "$Bin/common.pm";
 require "$Bin/self_lib.pm";
 require "$Bin/snp.pm";
 require "$Bin/product.pm";
+require "$Bin/dimer.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -73,7 +74,7 @@ $outdir=AbsolutePath("dir",$outdir);
 my $merge_len = 100;
 my $Wind_GC = 8;
 my $MAX_hairpin_tm = 60; ##  from experience
-my $Max_Dimer_tm = 55;
+my $Max_Dimer_tm = 30;
 my $Max_SNP_ratio = 0.071; ## 1/14
 my $Max_poly_ratio = 0.8;
 my $Max_poly_G = 5;
@@ -198,16 +199,16 @@ while (<P>){
 			print F join("\t", $id, $oligo_seq, "Hairpin", $hairpin_tm),"\n";
 			next;
 		}
-		my $END_tm = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq -r`;
-		chomp $END_tm;
-		if(!defined $NoFilter && $END_tm > $Max_Dimer_tm){
-			print F join("\t", $id, $oligo_seq, "END_Dimer",$END_tm),"\n";
+		my $ENDinfo = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq`;
+		my ($END_tm, $END31, $END32)=&dimer_amplify($ENDinfo);
+		if(!defined $NoFilter && ($END_tm > $Max_Dimer_tm && $END31+$END32==0)){
+			print F join("\t", $id, $oligo_seq, "END_Dimer",join(",",$END_tm, $END31,$END32)),"\n";
 			next;
 		}
-		my $ANY_tm = `$ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq -r`;
-		chomp $ANY_tm;
-		if(!defined $NoFilter && $ANY_tm > $Max_Dimer_tm){
-			print F join("\t", $id, $oligo_seq, "ANY_Dimer",$ANY_tm),"\n";
+		my $ANYinfo = `$ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq`;
+		my ($ANY_tm, $ANY31, $ANY32)=&dimer_amplify($ANYinfo);
+		if(!defined $NoFilter && ($ANY_tm > $Max_Dimer_tm && $ANY31+$ANY32==0)){
+			print F join("\t", $id, $oligo_seq, "ANY_Dimer",join(",", $ANY_tm, $ANY31, $ANY32)),"\n";
 			next;
 		}
 		
@@ -271,7 +272,13 @@ if(!defined $NoSpecificity){
 	my $sum=0;
 	foreach my $fdatabase(@fdatabase){
 		if(!-e "$fdatabase\.ann"){
-			`bwa index $fdatabase`;
+			my $fdbname = basename($fdatabase);
+			my $fdatabase_new = "$outdir/$fdbname";
+			if(!-e "$fdatabase_new\.ann"){
+				`ln -s $fdatabase $fdatabase_new`;
+				`$BWA index $fdatabase_new`;
+			}
+			$fdatabase=$fdatabase_new;
 		}
 		my $dname = basename($fdatabase);
 		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
