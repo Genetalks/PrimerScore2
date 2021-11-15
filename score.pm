@@ -1,3 +1,68 @@
+
+
+sub probe_oligo_score{
+	my ($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm, $is_G5, $CGd)=@_;
+
+	my @tm = ($opt_tm, $opt_tm+1, $opt_tm-3, $opt_tm+5);
+	my @gc = (0.48, 0.6, 0.4, 0.7);
+	my @self = (-50, 40, -50, 55); ## self tm
+	my @CGd = (0.1, 1, 0, 1);
+	my @G5 = (0, 0, 0, 0.5);
+	my $fulls=10;
+	
+	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
+	my $sgc=int(&score_single($gc, $fulls, @gc)+0.5);
+	my $self = &max($hairpin, $END, $ANY);
+	my $sself=int(&score_single($self, $fulls, @self)+0.5);
+	my ($snpv)=split /:/, $snp;	
+	my $ssnp = int(&SNP_score($snpv, $len, "Probe")*$fulls +0.5);
+	my $spoly = int(&poly_score($poly, $len, "Probe")*$fulls +0.5);
+	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
+	my $sG5=int(&score_single($is_G5, $fulls, @G5)+0.5);
+	#specificity: bound
+	my $sbound=&bound_score($bnum, $btm, $fulls, "Probe_Tm");
+	my @score = ($stm, $sgc, $sself, $sCGd, $sG5, $ssnp, $spoly, $sbound);
+	my @weight =( 2,   1.5,     1,      1,    1,    1.5,    0.5,      1.5);
+	my $sadd=0;
+	for(my $i=0; $i<@score; $i++){
+#		$score[$i]=$score[$i]<0? 0: $score[$i];
+		$sadd+=$weight[$i]*$score[$i];
+	}
+
+	my $score_info=join(",", @score);
+	return($sadd, $score_info);
+}
+
+sub primer_oligo_score{
+	my ($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm)=@_;
+	my $fulls = 10;
+	my @nendA = (0, 2, 0, 3);
+	my @enddG = (-9,-6.7,-12,-6.2);
+	my @gc = (0.48, 0.6, 0.36, 0.75);
+	my @tm = ($opt_tm, $opt_tm+1, $opt_tm-2, $opt_tm+6);
+	my @self = (-50, 40, -50, 55); ## self tm
+
+	my $snendA=int(&score_single($nendA, $fulls, @nendA)+0.5);
+	my $senddG=int(&score_single($enddG, $fulls, @enddG)+0.5);
+	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
+	my $sgc=int(&score_single($gc, $fulls, @gc)+0.5);
+	my $self = &max($hairpin, $END, $ANY);
+	my $sself=int(&score_single($self, $fulls, @self)+0.5);
+	my ($snpv)=split /:/, $snp; 
+	my $ssnp = int(&SNP_score($snpv, $len, "Primer")*$fulls +0.5);
+	my $spoly = int(&poly_score($poly, $len, "Primer")*$fulls +0.5);
+	my $sbound=&bound_score($bnum, $btm, $fulls, "Tm");
+	my @score = ($stm, $sgc, $sself,$snendA, $senddG, $ssnp, $spoly, $sbound);
+	my @weight =(1.5,     1.5,    1.5,    1,    1.5,    1.5,     1,      0.5);
+	my $sadd=0;
+	for(my $i=0; $i<@score; $i++){
+#		$score[$i]=$score[$i]<0? 0: $score[$i];
+		$sadd+=$weight[$i]*$score[$i];
+	}
+	my $score_info=join(",", @score);
+	return ($sadd, $score_info);
+}
+
 sub bound_score{
 	my ($bnum, $bvalue, $fulls, $type)=@_;
 	#bvalue: tm, Eff
@@ -47,8 +112,8 @@ sub poly_score{
 	my $score=1;
 	my @dprobe=($len*0.3, $len*0.5, 0, $len*0.5);
 	my @dprimer=(8,$len,0,$len);
-	my @polyleno=(0,2.5,0,8);
-	my @polylenG=(0,2.5,0,5);
+	my @polyleno=(0,2.5,0,5);
+	my @polylenG=(0,2.5,0,6);
 	for(my $i=0; $i<@polys; $i++){
 		my ($d3, $t, $l)=$polys[$i]=~/(\d+)(\w)(\d+)/;
 		my $s;

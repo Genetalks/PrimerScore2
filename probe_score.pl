@@ -37,17 +37,8 @@ GetOptions(
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
-my $dlen=$max_len-$min_len;
-my @endA = (0, 0, 0, 2);
-my @len = ($min_len,$max_len-$dlen*0.5,$min_len, $max_len+1);
-my @tm = ($opt_tm-1, $opt_tm+1, $opt_tm-5, $opt_tm+5);
-my @self = (-50, 40, -50, 55); ## self tm
-my @CGd = (0.1, 1, 0, 1);
-my @G5 = (0, 0, 0, 0.5);
-my $max_self_tm=$self[3];
-my $max_bound_num=100;
 
-my $fulls=10;
+my $max_bound_num=100;
 open(F,">$outdir/$fkey.probe.filter") or die $!;
 open(O, ">$outdir/$fkey.probe.score") or die $!;
 #$slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd
@@ -76,25 +67,7 @@ while(<P>){
 #		next;
 #	}
 	## score
-	my $slen=int(&score_single($len, $fulls, @len)+0.5);## round: int(x+0.5)
-	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
-	my $self = &max($hairpin, $END, $ANY);
-	my $sself=int(&score_single($self, $fulls, @self)+0.5);
-	my ($snpv)=split /:/, $snp;	
-	my $ssnp = int(&SNP_score($snpv, $len, "Probe")*$fulls +0.5);
-	my $spoly = int(&poly_score($poly, $len, "Probe")*$fulls +0.5);
-	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
-	my $sG5=int(&score_single($is_G5, $fulls, @G5)+0.5);
-	#specificity: bound
-	my $sbound=&bound_score($bnum, $btm, $fulls, "Probe_Tm");
-	my @score = ($slen, $stm, $sself, $sCGd, $sG5, $ssnp, $spoly, $sbound);
-	my @weight =(0.5,   2,     1,      1,    1,    1.5,    1,      2);
-	my $sadd=0;
-	for(my $i=0; $i<@score; $i++){
-#		$score[$i]=$score[$i]<0? 0: $score[$i];
-		$sadd+=$weight[$i]*$score[$i];
-	}
-	my $score_info=join(",", @score);
+	my ($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm, $is_G5, $CGd);
 	print O join("\t", $id, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm),"\n";
 }
 close(P);

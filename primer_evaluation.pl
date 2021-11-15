@@ -163,9 +163,14 @@ if(exists $bound{"P"}){#Probe
 
 ### output
 open(I, $fevalue) or die $!;
+
 if($ftype eq "Common"){
 	open(O, ">$outdir/$fkey.final.result") or die $!;
-	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
+	print O "##ScoreOligo: total score | scores of tm, gc, self-complementary, end3 A num, end3 stability, snp, poly, bounding\n";
+	if(exists $bound{"P"}){
+		print O "##ScoreOligo(Probe) : total score | scores of tm, gc, self-complementary, CG content diff, snp, poly, bounding\n";
+	}
+	print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
 }
 if(defined $OutAllProduct){
 	open(P, ">$outdir/$fkey.final.pair.product") or die $!;
@@ -194,8 +199,17 @@ while(<I>){
 		$peffs = join(",", @{$apeff}[0..2]);
 		$pinfos = join(";", @{$apinfos}[0..2]);
 	}
-	if($ftype eq "Common"){
-		print O join("\t", @info, $sbd, $pnum, $peffs, $pinfos),"\n";
+
+	if($ftype eq "Common"){## score for primer
+		my ($len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly)=@info[2..$#info];
+		my ($sadd, $score_info);
+		if($tp ne "P"){
+			($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $sbnum, $sbeff);
+		}else{
+			my ($is_G5, $CGd) = &G_content($info[1]);
+			($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $sbnum, $sbeff, $is_G5, $CGd);
+		}
+		print O join("\t", $info[0], $info[1], $info[2], $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $sbd, $pnum, $peffs, $pinfos),"\n";
 	}
 	if(defined $OutAllProduct){
 		if($tp!~/[2R]/){

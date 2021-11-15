@@ -64,12 +64,6 @@ $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
 
-my @nendA = (0, 0, 0, 3);
-my @enddG = (-8,0,-10,0);
-my $dlen=$max_len-$min_len;
-my @len = ($min_len,$max_len-$dlen*0.5,$min_len-5, $max_len+1);
-my @tm = ($opt_tm-1, $opt_tm+1, $opt_tm-5, $opt_tm+5);
-my @self = (-50, 40, -50, 55); ## self tm
 my $max_best_dis_primer_probe=3;
 my $max_dis_primer_probe=20;
 my $end_len=10;
@@ -77,7 +71,6 @@ my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
 my @lendif=(0,3,0,8); ## tm diff between F and R primer
 my @tmdif=(0,1,0,2); ## tm diff between F and R primer
 my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(25,15,10,20,30);
-my $fulls=10;
 my @rdis=split /,/, $range_dis;
 my @rpos;
 if(defined $range_pos){
@@ -138,30 +131,14 @@ while(<P>){
 	next if(!defined $NoFilter && ($len>$max_len || $len<$min_len));
 	next if(!defined $NoFilter && ($tm<$opt_tm-5 || $tm>$opt_tm+5));
 
-	## score
-	my $snendA=int(&score_single($nendA, $fulls, @nendA)+0.5);
-	my $senddG=int(&score_single($enddG, $fulls, @enddG)+0.5);
-	my $slen=int(&score_single($len, $fulls, @len)+0.5);## round: int(x+0.5)
-	my $stm=int(&score_single($tm, $fulls, @tm)+0.5);
-	my $self = &max($hairpin, $END, $ANY);
-	my $sself=int(&score_single($self, $fulls, @self)+0.5);
-	my ($snpv)=split /:/, $snp; 
-	my $ssnp = int(&SNP_score($snpv, $len, "Primer")*$fulls +0.5);
-	my $spoly = int(&poly_score($poly, $len, "Primer")*$fulls +0.5);
-	my $sbound=&bound_score($bnum, $btm, $fulls, "Tm");
-	my @score = ($slen, $stm, $sself,$snendA, $senddG, $ssnp, $spoly, $sbound);
-	my @weight =(0.5,   2.5,     1,    1,       1,     2,    1.5,      0.5);
-	my $sadd=0;
-	for(my $i=0; $i<@score; $i++){
-#		$score[$i]=$score[$i]<0? 0: $score[$i];
-		$sadd+=$weight[$i]*$score[$i];
-	}
-	my $score_info=join(",", @score);
-	@{$oligo_score{$id}}=($sadd, $score_info);
 	if($ftype eq "SNP"){
 		$tid=~s/-[UD]$//;
 	}
 	@{$oligo_pos{$tid}{$strand}{$id}}=($dis, $pos3, $pos5);
+
+	## score
+	my ($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm);
+	@{$oligo_score{$id}}=($sadd, $score_info);
 	print O join("\t", $id, $chr, $strand, $pos5, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo),"\n";
 }
 close(P);
@@ -201,11 +178,15 @@ if(defined $fprobe){
 
 #### score pair and output
 open(O,">$outdir/$fkey.final.result") or die $!;
-print O "##ScorePair(Primer): scores of P1 position to target(Probe 5'end), distance between pair, length diff, tm diff, specificity of primer pair\n";
-print O "##ScorePair(Probe) : score of probe boundings\n";
+print O "##ScorePair: scores of P1 position to target(Probe 5'end), distance between pair, length diff, tm diff, specificity of primer pair\n";
+if(defined $fprobe){
+	print O "##ScorePair(Probe) : score of probe boundings\n";
+}
 #($slen, $stm, $sself,$snendA, $senddG, $ssnp, $spoly, $sbound)
-print O "##ScoreOligo(Primer): total score | scores of length, tm, self-complementary, end3 A num, end3 stability, snp, poly, bounding\n";
-print O "##ScoreOligo(Probe) : total score | scores of length, tm, self-complementary, CG content diff, snp, poly, bounding\n";
+print O "##ScoreOligo: total score | scores of tm, gc, self-complementary, end3 A num, end3 stability, snp, poly, bounding\n";
+if(defined $fprobe){
+	print O "##ScoreOligo(Probe) : total score | scores of tm, gc, self-complementary, CG content diff, snp, poly, bounding\n";
+}
 my @title=("#Chr\tStart\tStrand\tID\tSeq\tLen");
 if(defined $range_pos){
 	push @title, "Dis2Target";
