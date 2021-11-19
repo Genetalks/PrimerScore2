@@ -19,9 +19,11 @@ my $type = "Result";
 my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $MultiPlex;
 my $SelfComplementary;
-my $high_tm = 30;
-my $min_tm = -30;
-my $max_unmap=20;
+my $high_tm = 45;
+my $min_tm = 20;
+my $max_unmap=1;
+my $min_len=3; ## min end3 match len when Enddimer
+my $sublen = 8; ## substr end3's seq to detect dimer, because primer3 always don't predict dimers with lowtm although end3 is matched exactly
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
@@ -62,7 +64,8 @@ while(<I>){
 	$LR=~s/L/1/;
 	$LR=~s/R/2/;
 	$LR=~s/P/3/;
-	$seq{$tid}->[$LR-1]=$seq;
+	my $subseq = substr($seq, length($seq)-$sublen, $sublen);	
+	@{$seq{$tid}->[$LR-1]}=($seq, $subseq);
 	$id{$tid}[$LR-1]=$id;
 }
 close(I);
@@ -72,7 +75,7 @@ open(O,">$outdir/$fkey.cross.dimer")or die $!;
 foreach my $tid(sort {$a cmp $b} keys %seq){
 	my @seq=@{$seq{$tid}};
 	for(my $j=0; $j<@seq; $j++){
-		my $oligo_seq = $seq{$tid}->[$j];
+		my ($oligo_seq, $subseq) = @{$seq{$tid}->[$j]};
 		my $id = $id{$tid}->[$j];
 #		print O ">",$id,"\t",$oligo_seq,"\n";
 		if(defined $SelfComplementary){
@@ -87,60 +90,50 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 				}
 			}
 			
-			my $ENDinfo = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq`;
-			chomp $ENDinfo;
-			#print "$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq\n";
-			my ($END_tm, $END31, $END32)=&dimer_amplify($ENDinfo);
-			if($END_tm>=$high_tm || ($END_tm>=$min_tm && $END31+$END32<=$max_unmap)){
-				print O join("\t", "#ENDDimer", $id, $id, $END_tm, $END31, $END32),"\n";
-				print O $ENDinfo, "\n";
-			}
-			
+					
 			my $ANYinfo = `$ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq`;
 			chomp $ANYinfo;
-			#print "$ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq\n";
 			my ($ANY_tm, $ANY31, $ANY32)=&dimer_amplify($ANYinfo);
-			if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && $ANY31+$ANY32<=$max_unmap)){
-				print O join("\t", "#ANYDimer", $id, $id, $ANY_tm, $ANY31, $ANY32),"\n";
+			if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && ($ANY31<=$max_unmap || $ANY32<=$max_unmap))){
+				print O join("\t", "\n#ANYDimer", $id, $id, $ANY_tm, $ANY31, $ANY32),"\n";
+				print O "ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq\n";
 				print O $ANYinfo, "\n";
 			}
+
+			my $ENDinfo = `$ntthal -a END1 -s1 $subseq -s2 $subseq`;
+			chomp $ENDinfo;
+			my ($END_tm, $END31, $END32, $mlen3)=&dimer_amplify($ENDinfo);
+			if($END31==0 && $END32==0 && $mlen3>=$min_len){
+				print O join("\t", "\n#EndDimer", $id, $id, $mlen3, $END_tm),"\n";
+				print O "ntthal -a END1 -s1 $subseq -s2 $subseq\n";
+				print O $ENDinfo, "\n";
+			}
+
 			
 		}
 		## cross primer of same tid
 		for(my $k=$j+1; $k<@seq; $k++){
 			my ($info, $tm, $umap1, $umap2);
-			my $seq = $seq{$tid}->[$k];
+			my ($seq, $subs) = @{$seq{$tid}->[$k]};
 			my $id2=$id{$tid}->[$k];
 
 			my $ANYinfo = `$ntthal -a ANY -s1 $oligo_seq -s2 $seq`;
 			chomp $ANYinfo;
-			#print "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
 			my ($ANY_tm, $ANY31, $ANY32)=&dimer_amplify($ANYinfo);
-			if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && $ANY31+$ANY32<=$max_unmap)){
-				print O join("\t", "#ANYDimer", $id, $id2, $ANY_tm, $ANY31, $ANY32),"\n";
+			if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && ($ANY31<=$max_unmap || $ANY32<=$max_unmap))){
+				print O join("\t", "\n#ANYDimer", $id, $id2, $ANY_tm, $ANY31, $ANY32),"\n";
+				print O "ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
 				print O $ANYinfo, "\n";
 			}
 			
-			my $END1info = `$ntthal -a END1 -s1 $oligo_seq -s2 $seq`;
+			my $END1info = `$ntthal -a END1 -s1 $subseq -s2 $subs`;
 			chomp $END1info;
-			#print "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
-			#print "result1:\n", $END1info,"\n";
-			my ($END_tm, $END31, $END32)=&dimer_amplify($END1info);
-			if($END_tm>=$high_tm || ($END_tm>=$min_tm && $END31+$END32<=$max_unmap)){
-				print O join("\t", "#ENDDimer", $id, $id2, $END_tm, $END31, $END32),"\n";
+			my ($END_tm, $END31, $END32, $mlen3)=&dimer_amplify($END1info);
+			if($END31==0 && $END32==0 && $mlen3>=$min_len){
+				print O join("\t", "\n#EndDimer", $id, $id2, $mlen3, $END_tm),"\n";
+				print O "ntthal -a END1 -s1 $subseq -s2 $subs\n";
 				print O $END1info, "\n";
 			}
-			my $END2info = `$ntthal -a END2 -s1 $oligo_seq -s2 $seq`;
-			chomp $END2info;
-			#print "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
-			{
-				my ($END_tm, $END31, $END32)=&dimer_amplify($END2info);
-				if($END_tm>=$high_tm || ($END_tm>=$min_tm && $END31+$END32<=$max_unmap)){
-					print O join("\t", "#ENDDimer", $id, $id2, $END_tm, $END31, $END32),"\n";
-					print O $END2info, "\n";
-				}
-			}
-			
 		}
 
 
@@ -150,7 +143,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 				next if($tid2 eq $tid);
 				my @seq2=@{$seq{$tid2}};
 				for(my $k=0; $k<@seq2; $k++){
-					my $seq = $seq{$tid2}->[$k];
+					my ($seq, $subs) = @{$seq{$tid2}->[$k]};
 					my $id2=$id{$tid2}->[$k];
 					if(!defined $seq){
 						print $tid2,"\n";
@@ -167,28 +160,18 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 						print $ANYinfo,"\n";
 						die;
 					}
-					if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && $ANY31+$ANY32<=$max_unmap)){
+					if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && ($ANY31<=$max_unmap || $ANY32<=$max_unmap))){
 						print O join("\t", "#ANYDimer", $id, $id2, $ANY_tm, $ANY31, $ANY32),"\n";
 						print O $ANYinfo, "\n";
 					}
 
-					my $END1info = `$ntthal -a END1 -s1 $oligo_seq -s2 $seq`;
+					my $END1info = `$ntthal -a END1 -s1 $subseq -s2 $subs`;
 					chomp $END1info;
 				#	print "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
-					my ($END_tm, $END31, $END32)=&dimer_amplify($END1info);
-					if($END_tm>=$high_tm || ($END_tm>=$min_tm && $END31+$END32<=$max_unmap)){
-						print O join("\t", "#ENDDimer", $id, $id2, $END_tm, $END31, $END32),"\n";
+					my ($END_tm, $END31, $END32, $mlen3)=&dimer_amplify($END1info);
+					if($END31==0 && $END32==0 && $mlen3>=$min_len){
+						print O join("\t", "#EndDimer", $id, $id2, $mlen3, $END_tm),"\n";
 						print O $END1info, "\n";
-					}
-					my $END2info = `$ntthal -a END2 -s1 $oligo_seq -s2 $seq`;
-					chomp $END2info;
-				#	print "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
-					{
-						my ($END_tm, $END31, $END32)=&dimer_amplify($END2info);
-						if($END_tm>=$high_tm || ($END_tm>=$min_tm && $END31+$END32<=$max_unmap)){
-							print O join("\t", "#ENDDimer", $id, $id2, $END_tm, $END31, $END32),"\n";
-							print O $END2info, "\n";
-						}
 					}
 				}
 			}

@@ -54,7 +54,11 @@ sub dimer_amplify{
 			$tright++;
 		}
 	}
-	return ($tm, $pright, $tleft);
+
+	## end3 map length
+	my @maps=split /\s+/, $line[1];
+	my $mlen3=length($maps[-1]);
+	return ($tm, $pright, $tleft, $mlen3);
 }
 
 #sub efficiency_dimer{
