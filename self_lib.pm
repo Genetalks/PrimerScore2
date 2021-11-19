@@ -136,10 +136,10 @@ sub get_end_A{
 ##:  ||*||||^^|||----------||||||||||||      =>      ####||||||||||||
 ##:  #######||*|||||||||||  (off=4)          =>      ###||*|||||||||||
 sub map_visual_trim{
-	my ($mv, $off, $end3_match)=@_;
-	#($mv, $off, $end3_match)=("######|*|||||^^|||**-||||||||||||*|*|||||", 14,5);	
+	my ($mv, $off)=@_;
+	#($mv, $off)=("######|*|||||^^|||**-||||||||||||*|*|||||", 14,5);	
 	if($off ==0){
-		return($mv, $end3_match);
+		return($mv);
 	}
 	#trim from offset
 	my @unit=split //, $mv;
@@ -171,7 +171,7 @@ sub map_visual_trim{
 	##
 	my $mvsub = join("", @unit);
 	if($unit[0] eq "#"){ ## no need adjust
-		return($mvsub, $end3_match);
+		return($mvsub);
 	}
 
 	## adjust
@@ -210,12 +210,112 @@ sub map_visual_trim{
 		}
 	}
 	my $mvn = $mvbf.$mvaf;
-	if($irm==-1 && $end3_match > length($mvsub)){
-		$end3_match=length($mvsub);
-	}
-	return ($mvn, $end3_match);
+	return ($mvn);
 }
 
+
+sub end_match_length{
+	my ($mv, $type)=@_;
+	if($type eq "End5"){
+		$mv=reverse $mv;
+	}
+	my @mv=split //, $mv;
+	my $len=1;
+	my $ref=$mv[$#mv];
+	for($i=$#mv-1; $i>=0; $i--){
+		last if($mv[$i] ne $ref);
+		$len++;
+	}
+	my $endm;
+	if($ref eq "|"){
+		$endm=$len;
+	}elsif($ref eq "#" || $ref eq "*"){
+		$endm=$len*(-1);
+	}else{ ## primer end is not covered by template
+		print "Warn: end3 map visual info $mv\n";
+		$endm="Fail";
+	}
+	return $endm;
+}
+
+my %coe=("G"=>4, "C"=>4, "A"=>2, "T"=>2);
+my $tm_ini=-4;
+sub tm_estimate_coe{
+	my ($tm0, $seq)=@_;
+	my @unit=split //, $seq;
+	my $tme=$tm_ini;
+	foreach my $b(@unit){
+		$tme+=$coe{$b};
+	}
+
+	return $tm0/$tme;
+}
+
+sub tm_estimate{
+	my ($mv, $seq, $coe)=@_;
+	#$mv="#||||^^|||||*|||||||||";
+	my $min_map_ratio = 0.65;
+	my @unit=split //, $mv;
+	my @units=split //, $seq;
+	my $coe_rm = 1;
+	my $ixs=$#units;
+	my $tm=$tm_ini; ## tm = 4*(G+C)+2*(A+T)-(5~8)
+	
+#	print join("\n", $mv, $seq),"\n";
+	my $end3b=$unit[-1];
+	for(my $i=$#unit; $i>=0; $i--){
+		if($unit[$i] eq "|"){
+			$tm+=$coe{$units[$ixs]};
+			if($i-1>=0 && $unit[$i-1] ne "|"){ ## left is map
+				$tm-=$coe_rm;
+			}
+			if($i+1<=$#unit && $unit[$i+1] ne "|"){ ## right is map
+				$tm-=$coe_rm;
+			}
+		}
+#		print join("\t", $i, $ixs, $units[$ixs], $tm),"\n";
+		if($unit[$i] ne "-"){
+			$ixs--;
+		}
+	}
+	return(sprintf("%.2f", $tm*$coe));
+}
+
+sub map_visual_from_sw{
+	my ($aline, $is_reverse, $start, $end)=@_;
+	my @line = @{$aline};
+	my $align = $line[1];
+
+	my @unit = split //, $align;
+	my ($tleft, $tright)=(0,0);
+	for(my $i=0; $i<=$#unit; $i++){
+		last if($unit[$i] ne " ");
+		if($unit[$i] eq " "){
+			$tleft=$i+1;
+		}
+	}
+	my $maplen = $#unit-$tleft+1;
+	for(my $i=$#unit; $i>0; $i--){
+		last if($unit[$i] ne " ");
+		if($unit[$i] eq " "){
+			$tright=$#unit-$i+1;
+			$maplen = $i-$tleft;
+		}
+	}
+
+	my ($pos3, $pos5);
+	my $mvisual=substr($align, $tleft, $maplen);
+	if($is_reverse){
+		$pos5=$end-$tleft;
+		$pos3=$start+$tright;
+	}else{
+		$pos5=$start+$tleft;
+		$pos3=$end-$tright;
+	}
+	
+	return ($mvisual, $pos3, $pos5);
+
+}
 
 sub map_visual_from_ntthal{
 	my ($aline, $is_reverse, $start, $end)=@_;
@@ -279,38 +379,18 @@ sub map_visual_from_ntthal{
 }
 
 
-sub end_match_length{
-	my ($mv)=@_;
-	my @mv=split //, $mv;
-	my $len=1;
-	my $ref=$mv[$#mv];
-	for($i=$#mv-1; $i>=0; $i--){
-		last if($mv[$i] ne $ref);
-		$len++;
-	}
-	my $endm;
-	if($ref eq "|"){
-		$endm=$len;
-	}elsif($ref eq "#"){
-		$endm=$len*(-1);
-	}else{ ## primer end is not covered by template
-		print "Warn: end3 map visual info $mv\n";
-		$endm="Fail";
-	}
-	return $endm;
-}
-
 
 
 #1S5M1D4M3I13M   3G0T0^G17       =>      #|||**-||||^^^|||||||||||||
 #13M16D5M        13^GGGCGTCAGATGCAGG5    =>      |||||||||||||----------------|||||
 #10M1D4M1I3M     10^T3C3 =>      ||||||||||-|||*^|||
 sub map_visualation{
-	my ($cigar, $md)=@_;
+	my ($cigar, $md, $is_reverse, $pos)=@_;
 	my ($acigar_n, $acigar_str)=&cigar_split($cigar);
 	my @numcg=@{$acigar_n};
 	my @strcg=@{$acigar_str};
-
+	
+	my $ref_dis=0;
 	my ($amds)=&md_split($md);
 	my @mds=@{$amds};
 	my $minfo;
@@ -320,6 +400,7 @@ sub map_visualation{
 			$minfo.="#" x $numcg[$i];
 		}elsif($strcg[$i] eq "M"){
 			my $Mlen=0;
+			$ref_dis+=$numcg[$i];
 			for(my $j=$imd; $j<@mds; $j++){
 				#print join("\t", $i, $j, $mds[$j], $Mlen, $numcg[$i]),"\n";
 				if($mds[$j]=~/[0-9]/){
@@ -356,6 +437,7 @@ sub map_visualation{
 			#$minfo.="-" x $numcg[$i];
 			$minfo.="^" x $numcg[$i];
 		}elsif($strcg[$i] eq "D"){
+			$ref_dis+=$numcg[$i];
 			#$minfo.="^" x $numcg[$i];
 			$minfo.="-" x $numcg[$i];
 			$imd++;
@@ -363,8 +445,18 @@ sub map_visualation{
 			die "Wrong: $cigar\n";
 		}
 	}
+	
+	my ($pos3, $pos5);
+	if($is_reverse==0){
+		$pos5=$pos;
+		$pos3=$pos+$ref_dis;
+	}else{
+		$minfo = reverse $minfo;
+		$pos3=$pos;
+		$pos5=$pos+$ref_dis;
+	}
 	#print join("\t", $cigar, $md, "=>", $minfo),"\n";
-	return $minfo;
+	return ($minfo, $pos3, $pos5);
 }
 
 #Example: 

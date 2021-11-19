@@ -205,6 +205,59 @@ sub SNP_score{
 	}
 	return $score;
 }
+
+
+### score accord growth curve
+## growth curve(a,b,K)=(1,1,1) is a symmetrical curve,  y--(0,1), y tend to 0 when x<-5, y tend to 1 when x>5.
+## minl is the limit min value when y tend to 0
+## maxl is the limit max value when y tend to 1
+#    |<--curve1->|   |<--curve2->|
+#----|------|----|---|-----|-----|---
+# minl     min minb maxb  max   maxl
+
+sub score_growth_curve{
+	my ($v, $score, $minb, $maxb, $min, $max, $minl, $maxl)=@_;
+	if(!defined $v){
+		print STDERR join("\t", $v, $score, $minb, $maxb, $min, $max, $minl, $maxl),"\n";
+	}
+	return $score if($v eq "NULL");
+	if(!defined $minb){
+		print STDERR join("\t", $v, $score, $minb, $maxb, $min, $max),"\n";
+	}
+	my $disl = $minb - $min;
+	my $disr = $max - $maxb;
+	if($disl<0 || $disr<0){
+		print "Wrong Score set: $minb, $maxb, $min, $max\n";
+		die;
+	}
+	##  growth curve
+	my ($K, $a, $b, $e)=(1,1,1,2.718);
+	my $x;
+	#y = $K/(1+$b*$e**(-1*$a*$x));
+
+	my $s;
+	if($v<$minb){
+		#up curve1
+		$x = ($v-$minl)/(($minb-$minl)/10)-5;
+		my $y1 = $K/(1+$b*$e**(-1*$a*$x));
+		$x = ($min-$minl)/(($minb-$minl)/10)-5; 
+		my $y10 = $K/(1+$b*$e**(-1*$a*$x)); ## v=min, score=0
+		$s = $score * ($y1-$y10)/(1-$y10);
+	}elsif($v<=$maxb){
+		$s = $score;
+	}else{
+		#down curve2
+		$x = ($maxb-$v)/(($maxl-$maxb)/10)-5;
+		my $y2 = $K/(1+$b*$e**(-1*$a*$x));
+		$x = ($maxb-$max)/(($maxl-$maxb)/10)-5; ## v=max, score=0
+		my $y20 = $K/(1+$b*$e**(-1*$a*$x));
+		$s = $score * ($y2-$y20)/(1-$y20);
+	}
+	return $s;
+}
+
+
+
 ## 打分
 ## score:满分
 sub score_single{

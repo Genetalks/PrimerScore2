@@ -100,6 +100,7 @@ my %evalue;
 my %map;
 my %map_id;
 my %olen_oligo;
+my %primer3_tm;
 open (P, $foligo) or die $!;
 #&SHSHOW_TIME("Routine analysis:");
 while (<P>){
@@ -179,6 +180,7 @@ while (<P>){
 		## filter TM and GC
 		my $Tm = `$oligotm $oligo_seq `;
 		chomp $Tm;
+		$primer3_tm{$oligo_seq}=$Tm;
 		$Tm = sprintf "%0.2f", $Tm;
 		my $GC=&GC($oligo_seq);
 		if(!defined $NoFilter && ($Tm<$MIN_tm || $Tm>$MAX_tm)){
@@ -281,10 +283,9 @@ if(!defined $NoSpecificity){
 			$fdatabase=$fdatabase_new;
 		}
 		my $dname = basename($fdatabase);
-		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a  $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
+		my $cmd="$BWA mem -D 0 -k 8 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a |samtools view -bS -> $fdatabase $fa_oligo >$fa_oligo\_$dname.bam 2>$fa_oligo\_$dname.bam.log";
 		&Run_monitor_timeout($max_time, $cmd);
-		open(I, "$fa_oligo\_$dname.sam.log") or die $!;
-		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
+		my $ret = `grep -aR Killed $fa_oligo\_$dname.bam.log`;
 		chomp $ret;
 		if($ret eq "Killed"){## time out
 			open(I, $fa_oligo) or die $!;
@@ -304,17 +305,15 @@ if(!defined $NoSpecificity){
 			exit(0); ## once time out, all primer is filtered with flag "BwaTimeout", and exit!
 			$/="\n";
 		}
-		### read in sam
-		open (I, "$SAMTOOLS view $fa_oligo\_$dname.sam|") or die $!;
+
+		### read in bam
+		open (I, "$SAMTOOLS view $fa_oligo\_$dname.bam|") or die $!;
 		while (<I>){
 			chomp;
 			my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;
 			my ($is_unmap, $is_reverse)=&explain_bam_flag_unmap($flag);
 			my ($md)=$_=~/MD:Z:(\S+)/;
 			next if ($is_unmap);
-			my ($H3)=&get_3end1_mismatch($is_reverse, $cigar);
-			#print "H3:", join("\t", $H3,$id, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
-			next if(!defined $probe && !defined $revcom && $H3>1);
 			$sum++;
 			push @{$mapping{$id}{$dname}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
 		}
@@ -324,6 +323,9 @@ if(!defined $NoSpecificity){
 	open(O, ">$outdir/$fkey.bound.info") or die $!;
 	foreach my $id0 (sort {$a cmp $b} keys %olen_oligo){
 		my ($id,undef, undef, $oligo_seq)=@{$olen_oligo{$id0}->[0]};
+		my $len = length($oligo_seq);
+		my $end3_base=substr($oligo_seq, $len-1, 1);
+		my $tm_coe = &tm_estimate_coe($primer3_tm{$oligo_seq}, $oligo_seq);
 		my %lowtm;
 		my $filter_by_bound=0;
 		foreach my $dname(keys %{$mapping{$id0}}){
@@ -336,28 +338,32 @@ if(!defined $NoSpecificity){
 				my $map_num = scalar @{$mapping{$id0t}{$dname}};
 				for (my $i=0; $i<$map_num; $i++){
 					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
+					my ($emis3)=&get_3end1_mismatch($is_reverse, $cigar, $md);
+					next if(!defined $probe && !defined $revcom && $oligo_seq!~/[CG]$/ && $emis3>=1);## if not C/G end, then filter mapping with end3 base not mapped exactly
+
 					#filter lowtm
 #					my $map_form=&map_form_standard($is_reverse, $cigar, $md);
 					my $map_form=join(",", $is_reverse, $cigar, $md);
 					next if(exists $lowtm{$map_form});## filter bound regions whose map info are same with where bound tm too low 
 					my $strand=$is_reverse? "-": "+";
 					if(defined $detail){
-						print Detail "\nOriginal:",join("\t",$id0t, $is_reverse, $flag, $chr, $pos, $score),"\n";
+						print Detail "\nOriginal:",join("\t",$id0t, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
 					}
 					######## specificity
-					my $len = length($oligo_seq);
-					my $extend = 40;
+					my $extend = 10;
 					
 					### get seq
+					my $off =$len-$len_map;
 					my ($start, $end);
-					my $off = $len-$len_map;
-					if($is_reverse){# "-"
-						$start = $pos-$extend;
-						$end = $pos+$len+$extend;
+					if(($is_reverse==0 && $id0t!~/_L/) || ($is_reverse==1 && $id0t=~/_L/) ){
+						$start=$pos-$off-$extend;
+						$end=$pos+$len_map+$extend;
 					}else{
-						$start = $pos-$off-$extend;
-						$end = $pos-$off-1+$len+$extend;
+						$start=$pos-$extend;
+						$end=$pos+$len_map+$off+$extend;
 					}
+#					my $start = $pos-$extend;
+#					my $end = $pos+$len+$extend;
 					#print join("\t", $pos, $is_reverse, $start, $end),"\n";
 					$start=$start>1? $start: 1;
 					my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
@@ -370,46 +376,42 @@ if(!defined $NoSpecificity){
 						next;
 					}
 					$seq=uc($seq);
-					$seq=&revcom($seq)if(!$is_reverse);
-					### ntthal
-					my $result = `$ntthal -a ANY -s1 $oligo_seq -s2 $seq`;
-					if(defined $detail){
-						print Detail "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
-						print Detail $result;
+					if($is_reverse){
+						$seq=&revcom($seq);
 					}
-				
-					### get tm 
-					my ($dG, $tm) = $result =~/dG = ([\d\+\-\.]+)\tt = ([\d\+\-\.]+)/;
-					next if($dG eq ""); ## map to NNNN region, invalid
+
+					## sw map
+					my $result = `$Bin/sw.pl $oligo_seq $seq`;
+					my @line = split /\n/, $result;
+
+					## match visual
+					my ($mvisual, $pos3, $pos5)=&map_visual_from_sw(\@line, $is_reverse, $start, $end);
+#					my $tm=&tm_estimate($mvisual, $oligo_seq, $tm_coe);
+					my $seqrv=&revcom($seq);
+					my $tm;
+					if($emis3>=1){## tm is usually lower when -a END1 
+						$tm=`$ntthal -r -s1 $oligo_seq -s2 $seqrv`; 
+					}else{
+						$tm=`$ntthal -r -a END1 -s1 $oligo_seq -s2 $seqrv`;
+					}
+					chomp $tm;
+					if(defined $detail){
+						print Detail join("\n", $line[0], $line[1], $line[2]),"\n";
+						print Detail "map convert:"; 
+						print Detail join("\t", ($mvisual, $pos3, $pos5, $tm)),"\n";
+					}
 					if($tm<$min_tm_spec){
-						if($map_form=~/H/){
+						my $end_match5=&end_match_length($mvisual, "End5");
+						if($end_match5 >= (length $oligo_seq) - $len_map || $tm<$min_tm_spec-10){ ## rest end5 bases all mapped
 							$lowtm{$map_form}=1;
 						}
 						next;
 					}
-					my @line = split /\n/, $result;
-					shift @line;	
-					if(!defined $line[1]){ ## just print and return
-						print join("\t",$oligo_seq, $chr, $pos, $is_reverse, $fdatabase),"\n";
-						print "$SAMTOOLS faidx $fdatabase $chr:$start-$end\n";
-						print "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
-						return (-1,-1,-1,-1);
-					}
-					## match visual
-					my ($mvisual, $pos3, $pos5)=&map_visual_from_ntthal(\@line, $is_reverse, $start, $end);
-					my ($end_match3) = &end_match_length($mvisual);
-					my $mvisualr=reverse $mvisual;
-					my ($end_match5) = &end_match_length($mvisualr);
-					next if($end_match3 eq "Fail" || $end_match5 eq "Fail");#oligo end is not covered by template 
 					if(defined $detail){
-						print Detail "ntthal map:"; 
-						print Detail join("\t", ($mvisual, $pos3, $pos5, $end_match3, $end_match5)),"\n";
+						print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $oligo_seq, $tm, $mvisual),"\n";
 					}
-					next if(!defined $probe && !defined $revcom && $end_match3<0);
-					if(defined $detail){
-						print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
-					}
-					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end_match3,$mvisual),"\n";
+
+					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end3_base, $mvisual),"\n";
 					$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
 					$bound_num++;
 					if(!defined $NoFilter && $bound_num>$Max_Bound_Num){
@@ -427,8 +429,8 @@ if(!defined $NoSpecificity){
 					for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
 						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
 						next if(!exists $evalue{$idn});
+						my $end3_basen=substr($pseqn, length($pseqn)-1, 1);
 						my $posn = $pos3;
-						my $end_matchn=$end_match3;
 						my $seqn=$seq;
 						my $strandn=$strand;
 						my $mvisualn=$mvisual;
@@ -436,18 +438,15 @@ if(!defined $NoSpecificity){
 							$mvisualn=reverse($mvisual);
 							$seqn=&revcom($seq);
 							$posn = $pos5;
-							$end_matchn=$end_match5;
 							$strandn=$strand eq "+"? "-": "+";
 						}
-						my $tmn = `$ntthal -a ANY -s1 $pseqn -s2 $seqn -r`;
-						chomp $tmn;
+						my ($mvn) = &map_visual_trim($mvisualn, $off); 
+						my $tmn=&tm_estimate($mvn, $pseqn, $tm_coe);
 						next if($tmn<$min_tm_spec);
-						my ($mvn, $ematchn) = &map_visual_trim($mvisualn, $off, $end_matchn); 
-						next if(!defined $probe && $ematchn<0);
 						if(defined $detail){
-							print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
+							print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $mvn),"\n";
 						}
-						print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$ematchn,$mvn),"\n";
+						print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$end3_basen, $mvn),"\n";
 						$bound{$idn}{$strandn."/".$chr."/".$posn.":".$mvn}=$tmn;
 					}
 				}
@@ -532,7 +531,7 @@ sub map_form_standard{
 }
 
 sub get_3end1_mismatch{
-	my ($is_reverse, $cigar)=@_;
+	my ($is_reverse, $cigar, $md)=@_;
 	my $H3;
 	if($is_reverse==0){
 		($H3)=$cigar=~/M(\d+)H$/;
@@ -540,7 +539,11 @@ sub get_3end1_mismatch{
 		($H3)=$cigar=~/^(\d+)H/;
 	}
 	if(!defined $H3){ ## 1H can be prc from experiment data
-		$H3=0;
+		if(($is_reverse==0 && $md=~/[ATCG]0$/) || ($is_reverse==1 && $md=~/^0[ATCG]/)){
+			$H3=1;
+		}else{
+			$H3=0;
+		}
 	}
 	return $H3;
 }

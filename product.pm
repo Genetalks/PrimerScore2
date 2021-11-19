@@ -1,12 +1,10 @@
 require "$Bin/score.pm";
 require "$Bin/math.pm";
 
-my $end_len=10;
-my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
 
 #my $prob=$dis."/".join(",", $chr, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1), $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
 sub probe_bounds_on_products{
-	my ($pb, $abound, $aprod, $aresult, $PCRsize, $opt_tm_probe)=@_;
+	my ($pb, $abound, $aprod, $aresult, $PCRsize, $opt_tm_probe, $min_tm_spec)=@_;
 	my %bdid=%{$abound};
 	my $n=0;
 	foreach my $prod(keys %{$aprod}){
@@ -19,10 +17,10 @@ sub probe_bounds_on_products{
 		foreach my $sd(keys %{$bdid{$chr}}){
 			my @bds=@{$bdid{$chr}{$sd}};
 			for(my $i=0; $i<@bds; $i++){
-				my ($pos3, $pos5, $tm, $end_match, $mvisual)=@{$bds[$i]};
+				my ($pos3, $pos5, $tm, $end3_base, $mvisual)=@{$bds[$i]};
 				if($pos5>$minp-10 && $pos5<$maxp+10){
 					my $dis=&min($pos5-$minp, $maxp-$pos5);
-					my $eff=&efficiency_probe($tm, $dis, $PCRsize, $opt_tm_probe) * $aprod->{$prod};
+					my $eff=&efficiency_probe($tm, $dis, $PCRsize, $opt_tm_probe, $min_tm_spec) * $aprod->{$prod};
 					my $bpd=$dis."/".join(",", $chr, $sd.$pos5,$mvisual,sprintf("%.2f",$tm)).":".$info;
 					$aresult->{$pb}{$bpd}=$eff;
 					$n++;
@@ -34,9 +32,9 @@ sub probe_bounds_on_products{
 	return $n;
 }
 
-#push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual];
+#push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end3_base, $mvisual];
 sub caculate_product{
-	my ($tid1, $p1, $tid2, $p2, $abound1, $abound2, $ptype, $aprod, $arecord, $PCRsize, $opt_tm, $mind, $maxd, $min_eff, $Max_prodn)=@_;
+	my ($tid1, $p1, $tid2, $p2, $abound1, $abound2, $ptype, $aprod, $arecord, $PCRsize, $opt_tm, $min_tm, $mind, $maxd, $min_eff, $Max_prodn)=@_;
 	my %bdp1=%{$abound1};
 	my %bdp2=%{$abound2};
 	my $prodn=0;
@@ -44,7 +42,7 @@ sub caculate_product{
 		foreach my $sd(keys %{$bdp1{$chr}}){
 			my @bds=@{$bdp1{$chr}{$sd}};
 			for(my $i=0; $i<@bds; $i++){
-				my ($tm1, $end_match1, $mvisual1)=@{$bds[$i]}[2..4];
+				my ($tm1, $end3_base1, $mvisual1)=@{$bds[$i]}[2..4];
 ##                Nested		 face-to-face         back-to-back
 ##P1			 	  -->| 		   |-->                    |-->
 ##P2min		  -->|...      		    <--|             <--|...  
@@ -78,23 +76,23 @@ sub caculate_product{
 				next if(!exists $bdp2{$chr}{$sd2});
 				my @bds2=@{$bdp2{$chr}{$sd2}};
 				for(my $j=0; $j<@bds2; $j++){
-					my ($tm2, $end_match2, $mvisual2)=@{$bds2[$j]}[2..4];
+					my ($tm2, $end3_base2, $mvisual2)=@{$bds2[$j]}[2..4];
 					my $pos2 = $bds2[$j][$ixpos];
 					if($pos2>=$pmin && $pos2<=$pmax){
 						##
-						my ($eff1, $eff2);
+						my ($eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end);
 						my $b1=join(",", $p1, $chr, $sd, $bds[$i][0]);
 						if(exists $arecord->{"eff"}->{$b1}){
 							$eff1=$arecord->{"eff"}->{$b1};
 						}else{
-							$eff1=&efficiency($tm1, $mvisual1, $opt_tm);
+							($eff1, $eff1_tm, $eff1_end)=&efficiency($tm1, $mvisual1, $opt_tm, $min_tm, $end3_base1);
 							$arecord->{"eff"}->{$b1}=$eff1;
 						}
 						my $b2=join(",", $p2, $chr, $sd2, $bds2[$j][0]);
 						if(exists $aeff->{$b2}){
 							$eff2=$aeff->{$b2};
 						}else{
-							$eff2=&efficiency($tm2, $mvisual2, $opt_tm);
+							($eff2, $eff2_tm, $eff2_end)=&efficiency($tm2, $mvisual2, $opt_tm, $min_tm, $end3_base2);
 							$aeff->{$b2}=$eff2;
 						}
 						my $dis=$pos2-$pos;
@@ -104,7 +102,7 @@ sub caculate_product{
 						my @rsize=($mind,$maxd, $dmin, $dmax);
 						my $eff_dis=&score_single($dis, 1, @rsize);
 						my $eff=$eff1*$eff2*$eff_dis;
-						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1), $p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
+						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1),sprintf("%.2f", $eff1), sprintf("%.2f", $eff1_tm), sprintf("%.2f", $eff1_end), $p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2),sprintf("%.2f", $eff2), sprintf("%.2f", $eff2_tm), sprintf("%.2f", $eff2_end));
 						next if($eff<$min_eff);
 						$aprod->{$tid1}{$tid2}{$prob}=$eff;
 					#	print join("\t", $eff, $prob),"\n";
@@ -152,11 +150,11 @@ sub primer2_scope{
 
 
 sub efficiency_probe{
-	my ($tm, $dis, $PCRsize, $opt_tm_probe)=@_;
+	my ($tm, $dis, $PCRsize, $opt_tm_probe, $min_tm)=@_;
 	# tm eff
 	my $opt=$opt_tm_probe;
-	my @etm=($opt-1, $opt+100, 45, $opt+100); 
-	my $eff_tm = &score_single($tm, 1, @etm);
+	my @etm=($opt-1, $opt+100, $min_tm-0.1, $opt+100, $min_tm-0.1, $opt+100); 
+	my $eff_tm = &score_growth_curve($tm, 1, @etm);
 	$eff_tm = $eff_tm>0? $eff_tm: 0;
 	
 	# dis to primer 3end
@@ -169,24 +167,31 @@ sub efficiency_probe{
 
 
 sub efficiency{
-	my ($tm, $mvisual, $opt_tm)=@_;
+	my ($tm, $mvisual, $opt_tm, $min_tm, $end3b)=@_;
+	
 	# tm eff
-	my @etm=($opt_tm-1, $opt_tm+100, 40, $opt_tm+100); 
-	my $eff_tm = &score_single($tm, 1, @etm);
+	my @etm=($opt_tm, $opt_tm+100, $min_tm-0.1, $opt_tm+100, $min_tm-0.1, $opt_tm+100); 
+	my $eff_tm = &score_growth_curve($tm, 1, @etm);
 	$eff_tm = $eff_tm>0? $eff_tm: 0;
 
 	# mismatch pos to 3end
 	my @mis_pos;
-	&get_3end_mismatch($mvisual, \@mis_pos, $end_len);
+	my $tlen = &get_3end_mismatch($mvisual, \@mis_pos);
 	my $eff_end = 1;
-	for(my $i=0; $i<@mis_pos; $i++){
-		$eff_end *= &score_single($mis_pos[$i], 1, @mis_end);
+	if(scalar @mis_pos>0){
+		my @mis_end=($tlen/2,100,1,100); #end: 0-$tlen/2 => score: 0-fulls
+		if($mis_pos[0]==1 && ($end3b eq "C" || $end3b eq "G")){
+			@mis_end=($tlen/2,100,0.5,100);
+		}
+		for(my $i=0; $i<@mis_pos; $i++){
+			$eff_end *= &score_single($mis_pos[$i], 1, @mis_end);
+		}
 	}
-	return $eff_tm*$eff_end;
+	return ($eff_tm*$eff_end, $eff_tm, $eff_end);
 }
 
 sub get_3end_mismatch{
-	my ($mv, $apos, $max_end)=@_;
+	my ($mv, $apos)=@_;
 	
 	$mv=~s/\^+/\*\*/; ## Del ==> 2 mismatch
 	$mv=~s/\-+/\*\*/; ## Insert ==> 2 mismatch
@@ -198,6 +203,7 @@ sub get_3end_mismatch{
 			push @{$apos}, $num;
 		}
 	}
+	return $num;
 }
 
 sub get_highest_bound{

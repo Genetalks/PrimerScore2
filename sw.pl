@@ -31,11 +31,16 @@ my $seq2=shift;
 # ------------------------------------------------------------------
 my $DEBGU_MODE=0;
 
+#my $match_score     ||=  1;
+#my $mismatch_score  ||=  -1;
+#my $open_gap        ||=  -5;
+#my $extend_gap      ||=  -3;
 my $match_score     ||=  1;
-my $mismatch_score  ||=  -1;
+my $mismatch_score  ||=  -0.8;
 my $open_gap        ||=  -5;
 my $extend_gap      ||=  -3;
-my $printOverall;
+
+
 GetOptions(
 				"help|?" =>\&USAGE,
 				"match_score:s"=>\$match_score,
@@ -43,7 +48,6 @@ GetOptions(
 				"open_gap:s"=>\$open_gap,
 				"extend_gap:s"=>\$extend_gap,
 				"debug"=>\$DEBGU_MODE,
-				"print_overall"=>\$printOverall,
 				) or &USAGE;
 
 # guarantee sign of parameters
@@ -146,8 +150,8 @@ if ($DEBGU_MODE) {
 
 
 #traceback for alignment sequence
-my $str1;
-my $str2;
+my $str1="";
+my $str2="";
 my $alig;
 
 my $i=$max_i;
@@ -159,17 +163,21 @@ my $gapCount=0;
 my $gapSize=0;
 
 
-
+my ($index_s1, $index_s2, $index_e1, $index_e2) ;
 while ($trace_matrix[$i][$j] ne "done" && $i>0 && $j>0) {
 	$DEBGU_MODE && print $i,"\t",$j,"\t",$trace_matrix[$i][$j],"\t";
 	if ($trace_matrix[$i][$j] eq "diag") {
 		$str1.=$seq1[$j-1];
 		$str2.=$seq2[$i-1];
 		if ($seq1[$j-1] eq $seq2[$i-1]){
+			if(length($str1)==1){$index_e1 = $j-1;}
+			if(length($str2)==1){$index_e2 = $i-1;}
+			$index_s1 = $j-1;
+			$index_s2 = $i-1;
 			$alig.="|";
 			$match++;
 		}else{
-			$alig.=" ";
+			$alig.="*";
 			$misMatch++;
 		}
 		$i--;
@@ -178,14 +186,14 @@ while ($trace_matrix[$i][$j] ne "done" && $i>0 && $j>0) {
 	}elsif($trace_matrix[$i][$j] eq "left"){
 		$str1.=$seq1[$j-1];
 		$str2.="-";
-		$alig.=" ";
+		$alig.="^";
 		$j--;
 		$gapSize++;
 		$DEBGU_MODE && print "left","\n";
 	}else{
 		$str1.="-";
 		$str2.=$seq2[$i-1];
-		$alig.=" ";
+		$alig.="-";
 		$i--;
 		$gapSize++;
 		$DEBGU_MODE && print "up","\n";
@@ -193,11 +201,59 @@ while ($trace_matrix[$i][$j] ne "done" && $i>0 && $j>0) {
 }
 $DEBGU_MODE && print "\n********************************************************************\n";
 
-
 #reverse traceback string
 $str1=reverse $str1;
 $str2=reverse $str2;
 $alig=reverse $alig;
+#print join("\n", $str1, $alig, $str2),"\n";
+#print join("\t", $index_s1, $index_s2, $index_e1, $index_e2),"\n";
+
+## complement seq
+if($index_s1 !=0 || $index_s2 !=0){
+	my $sub1 = substr($seq1, 0, $index_s1);
+	my $sub2 = substr($seq2, 0, $index_s2);
+	my $max_len;
+	if($index_s1 > $index_s2){
+		my $l = length $sub2;
+		$str1 = $sub1.$str1;
+		$alig = "#" x $l. $alig;
+		$str2 = " " x ($index_s1 - $index_s2). $sub2. $str2;
+		$alig = " " x ($index_s1 - $l) . $alig;
+	}else{
+		my $l = length $sub1;
+		$str2 = $sub2. $str2;
+		$alig = "#" x $l . $alig;
+		$str1 = " " x ($index_s2 - $index_s1) . $sub1. $str1;
+		$alig = " " x ($index_s2 - $l) . $alig;
+	}
+	#print join("\t", $index_s1, $index_s2, $sub1, $sub2),"\n";
+	#print $alig,"\n";
+}
+my $imax1 = length($seq1)-1;
+my $imax2 = length($seq2)-1;
+if($index_e1 != $imax1 || $index_e2 != $imax2){
+	my $sub1 = substr($seq1, $index_e1+1);
+	my $sub2 = substr($seq2, $index_e2+1);
+	my $alen1 = $imax1 - $index_e1;
+	my $alen2 = $imax2 - $index_e2;
+	my $dlen = abs($alen1 - $alen2);
+#	print join("\t", $sub1, $sub2, $alen1, $alen2),"\n";
+	if($alen1 > $alen2){
+		$str1 .= $sub2;
+		$str2 .= $sub2. " " x $dlen;
+		$alig .= "#" x $alen2;
+		$alig .= " " x ($alen1-$alen2);
+	}else{
+		$str2 .= $sub2;
+		$str1 .= $sub1 . " " x $dlen;
+		$alig .= "#" x $alen1;
+		$alig .= " " x ($alen2-$alen1);
+	}
+	#print join("\t", $index_e1, $index_e2, $imax1, $imax2, $alen1, $alen2, $sub1, $sub2, $alig),"\n";
+}
+
+
+
 
 #exit if no alignment
 if ($alig eq "") {
@@ -231,40 +287,9 @@ my $identity=sprintf "%.2f",$match/$alignment_length;
 # ------------------------------------------------------------------
 # Output result
 # ------------------------------------------------------------------
-if(defined $printOverall){
-	my $seqL1=substr($seq1, 0, $j);
-	my $seqR1=substr($seq1, $max_j);
-	my $seqL2=substr($seq2, 0, $i);
-	my $seqR2=substr($seq2, $max_i);
-	my $lenL1 = length $seqL1;
-	my $lenL2 = length $seqL2;
-	my $lenR1 = length $seqR1;
-	my $lenR2 = length $seqR2;
-	my ($aligL, $aligR);
-	if($lenL1 > $lenL2){
-		$seqL2="-" x ($lenL1-$lenL2).$seqL2;
-		$aligL = " " x $lenL1;
-	}else{
-		$seqL1="-" x ($lenL2-$lenL1).$seqL1;
-		$aligL = " " x $lenL2;
-	}
-	if($lenR1 > $lenR2){
-		$seqR2.="-" x ($lenR1-$lenR2);
-		$aligR = " " x $lenR1;
-	}else{
-		$seqR1.="-" x ($lenR2-$lenR1);
-		$aligR = " " x $lenR2;
-	}
-	
-	print $seqL1.$str1.$seqR1,"\n";
-	print $aligL.$alig.$aligR,"\n";
-	print $seqL2.$str2.$seqR2,"\n";
-}else{
-	print $str1,"\n";
-	print $alig,"\n";
-	print $str2,"\n";
-}
-
+print $str1,"\n";
+print $alig,"\n";
+print $str2,"\n";
 print "\n";
 print "Match     : $match","\n";
 print "MisMatch  : $misMatch","\n";
@@ -289,7 +314,6 @@ Usage: perl $0 <seq1> <seq2> [option]
   -open_gap         <int>   open gap score, default -5
   -extend_gap       <int>   extend gap score, default -3
   -debug                    Debug mode, default off
-  -print_overall            print overall of seq
   -h                        Help
 
 USAGE

@@ -35,6 +35,7 @@ my $PCRsize=1000;
 my $NoFilter;
 my $min_eff=0.01;
 my $max_prodn=50;
+my $min_tm_spec=45;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -304,11 +305,11 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 					print "Warn: $p2 No bound info!\n";
 					next;
 				}
-				&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
+				&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
 				$record{"pro"}{$p1}{$p2}=1;
-				&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
+				&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
 				$record{"pro"}{$p1}{$p1}=1;
-				&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
+				&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
 				$record{"pro"}{$p2}{$p2}=1;
 				my @effs = sort{$b<=>$a} values %{$prod{$tid}{$tid}};
 				my $pnum=scalar @effs;
@@ -320,7 +321,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 					# probe num on products
 					my %pdr;
 					my $pb=$condv[$i][4];
-					my ($pdnum)= &probe_bounds_on_products($pb, $bound{$pb}, $prod{$tid}{$tid}, \%pdr, $PCRsize, $opt_tm+10); #my ($id, $abound, $aprod, $aresult)=@_;
+					my ($pdnum)= &probe_bounds_on_products($pb, $bound{$pb}, $prod{$tid}{$tid}, \%pdr, $PCRsize, $opt_tm+8, $min_tm_spec+8); #my ($id, $abound, $aprod, $aresult)=@_;
 					my @pdeffs = sort{$b<=>$a} values %{$pdr{$pb}};
 					my $spdr = &bound_score($pdnum, join(",", @pdeffs), $fulls_prod, "Eff"); ## probe specificity
 					$sprod=($sprod*1+$spdr*2)/3; ## specificity weight is primer:probe=1:2

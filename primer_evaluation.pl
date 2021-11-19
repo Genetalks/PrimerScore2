@@ -21,7 +21,8 @@ our $REF_GRCh37;
 my $fdatabases = $REF_GRCh37;
 my $ptype = "face-to-face";
 my $PCRsize=1000;
-my $min_eff=0.01;
+my $min_eff=0.001;
+my $min_tm_spec=45;
 my $opt_tm = 60;
 my $opt_tm_probe = 70;
 my $max_prodn=50;
@@ -113,7 +114,7 @@ my %boundm;
 open(B, $fbound) or die $!;
 while(<B>){
 	chomp;
-	my ($id, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
+	my ($id, $strand, $chr, $pos3, $seq, $tm, $end3_base, $mvisual)=split /\t/, $_;
 	next if(!exists $id{$id});
 	$id{$id}=1;
 	my ($tid, $type)=$id=~/(\S+)-([12LRP])/;
@@ -122,7 +123,7 @@ while(<B>){
 	}
 	my $len = length $seq;
 	my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
-	push @{$bound{$type}{$tid}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $tid];
+	push @{$bound{$type}{$tid}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end3_base, $mvisual, $tid];
 }
 close(B);
 foreach my $id(keys %id){
@@ -146,7 +147,7 @@ foreach my $tp1(@tps){
 			foreach my $tid2(keys %{$bound{$tp2}}){
 				next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
 				next if(exists $record{"pro"}{$tid2."-".$tp2}{$tid1."-".$tp1});
-				&caculate_product($tid1, $tid1."-".$tp1, $tid2, $tid2."-".$tp2, $bound{$tp1}{$tid1}, $bound{$tp2}{$tid2}, $ptype,\%product, \%record, $PCRsize, $opt_tm, $mind, $maxd, $min_eff, $max_prodn);
+				&caculate_product($tid1, $tid1."-".$tp1, $tid2, $tid2."-".$tp2, $bound{$tp1}{$tid1}, $bound{$tp2}{$tid2}, $ptype,\%product, \%record, $PCRsize, $opt_tm, $min_tm_spec, $mind, $maxd, $min_eff, $max_prodn);
 				$record{"pro"}{$tid1."-".$tp1}{$tid2."-".$tp2}=1;
 			}
 		}
@@ -157,7 +158,7 @@ my %productp;
 if(exists $bound{"P"}){#Probe
 	foreach my $tid(keys %{$bound{"P"}}){
 		# probe num on products
-		&probe_bounds_on_products($tid."-P", $bound{"P"}{$tid}, $product{$tid}{$tid}, \%productp, $PCRsize, $opt_tm_probe); #my ($id, $abound, $aprod, $aresult)=@_;
+		&probe_bounds_on_products($tid."-P", $bound{"P"}{$tid}, $product{$tid}{$tid}, \%productp, $PCRsize, $opt_tm_probe, $min_tm_spec+8); #my ($id, $abound, $aprod, $aresult)=@_;
 	}
 }
 
