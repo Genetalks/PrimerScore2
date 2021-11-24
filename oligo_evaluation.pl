@@ -243,10 +243,14 @@ while (<P>){
 		my $mseq = substr($oligo_seq0, $off);
 		print PN ">$id0\n";
 		print PN $mseq,"\n";
+		print PN ">$id0\_rc\n";
+		print PN &revcom($mseq),"\n";
 		if(defined $revcom){
 			my $mseqL = substr($oligo_seq0, 0, $len_map); ##
 			print PN ">$id0\_L\n";
 			print PN $mseqL,"\n";
+			print PN ">$id0\_L_rc\n";
+			print PN &revcom($mseqL),"\n";
 		}
 	}
 	
@@ -283,9 +287,9 @@ if(!defined $NoSpecificity){
 			$fdatabase=$fdatabase_new;
 		}
 		my $dname = basename($fdatabase);
-		my $cmd="$BWA mem -D 0 -k 8 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a |samtools view -bS -> $fdatabase $fa_oligo >$fa_oligo\_$dname.bam 2>$fa_oligo\_$dname.bam.log";
-		&Run_monitor_timeout($max_time, $cmd);
-		my $ret = `grep -aR Killed $fa_oligo\_$dname.bam.log`;
+		my $cmd="$BWA mem -D 0 -k 8 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
+		#&Run_monitor_timeout($max_time, $cmd);
+		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
 		chomp $ret;
 		if($ret eq "Killed"){## time out
 			open(I, $fa_oligo) or die $!;
@@ -307,15 +311,22 @@ if(!defined $NoSpecificity){
 		}
 
 		### read in bam
-		open (I, "$SAMTOOLS view $fa_oligo\_$dname.bam|") or die $!;
+		open (I, "$SAMTOOLS view $fa_oligo\_$dname.sam|") or die $!;
+		my %record;
 		while (<I>){
 			chomp;
 			my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;
 			my ($is_unmap, $is_reverse)=&explain_bam_flag_unmap($flag);
 			my ($md)=$_=~/MD:Z:(\S+)/;
 			next if ($is_unmap);
+			if($id=~/_rc$/){
+				$id=~s/_rc$//;
+				$is_reverse=$is_reverse==0? 1: 0;
+				next if(exists $record{$id}{join(",", $is_reverse, $chr, $pos, $cigar, $md)});
+			}
 			$sum++;
 			push @{$mapping{$id}{$dname}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
+			$record{$id}{join(",", $is_reverse, $chr, $pos, $cigar, $md)}=1;
 		}
 		close(I);
 	}
@@ -340,7 +351,6 @@ if(!defined $NoSpecificity){
 					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
 					my ($emis3)=&get_3end1_mismatch($is_reverse, $cigar, $md);
 					next if(!defined $probe && !defined $revcom && $oligo_seq!~/[CG]$/ && $emis3>=1);## if not C/G end, then filter mapping with end3 base not mapped exactly
-
 					#filter lowtm
 #					my $map_form=&map_form_standard($is_reverse, $cigar, $md);
 					my $map_form=join(",", $is_reverse, $cigar, $md);
@@ -381,7 +391,7 @@ if(!defined $NoSpecificity){
 					}
 
 					## sw map
-					my $result = `$Bin/sw.pl $oligo_seq $seq`;
+					my $result = `perl $Bin/sw.pl $oligo_seq $seq`;
 					my @line = split /\n/, $result;
 
 					## match visual

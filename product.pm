@@ -102,7 +102,7 @@ sub caculate_product{
 						my @rsize=($mind,$maxd, $dmin, $dmax);
 						my $eff_dis=&score_single($dis, 1, @rsize);
 						my $eff=$eff1*$eff2*$eff_dis;
-						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1),sprintf("%.2f", $eff1), sprintf("%.2f", $eff1_tm), sprintf("%.2f", $eff1_end), $p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2),sprintf("%.2f", $eff2), sprintf("%.2f", $eff2_tm), sprintf("%.2f", $eff2_end));
+						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1),sprintf("%.3f", $eff1), sprintf("%.3f", $eff1_tm), sprintf("%.3f", $eff1_end), $p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2),sprintf("%.3f", $eff2), sprintf("%.3f", $eff2_tm), sprintf("%.3f", $eff2_end));
 						next if($eff<$min_eff);
 						$aprod->{$tid1}{$tid2}{$prob}=$eff;
 					#	print join("\t", $eff, $prob),"\n";
@@ -179,9 +179,9 @@ sub efficiency{
 	my $tlen = &get_3end_mismatch($mvisual, \@mis_pos);
 	my $eff_end = 1;
 	if(scalar @mis_pos>0){
-		my @mis_end=($tlen/2,100,1,100); #end: 0-$tlen/2 => score: 0-fulls
+		my @mis_end=($tlen,100,1,100); #end: 0-$tlen/2 => score: 0-fulls
 		if($mis_pos[0]==1 && ($end3b eq "C" || $end3b eq "G")){
-			@mis_end=($tlen/2,100,0.5,100);
+			@mis_end=($tlen,100,0.95,100);
 		}
 		for(my $i=0; $i<@mis_pos; $i++){
 			$eff_end *= &score_single($mis_pos[$i], 1, @mis_end);
@@ -221,7 +221,7 @@ sub get_highest_bound{
 	my @binfos;
 	foreach $binfo(@binfo){
 		push @binfos, $binfo;
-		push @bvalue, sprintf("%.2f",$bound{$binfo});
+		push @bvalue, sprintf("%.5f",$bound{$binfo});
 		$n++;
 		last if($n==$maxn);
 	}
