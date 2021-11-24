@@ -20,10 +20,15 @@ my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $MultiPlex;
 my $SelfComplementary;
 my $high_tm = 45;
-my $min_tm = 20;
-my $max_unmap=1;
-my $min_len=3; ## min end3 match len when Enddimer
+my $min_tm_omega = 17;
+my $min_tm_amp = 29; ##Dis-7:26
+my $min_meetlen=3; ## min end3 match len when Enddimer
+my $min_amplen=15;
 my $sublen = 8; ## substr end3's seq to detect dimer, because primer3 always don't predict dimers with lowtm although end3 is matched exactly
+my $adapter1="AGATGTGTATAAGAGACAG";
+#my $adapter2="GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT";
+my $adapter2="CTGGAGTTCAGACGTGTGCTCTTCCGATCT"; ## remove 4 bp, for too long to ntthal
+my $Nofilter;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
@@ -33,7 +38,10 @@ GetOptions(
 				"dv:s"=>\$dv,
 				"dNTP:s"=>\$dNTP,
 				"dna:s"=>\$dna,
+				"adpt1:s"=>\$adapter1,
+				"adpt2:s"=>\$adapter2,
 				"MultiPlex:s"=>\$MultiPlex,
+				"Nofilter:s"=>\$Nofilter,
 				"SelfComplementary:s"=>\$SelfComplementary,
 				"od:s"=>\$outdir,
 				) or &USAGE;
@@ -64,7 +72,12 @@ while(<I>){
 	$LR=~s/L/1/;
 	$LR=~s/R/2/;
 	$LR=~s/P/3/;
-	my $subseq = substr($seq, length($seq)-$sublen, $sublen);	
+	my $subseq = substr($seq, length($seq)-$sublen, $sublen);
+	if($LR==1){
+		$seq=$adapter1.$seq;
+	}elsif($LR==2){
+		$seq=$adapter2.$seq;
+	}
 	@{$seq{$tid}->[$LR-1]}=($seq, $subseq);
 	$id{$tid}[$LR-1]=$id;
 }
@@ -89,24 +102,32 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 					print O $HPinfo, "\n";
 				}
 			}
-			
-					
-			my $ANYinfo = `$ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq`;
-			chomp $ANYinfo;
-			my ($ANY_tm, $ANY31, $ANY32)=&dimer_amplify($ANYinfo);
-			if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && ($ANY31<=$max_unmap || $ANY32<=$max_unmap))){
-				print O join("\t", "\n#ANYDimer", $id, $id, $ANY_tm, $ANY31, $ANY32),"\n";
-				print O "ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq\n";
-				print O $ANYinfo, "\n";
+			my ($is_amplify, $atype, $eff);
+			{
+			my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq`;
+			chomp $info;
+			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+			if($is_amplify || defined $Nofilter){
+				print O join("\t", "#Dimer", $id, $id, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+				print O "$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq\n";
+				print O $info, "\n";
+			}
 			}
 
-			my $ENDinfo = `$ntthal -a END1 -s1 $subseq -s2 $subseq`;
-			chomp $ENDinfo;
-			my ($END_tm, $END31, $END32, $mlen3)=&dimer_amplify($ENDinfo);
-			if($END31==0 && $END32==0 && $mlen3>=$min_len){
-				print O join("\t", "\n#EndDimer", $id, $id, $mlen3, $END_tm),"\n";
-				print O "ntthal -a END1 -s1 $subseq -s2 $subseq\n";
-				print O $ENDinfo, "\n";
+			if($atype ne "AmpEndMeet"){
+			my $info = `$ntthal -a END1 -s1 $subseq -s2 $subseq`;
+			chomp $info;
+			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+			next if($msum>1 && $atype eq "AmpEndMap");
+			$len+=length($oligo_seq)-$sublen+length($oligo_seq)-$sublen;
+			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3, $min_meetlen);
+			if($is_amplify || defined $Nofilter){
+				$amplen="NA";
+				print O join("\t", "#EndDimer", $id, $id, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+				print O "$ntthal -a END1 -s1 $subseq -s2 $subseq\n";
+				print O $info, "\n";
+			}
 			}
 
 			
@@ -116,23 +137,44 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my ($info, $tm, $umap1, $umap2);
 			my ($seq, $subs) = @{$seq{$tid}->[$k]};
 			my $id2=$id{$tid}->[$k];
-
-			my $ANYinfo = `$ntthal -a ANY -s1 $oligo_seq -s2 $seq`;
-			chomp $ANYinfo;
-			my ($ANY_tm, $ANY31, $ANY32)=&dimer_amplify($ANYinfo);
-			if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && ($ANY31<=$max_unmap || $ANY32<=$max_unmap))){
-				print O join("\t", "\n#ANYDimer", $id, $id2, $ANY_tm, $ANY31, $ANY32),"\n";
-				print O "ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
-				print O $ANYinfo, "\n";
+			my ($is_amplify, $atype, $eff);
+			{
+			my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $seq`;
+			chomp $info;
+			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+			if($is_amplify || defined $Nofilter){
+				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+				print O "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
+				print O $info, "\n";
+			}
+			}
+			if(!$is_amplify || defined $Nofilter){
+			my $info = `$ntthal -a END2 -s1 $oligo_seq -s2 $seq`;
+			chomp $info;
+			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+			if($is_amplify || defined $Nofilter){
+				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+				print O "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
+				print O $info, "\n";
+			}
 			}
 			
-			my $END1info = `$ntthal -a END1 -s1 $subseq -s2 $subs`;
-			chomp $END1info;
-			my ($END_tm, $END31, $END32, $mlen3)=&dimer_amplify($END1info);
-			if($END31==0 && $END32==0 && $mlen3>=$min_len){
-				print O join("\t", "\n#EndDimer", $id, $id2, $mlen3, $END_tm),"\n";
-				print O "ntthal -a END1 -s1 $subseq -s2 $subs\n";
-				print O $END1info, "\n";
+			if($atype ne "AmpEndMeet"){
+			my $info = `$ntthal -a END1 -s1 $subseq -s2 $subs`;
+			chomp $info;
+			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+			next if($msum>1 && $atype eq "AmpEndMap");
+			$len+=length($seq)-$sublen+length($oligo_seq)-$sublen;
+			
+			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3, $min_meetlen);
+			if($is_amplify || defined $Nofilter){
+				$amplen="NA";
+				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+				print O "$ntthal -a END1 -s1 $subseq -s2 $subs\n";
+				print O $info, "\n";
+			}
 			}
 		}
 
@@ -145,33 +187,45 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 				for(my $k=0; $k<@seq2; $k++){
 					my ($seq, $subs) = @{$seq{$tid2}->[$k]};
 					my $id2=$id{$tid2}->[$k];
-					if(!defined $seq){
-						print $tid2,"\n";
-						print Dumper @seq2;
-						print $k,"\n";
-						die;
+					my ($is_amplify, $atype, $eff);
+					{
+					my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $seq`;
+					chomp $info;
+					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+					if($is_amplify || defined $Nofilter){
+						print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+						print O "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
+						print O $info, "\n";
+					}
+					}
+					
+					if(!$is_amplify || defined $Nofilter){
+					my $info = `$ntthal -a END2 -s1 $oligo_seq -s2 $seq`;
+					chomp $info;
+					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+					if($is_amplify || defined $Nofilter){
+						
+						print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+						print O "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
+						print O $info, "\n";
+					}
 					}
 
-					my $ANYinfo = `$ntthal -a ANY -s1 $oligo_seq -s2 $seq`;
-					chomp $ANYinfo;
-				#	print "$ntthal -a ANY -s1 $oligo_seq -s2 $seq\n";
-					my ($ANY_tm, $ANY31, $ANY32)=&dimer_amplify($ANYinfo);
-					if(!defined $ANY_tm){
-						print $ANYinfo,"\n";
-						die;
+					if($atype ne "AmpEndMeet"){
+					my $info = `$ntthal -a END1 -s1 $subseq -s2 $subs`;
+					chomp $info;
+					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
+					next if($msum>1 && $atype eq "AmpEndMap");
+					$len+=length($seq)-$sublen+length($oligo_seq)-$sublen;
+					($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3, $min_meetlen);
+					if($is_amplify || defined $Nofilter){
+						$amplen="NA";
+						print O join("\t", "#EndDimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+						print O "$ntthal -a END1 -s1 $subseq -s2 $subs\n";
+						print O $info, "\n";
 					}
-					if($ANY_tm>=$high_tm || ($ANY_tm>=$min_tm && ($ANY31<=$max_unmap || $ANY32<=$max_unmap))){
-						print O join("\t", "#ANYDimer", $id, $id2, $ANY_tm, $ANY31, $ANY32),"\n";
-						print O $ANYinfo, "\n";
-					}
-
-					my $END1info = `$ntthal -a END1 -s1 $subseq -s2 $subs`;
-					chomp $END1info;
-				#	print "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
-					my ($END_tm, $END31, $END32, $mlen3)=&dimer_amplify($END1info);
-					if($END31==0 && $END32==0 && $mlen3>=$min_len){
-						print O join("\t", "#EndDimer", $id, $id2, $mlen3, $END_tm),"\n";
-						print O $END1info, "\n";
 					}
 				}
 			}
@@ -243,8 +297,9 @@ Usage:
   -i  <file>   Input primer file, forced
   -t  <str>    primer file type, "Result" (xxx.final.result) or "Primer", [$type]
   -k  <str>	   Key of output file, forced
-  --SelfComplementary      Evalue self-complementary
-  --MultiPlex              Evalue dimer among different primer pairs
+  --SelfComplementary   Evalue self-complementary
+  --MultiPlex           Evalue dimer among different primer pairs
+  --Nofilter            No filter and output all dimer info.
   -mv        <int>      concentration of monovalent cations in mM, [$mv]
   -dv        <float>    concentration of divalent cations in mM, [$dv]
   -dNTP      <float>    concentration of deoxynycleotide triphosphate in mM, [$dNTP]
