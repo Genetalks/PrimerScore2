@@ -19,15 +19,11 @@ my $type = "Result";
 my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $MultiPlex;
 my $SelfComplementary;
-my $high_tm = 45;
-my $min_tm_omega = 17;
-my $min_tm_amp = 29; ##Dis-7:26
-my $min_meetlen=3; ## min end3 match len when Enddimer
-my $min_amplen=15;
-my $sublen = 8; ## substr end3's seq to detect dimer, because primer3 always don't predict dimers with lowtm although end3 is matched exactly
 my $adapter1="AGATGTGTATAAGAGACAG";
 #my $adapter2="GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT";
 my $adapter2="CTGGAGTTCAGACGTGTGCTCTTCCGATCT"; ## remove 4 bp, for too long to ntthal
+my $high_tm=50;
+my $sublen = 8; ## substr end3's seq to detect dimer, because primer3 always don't predict dimers with lowtm although end3 is matched exactly
 my $Nofilter;
 GetOptions(
 				"help|?" =>\&USAGE,
@@ -107,7 +103,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq`;
 			chomp $info;
 			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
-			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 			if($is_amplify || defined $Nofilter){
 				print O join("\t", "#Dimer", $id, $id, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
 				print O "$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq\n";
@@ -121,7 +117,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
 			next if($msum>1 && $atype eq "AmpEndMap");
 			$len+=length($oligo_seq)-$sublen+length($oligo_seq)-$sublen;
-			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3, $min_meetlen);
+			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3);
 			if($is_amplify || defined $Nofilter){
 				$amplen="NA";
 				print O join("\t", "#EndDimer", $id, $id, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
@@ -142,7 +138,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $seq`;
 			chomp $info;
 			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
-			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 			if($is_amplify || defined $Nofilter){
 				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
 				print O "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
@@ -153,7 +149,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my $info = `$ntthal -a END2 -s1 $oligo_seq -s2 $seq`;
 			chomp $info;
 			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
-			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 			if($is_amplify || defined $Nofilter){
 				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
 				print O "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
@@ -168,7 +164,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			next if($msum>1 && $atype eq "AmpEndMap");
 			$len+=length($seq)-$sublen+length($oligo_seq)-$sublen;
 			
-			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3, $min_meetlen);
+			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3);
 			if($is_amplify || defined $Nofilter){
 				$amplen="NA";
 				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
@@ -192,7 +188,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 					my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $seq`;
 					chomp $info;
 					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
-					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 					if($is_amplify || defined $Nofilter){
 						print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
 						print O "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
@@ -204,7 +200,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 					my $info = `$ntthal -a END2 -s1 $oligo_seq -s2 $seq`;
 					chomp $info;
 					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
-					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen); 
+					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 					if($is_amplify || defined $Nofilter){
 						
 						print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
@@ -219,7 +215,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
 					next if($msum>1 && $atype eq "AmpEndMap");
 					$len+=length($seq)-$sublen+length($oligo_seq)-$sublen;
-					($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3, $min_meetlen);
+					($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3);
 					if($is_amplify || defined $Nofilter){
 						$amplen="NA";
 						print O join("\t", "#EndDimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";

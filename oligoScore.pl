@@ -16,13 +16,13 @@ require "$Bin/math.pm";
 # GetOptions
 # ------------------------------------------------------------------
 our ($VCF_dbSNP, $REF_GRCh37, $REF_GRCh37_SNP, $REF_GRCh38, $REF_GRCh38_SNP, $BLAT, $SAMTOOLS);
-my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer);
+my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer, $Precise);
 my $fref = $REF_GRCh37;
 my $fref_snp;
 my $fdatabases = $REF_GRCh37;
 my $step = 1;
 my $para_num = 10;
-my $stm = 45;
+my $stm = 48;
 my $opt_tm=60;
 my $opt_tm_probe=70;
 my $min_len=18;
@@ -31,13 +31,13 @@ my $min_len_probe=18;
 my $max_len_probe=36;
 my $scale_len=2;
 my $pcr_size=1000;
-my $min_eff=0.01;
+my $min_eff=0.00001;
 my $max_prodn=50;
 my $pnum = 20; ## position num for one oligo, its candidate oligos num is roughly: pnum*(maxl-minl)/scalel.
 my $choose_num = 10; ## for a primer, at least $choose_num primers can be selected as its pair with the best dis.
 my $rfloat = 0.2;
 my $dis_aver = 500;
-my $dis_range="100,150,70,200"; ##distance between oligos range(best_min, best_max, min, max), that is product size range when face-to-face
+my $dis_range="120,160,80,200"; ##distance between oligos range(best_min, best_max, min, max), that is product size range when face-to-face
 my $pos_range; ## pos range(best_min, best_max, min, max)
 my $type = "face-to-face";
 my $plex = "SinglePlex";
@@ -58,6 +58,7 @@ GetOptions(
 				"Probe:s"=>\$probe,
 				"Homology_check:s"=>\$homology_check,
 				"NoFilter:s"=>\$NoFilter,
+				"Precise:s"=>\$Precise,
 
 				## oligo design
 				"opttm:s"=>\$opt_tm,
@@ -213,7 +214,7 @@ if($ftype eq "SNP"){
 }elsif($ftype eq "Primer"){
 	my $range = join(",", $rdiss[-2], $rdiss[-1]);
 	$thread=defined $thread? $thread: 10;
-	&Run("perl $Bin/primer_evaluation.pl -io $ftarget -id $fdatabases -k $fkey -tp $type -ep $plex --AllEvalue --OutAllProduct -td $thread -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd $range -me $min_eff -mp $max_prodn -od $outdir", $sh);
+	&Run("perl $Bin/primer_evaluation.pl -io $ftarget -id $fdatabases -k $fkey -tp $type -ep $plex --AllEvalue --OutAllProduct -td $thread -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd $range -stm $stm -me $min_eff -mp $max_prodn -od $outdir", $sh);
 	if($plex eq "MultiPlex"){
 		&Run("perl $Bin/cross_dimer_check.pl -i $ftarget -t Primer -k $fkey.final -od $outdir", $sh);
 	}
@@ -256,6 +257,9 @@ if($step==2){
 	}
 	if(defined $NoFilter){
 		$dcmd .= " --NoFilter";
+	}
+	if(defined $Precise){
+		$dcmd .= " --Precise";
 	}
 	&Run($dcmd, $sh);
 	$step++;
@@ -431,10 +435,10 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
     ###-rdis: distance range of pair primers, (best_min, best_max, min, max) separted by ",", example:
    		
-      face-to-face: |---> P1 x            dis_range:100,150,70,200(qPCR); 530,570,500,600(Sanger)
+      face-to-face: |---> P1 x            dis_range:120,160,80,200(qPCR); 530,570,500,600(Sanger)
          (SNP)               x  P2 <---|  
 
-      face-to-face: P1 |--->              dis_range:100,150,70,200(qPCR)
+      face-to-face: P1 |--->              dis_range:120,160,80,200(qPCR)
         (Region)              <---| P2    
 
       back-to-back:  x <---| P2           dis_range:5,10,0,15
@@ -456,6 +460,7 @@ Usage:
   -p         <str>    prefix of output file, forced
   --Probe             Design probe when -type "face-to-face", optional
   --NoFilter          Not filter any oligos
+  --Precise           Evalue specificity precisely, but will consume a long time(reach to 100 times longer)
   --Homology_check    Check homologous sequence of template sequence when design for NGS primers, optional
 
   ### oligo parameters

@@ -15,7 +15,7 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($NoSpecificity, $FiterRepeat, $NoFilter);
+my ($NoSpecificity, $FiterRepeat, $NoFilter, $Precise);
 my ($ftem,$ftem_snp,$fkey,$outdir);
 my $para_num = 10;
 my $stm = 45;
@@ -38,6 +38,7 @@ GetOptions(
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"FilterRepeat:s"=>\$FiterRepeat,
 				"NoFilter:s"=>\$NoFilter,
+				"Precise:s"=>\$Precise,
 				"ptype:s"=>\$ptype,
 				"rlen:s"=>\$range_len,
 				"opttm:s"=>\$opt_tm,
@@ -168,6 +169,9 @@ while(<I>){
 			if(defined $NoFilter){
 				$cmd .= " --NoFilter";
 			}
+			if(defined $Precise){
+				$cmd .= " --Precise"
+			}
 			$cmd .= " >$dir/$fname.log 2>&1";
 			print SH $cmd,"\n";
 
@@ -283,6 +287,7 @@ Usage:
 
   --Probe           Design probe
   --NoFilter        Not filter any oligos
+  --Precise         Evalue specificity precisely, but will consume a long time
   --FilterRepeat	Filter oligos with repeat region(lowercase in fdatabases) more than 40%
   --NoSpecificity   not evalue specificity
 

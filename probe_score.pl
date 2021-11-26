@@ -43,11 +43,11 @@ open(F,">$outdir/$fkey.probe.filter") or die $!;
 open(O, ">$outdir/$fkey.probe.score") or die $!;
 #$slen, $stm, $sself, $ssnp, $spoly, $sbound, $sCGd
 print O "##ScoreInfo: scores of length, tm, self-complementary, CG content diff, 5endG, snp, poly, bounding\n";
-print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTM\tGC\tHairpin\tEND\tANY\tSNP\tPoly\tBoundNum\tBoundTM\tBoundInfo\n";
+print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTM\tGC\tHairpin\tDimerType\tDimerSize\tSNP\tPoly\tBoundNum\tBoundTM\tBoundInfo\n";
 open(P, $foligo) or die $!;
 while(<P>){
 	chomp;
-	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, undef, undef, $snp, $poly, $bnum, $btm)=split /\t/, $_;
+	my ($id, $seq, $len, $tm, $gc, $hairpin, $dimert, $dimers, undef, undef, $snp, $poly, $bnum, $btm)=split /\t/, $_;
 	## filter
 	if(!defined $NoFilter && ($tm<$opt_tm-8 || $tm>$opt_tm+8)){
 		print F "TM\t$_\n";
@@ -67,8 +67,8 @@ while(<P>){
 #		next;
 #	}
 	## score
-	my ($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm, $is_G5, $CGd);
-	print O join("\t", $id, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $bnum, $btm),"\n";
+	my ($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $snp, $poly, $bnum, $btm, $is_G5, $CGd);
+	print O join("\t", $id, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $dimert, $dimers, $snp, $poly, $bnum, $btm),"\n";
 }
 close(P);
 close(O);

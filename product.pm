@@ -80,12 +80,12 @@ sub caculate_product{
 					my $pos2 = $bds2[$j][$ixpos];
 					if($pos2>=$pmin && $pos2<=$pmax){
 						##
-						my ($eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end);
+						my ($eff1, $eff2);
 						my $b1=join(",", $p1, $chr, $sd, $bds[$i][0]);
 						if(exists $arecord->{"eff"}->{$b1}){
 							$eff1=$arecord->{"eff"}->{$b1};
 						}else{
-							($eff1, $eff1_tm, $eff1_end)=&efficiency($tm1, $mvisual1, $opt_tm, $min_tm, $end3_base1);
+							($eff1)=&efficiency($tm1, $mvisual1, $opt_tm, $min_tm, $end3_base1);
 							$arecord->{"eff"}->{$b1}=$eff1;
 						}
 						my $b2=join(",", $p2, $chr, $sd2, $bds2[$j][0]);
@@ -102,7 +102,7 @@ sub caculate_product{
 						my @rsize=($mind,$maxd, $dmin, $dmax);
 						my $eff_dis=&score_single($dis, 1, @rsize);
 						my $eff=$eff1*$eff2*$eff_dis;
-						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1),sprintf("%.3f", $eff1), sprintf("%.3f", $eff1_tm), sprintf("%.3f", $eff1_end), $p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2),sprintf("%.3f", $eff2), sprintf("%.3f", $eff2_tm), sprintf("%.3f", $eff2_end));
+						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1),$p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
 						next if($eff<$min_eff);
 						$aprod->{$tid1}{$tid2}{$prob}=$eff;
 					#	print join("\t", $eff, $prob),"\n";

@@ -1,5 +1,9 @@
 
 require "$Bin/score.pm";
+my $min_tm_omega = 17;
+my $min_tm_amp = 29; ##Dis-7:26
+my $min_meetlen=3; ## min end3 match len when Enddimer
+my $min_amplen=15;
 
 
 #Example: 
@@ -102,15 +106,13 @@ sub dimer_amplify{
 			$indel++;
 		}
 	}
-	print $info,"\n";
-	print $indel,"\n";
 	## 
 	my $len = length $line[0];
 	return ($tm, $pright, $tleft, $amplen, $mlen3, $len, $msum, $indel);
 }
 
 sub judge_amplify_endmeet{
-	my ($tm, $end31, $end32, $mlen3, $min_meetlen)=@_;
+	my ($tm, $end31, $end32, $mlen3)=@_;
 	my $is_amplify=0;
 	my $type = "NoAmplify";
 	my $eff=0;
@@ -125,7 +127,7 @@ sub judge_amplify_endmeet{
 }
 
 sub judge_amplify{
-	my ($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel, $min_tm_omega, $min_tm_amp, $min_amplen, $min_meetlen)=@_;
+	my ($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel)=@_;
 	
 	my $type="NoAmplify";
 	my $eff=0;

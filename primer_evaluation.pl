@@ -45,6 +45,7 @@ GetOptions(
 				"tmb:s"=>\$opt_tm_probe,
 				"sz:s"=>\$PCRsize,
 				"mp:s"=>\$max_prodn,
+				"stm:s"=>\$min_tm_spec,
 				"me:s"=>\$min_eff,
 				"td:s"=>\$thread,
 				"od:s"=>\$outdir,
@@ -86,7 +87,7 @@ if(!defined $fbound){
 	if($ftype ne "Common"){
 		die "Wrong file type: must be Common(2column: id seq) when not defined -ib!\n";
 	}
-	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm 45 --NoFilter -k $fkey -maxtime 100000000 -od $outdir");
+#	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm 45 --NoFilter -k $fkey -maxtime 100000000 -od $outdir");
 	$fevalue = "$outdir/$fkey.evaluation.out";
 	$fbound = "$outdir/$fkey.bound.info";
 }else{
@@ -171,7 +172,7 @@ if($ftype eq "Common"){
 	if(exists $bound{"P"}){
 		print O "##ScoreOligo(Probe) : total score | scores of tm, gc, self-complementary, CG content diff, snp, poly, bounding\n";
 	}
-	print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
+	print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
 }
 if(defined $OutAllProduct){
 	open(P, ">$outdir/$fkey.final.pair.product") or die $!;
@@ -202,15 +203,15 @@ while(<I>){
 	}
 
 	if($ftype eq "Common"){## score for primer
-		my ($len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly)=@info[2..$#info];
+		my ($len, $tm, $gc, $hairpin, $dimert, $dimers, $nendA, $enddG, $snp, $poly)=@info[2..$#info];
 		my ($sadd, $score_info);
 		if($tp ne "P"){
-			($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $sbnum, $sbeff);
+			($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $nendA, $enddG, $snp, $poly, $sbnum, $sbeff);
 		}else{
 			my ($is_G5, $CGd) = &G_content($info[1]);
-			($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $snp, $poly, $sbnum, $sbeff, $is_G5, $CGd);
+			($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $snp, $poly, $sbnum, $sbeff, $is_G5, $CGd);
 		}
-		print O join("\t", $info[0], $info[1], $info[2], $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $sbd, $pnum, $peffs, $pinfos),"\n";
+		print O join("\t", $info[0], $info[1], $info[2], $sadd, $score_info, $tm, $gc, $hairpin, $dimert, $dimers, $nendA, $enddG, $snp, $poly, $sbd, $pnum, $peffs, $pinfos),"\n";
 	}
 	if(defined $OutAllProduct){
 		if($tp!~/[2R]/){
@@ -276,7 +277,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 		ID2-2   AAAAAAAAAAAA
 
 		Evalue Format: xxx.final.result
-		#Chr    Start   Strand  ID      Seq     Len     Dis2Target      ProductSize     ScoreTotal      ScorePair       ScoreOligo      Tm      GC      Hairpin END_Dimer       ANY_Dimer       EndANum EndStability    SNP     Poly    OligoBound      BoundNum        HighestTm       HighestInfo
+		#Chr    Start   Strand  ID      Seq     Len     Dis2Target      ProductSize     ScoreTotal      ScorePair       ScoreOligo      Tm      GC      Hairpin DimerType       DimerSize       EndANum EndStability    SNP     Poly    OligoBound      BoundNum        HighestTm       HighestInfo
 		chr1    100379124       -       rs113994132-B1-1        TTTTTCTGTTCCACTCATCATATGAGA     27      0       162     286     25,11,10,20,30  41|3,10,0,7,10,-5,5,0   58.90   0.333   55.89   7.91    20.73   1       -6.7    0D1:TTTTTCTGTTCCACTCATCATATGAGE 22T5    10|58.84,49.32,48.69    1       1.00    162/chr1,P1,-100379124,|||||||||||||||||||||||||||,58.84,P2,+100378962,|||||||||||||||||||||||||||||,59.58
 		chr1    100379097       -       rs113994132-B1-P        CCTTTATAGCCTTTCCTGAAAAATGACATAAGACATGGTA        40      40      0       286     30      63.5|1,3,10,5,10,10,3,7 66.39   0.350   30.67   -18.20  -6.10   2       0       NA      17A5,26T3,35T3  15|65.97,50.26,49.55    1       0.86    27/chr1,-100379097,||||||||||||||||||||||||||||||||||||||||,65.97:chr1,P1,-100379124,|||||||||||||||||||||||||||,58.84,P2,+100378962,|||||||||||||||||||||||||||||,59.58
 
@@ -323,6 +324,7 @@ Usage:
                       when -tp is "face-to-face", [70,200]
                                   "back-to-back", [0,15]
                                   "Nested",       [5,30]
+  -stm      <int>     min tm to amplify when caculate specifity, [$min_tm_spec]
   -me       <float>   min efficiency to consider a product, [$min_eff]
 
   -h		   Help

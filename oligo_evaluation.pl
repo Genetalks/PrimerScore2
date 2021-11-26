@@ -24,8 +24,8 @@ our $BWA;
 # GetOptions
 # ------------------------------------------------------------------
 my ($foligo, $fkey,$detail,$outdir);
-my ($NoSpecificity,$NoFilter);
-my $min_tm_spec = 45; #when caculate specificity
+my ($NoSpecificity,$NoFilter, $Precise);
+my $min_tm_spec = 48; #when caculate specificity
 my $nohead;
 my $thread = 1;
 my $fdatabases = $REF_GRCh37;
@@ -39,6 +39,7 @@ my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $olens;
 my $revcom;
 my $max_time=120;
+my $sublen = 8; ## substr end3's seq to detect dimer, because primer3 always don't predict dimers with lowtm although end3 is matched exactly
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$foligo,
@@ -47,6 +48,7 @@ GetOptions(
 				"Revcom:s"=>\$revcom,
 				"Probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
+				"Precise:s"=>\$Precise,
 				"maxtime:s"=>\$max_time,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"nohead:s"=>\$nohead,
@@ -91,6 +93,10 @@ my @tm = ($opt_tm*0.8, $opt_tm*2, $opt_tm*0.6, $opt_tm*2);
 	
 my $oligotm = "$PATH_PRIMER3/src/oligotm -mv $mv -dv $dv -n $dNTP -d $dna -tp $tp -sc $sc";
 my $ntthal = "$PATH_PRIMER3/src/ntthal -mv $mv -dv $dv -n $dNTP -d $dna";
+
+if(defined $Precise){
+	$max_time=3000;
+}
 
 ## creat oligo.fa
 open(PN, ">$outdir/$fkey.oligo.fa") or die $!;
@@ -194,26 +200,49 @@ while (<P>){
 			next;
 		}
 		
-		## filter Self_Complementarity
+		## filter Self_Complementarity: Hairpin
 		my $hairpin_tm = `$ntthal -a HAIRPIN -s1 $oligo_seq -r`;
 		chomp $hairpin_tm;
 		if(!defined $NoFilter && $hairpin_tm > $MAX_hairpin_tm){
 			print F join("\t", $id, $oligo_seq, "Hairpin", $hairpin_tm),"\n";
 			next;
 		}
-		my $ENDinfo = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq`;
-		my ($END_tm, $END31, $END32)=&dimer_amplify($ENDinfo);
-		if(!defined $NoFilter && ($END_tm > $Max_Dimer_tm && $END31+$END32==0)){
-			print F join("\t", $id, $oligo_seq, "END_Dimer",join(",",$END_tm, $END31,$END32)),"\n";
-			next;
+
+		## dimer check
+		my ($is_amplify, @dtype, @eff, @dlen);
+		{
+		my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq`;
+		chomp $info;
+		my ($dtm, $end31, $end32, $amplen, $mlen3, $dlen, $msum, $indel)=&dimer_amplify($info);
+		my ($is_amplify, $dtype, $eff)=&judge_amplify($dtm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
+		if($eff>0){
+			push @dtype, $dtype;
+			push @eff, $eff;
+			push @dlen, $dlen;
 		}
-		my $ANYinfo = `$ntthal -a ANY -s1 $oligo_seq -s2 $oligo_seq`;
-		my ($ANY_tm, $ANY31, $ANY32)=&dimer_amplify($ANYinfo);
-		if(!defined $NoFilter && ($ANY_tm > $Max_Dimer_tm && $ANY31+$ANY32==0)){
-			print F join("\t", $id, $oligo_seq, "ANY_Dimer",join(",", $ANY_tm, $ANY31, $ANY32)),"\n";
-			next;
 		}
 		
+		if(scalar @dtype==0 || $dtype[0] ne "AmpEndMeet"){
+		my $subseq = substr($oligo_seq, length($oligo_seq)-$sublen, $sublen);
+		my $info = `$ntthal -a END1 -s1 $subseq -s2 $subseq`;
+		chomp $info;
+		my ($dtm, $end31, $end32, $amplen, $mlen3, $dlen, $msum, $indel)=&dimer_amplify($info);
+		$dlen+=length($oligo_seq)-$sublen+length($oligo_seq)-$sublen;
+		my ($is_amplify, $dtype, $eff)=&judge_amplify_endmeet($dtm, $end31, $end32, $mlen3);
+		if($eff>0){
+			push @dtype, $dtype;
+			push @eff, $eff;
+			push @dlen, $dlen;
+		}
+		}
+		my $dimertype="NA";
+		my $dimersize="NA";
+		if(scalar @dtype>0){
+			$dimertype=join(",", @dtype);
+			$dimersize=join(",", @dlen);
+
+		}
+
 		## filter SNP
 		my ($SNP_num, $SNP_info)=&SNP_parse($oligo_seq_snp);
 		$SNP_info=$SNP_num==0? "NA":$SNP_info.":".$oligo_seq_snp;
@@ -232,7 +261,7 @@ while (<P>){
 				next;
 			}
 		}
-		push @{$evalue{$id}},($oligo_seq, $len, $Tm, sprintf("%.3f",$GC), sprintf("%.2f",$hairpin_tm), sprintf("%.2f",$END_tm), sprintf("%.2f",$ANY_tm),$nendA,$dG_end3, $SNP_info, $poly_info);
+		push @{$evalue{$id}},($oligo_seq, $len, $Tm, sprintf("%.3f",$GC), sprintf("%.2f",$hairpin_tm), $dimertype, $dimersize,$nendA,$dG_end3, $SNP_info, $poly_info);
 		$is_all_filter=0;
 	}
 	
@@ -243,14 +272,18 @@ while (<P>){
 		my $mseq = substr($oligo_seq0, $off);
 		print PN ">$id0\n";
 		print PN $mseq,"\n";
-		print PN ">$id0\_rc\n";
-		print PN &revcom($mseq),"\n";
+		if(defined $Precise){
+			print PN ">$id0\_rc\n";
+			print PN &revcom($mseq),"\n";
+		}
 		if(defined $revcom){
 			my $mseqL = substr($oligo_seq0, 0, $len_map); ##
 			print PN ">$id0\_L\n";
 			print PN $mseqL,"\n";
-			print PN ">$id0\_L_rc\n";
-			print PN &revcom($mseqL),"\n";
+			if(defined $Precise){
+				print PN ">$id0\_L_rc\n";
+				print PN &revcom($mseqL),"\n";
+			}
 		}
 	}
 	
@@ -287,8 +320,11 @@ if(!defined $NoSpecificity){
 			$fdatabase=$fdatabase_new;
 		}
 		my $dname = basename($fdatabase);
-		my $cmd="$BWA mem -D 0 -k 8 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
-		#&Run_monitor_timeout($max_time, $cmd);
+		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
+		if(defined $Precise){
+			$cmd="$BWA mem -D 0 -k 7 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
+		}
+		&Run_monitor_timeout($max_time, $cmd);
 		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
 		chomp $ret;
 		if($ret eq "Killed"){## time out
@@ -350,7 +386,7 @@ if(!defined $NoSpecificity){
 				for (my $i=0; $i<$map_num; $i++){
 					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
 					my ($emis3)=&get_3end1_mismatch($is_reverse, $cigar, $md);
-					next if(!defined $probe && !defined $revcom && $oligo_seq!~/[CG]$/ && $emis3>=1);## if not C/G end, then filter mapping with end3 base not mapped exactly
+					next if(!defined $probe && !defined $revcom && ($emis3>=2 || ($emis3==1 && $oligo_seq!~/[CG]$/)));## if not C/G end, then filter mapping with end3 base not mapped exactly
 					#filter lowtm
 #					my $map_form=&map_form_standard($is_reverse, $cigar, $md);
 					my $map_form=join(",", $is_reverse, $cigar, $md);
@@ -421,7 +457,7 @@ if(!defined $NoSpecificity){
 						print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $oligo_seq, $tm, $mvisual),"\n";
 					}
 
-					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end3_base, $mvisual),"\n";
+					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end3_base.";".$map_form, $mvisual),"\n";
 					$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
 					$bound_num++;
 					if(!defined $NoFilter && $bound_num>$Max_Bound_Num){
@@ -456,7 +492,7 @@ if(!defined $NoSpecificity){
 						if(defined $detail){
 							print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $mvn),"\n";
 						}
-						print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$end3_basen, $mvn),"\n";
+						print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$end3_basen.";".$map_form, $mvn),"\n";
 						$bound{$idn}{$strandn."/".$chr."/".$posn.":".$mvn}=$tmn;
 					}
 				}
@@ -476,7 +512,7 @@ close(F);
 ### output
 open (O, ">$outdir/$fkey.evaluation.out") or die $!;
 if(!defined $nohead){
-	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tBoundNum\tHighestTm\tHighestInfo\n";
+	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tBoundNum\tHighestTm\tHighestInfo\n";
 }
 
 foreach my $id (sort {$a cmp $b} keys %evalue){
@@ -549,7 +585,9 @@ sub get_3end1_mismatch{
 		($H3)=$cigar=~/^(\d+)H/;
 	}
 	if(!defined $H3){ ## 1H can be prc from experiment data
-		if(($is_reverse==0 && $md=~/[ATCG]0$/) || ($is_reverse==1 && $md=~/^0[ATCG]/)){
+		if(($is_reverse==0 && $md=~/0[ATCG]0$/) || ($is_reverse==1 && $md=~/^0[ATCG]0/)){
+			$H3=2;
+		}elsif(($is_reverse==0 && $md=~/[ATCG]0$/) || ($is_reverse==1 && $md=~/^0[ATCG]/)){
 			$H3=1;
 		}else{
 			$H3=0;
@@ -611,6 +649,7 @@ Usage:
 
   --NoFilter             Not filter any oligos
   --NoSpecificity        Not evalue specificity
+  --Precise              Evalue specificity precisely, but will consume a long time
   --Detail              Output Detail Info to xxx.evaluation.detail, optional
   -od        <dir>      Dir of output file, default ./
   -h		 Help

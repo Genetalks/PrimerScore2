@@ -25,7 +25,7 @@ my $max_len=30;
 my $opt_tm=60;
 my $rfloat = 0.2;
 my $dis = 500;
-my $range_dis="100,150,70,200"; ## dis score, pair dis range(best_min, best_max, min, max)
+my $range_dis="120,160,80,200"; ## dis score, pair dis range(best_min, best_max, min, max)
 my $range_pos;
 my $ptype = "face-to-face";
 my $ctype = "Single";
@@ -35,7 +35,7 @@ my $PCRsize=1000;
 my $NoFilter;
 my $min_eff=0.01;
 my $max_prodn=50;
-my $min_tm_spec=45;
+my $min_tm_spec=48;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -69,9 +69,10 @@ my $max_best_dis_primer_probe=3;
 my $max_dis_primer_probe=20;
 my $end_len=10;
 my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
-my @lendif=(0,3,0,8); ## tm diff between F and R primer
-my @tmdif=(0,1,0,2); ## tm diff between F and R primer
-my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(25,15,10,20,30);
+my @lendif=(0,4,0,8); ## tm diff between F and R primer
+my @tmdif=(0,3,0,6); ## tm diff between F and R primer
+#my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(25,25,10,10,30);
+my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(20,30,10,10,30);
 my @rdis=split /,/, $range_dis;
 my @rpos;
 if(defined $range_pos){
@@ -126,9 +127,9 @@ open(P, $foligo) or die $!;
 &SHOW_TIME("#Primer Score");
 while(<P>){
 	chomp;
-	my ($id, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo)=split /\t/, $_;
+	my ($id, $seq, $len, $tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo)=split /\t/, $_;
 	my ($tid, $dis, $chr, $pos3, $pos5, $strand)=&get_position_info($id, $len, \%tempos);
-	@{$oligo_info{$id}}=($chr, $pos3, $pos5, $strand, $dis, $seq, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum."|".$btm);
+	@{$oligo_info{$id}}=($chr, $pos3, $pos5, $strand, $dis, $seq, $len, $tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly, $bnum."|".$btm);
 	next if(!defined $NoFilter && ($len>$max_len || $len<$min_len));
 	next if(!defined $NoFilter && ($tm<$opt_tm-5 || $tm>$opt_tm+5));
 
@@ -138,9 +139,10 @@ while(<P>){
 	@{$oligo_pos{$tid}{$strand}{$id}}=($dis, $pos3, $pos5);
 
 	## score
-	my ($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm);
+	my ($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $nendA, $enddG, $snp, $poly, $bnum, $btm);
+	#my ($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $nendA, $enddG, $snp, $poly, $bnum, $btm);
 	@{$oligo_score{$id}}=($sadd, $score_info);
-	print O join("\t", $id, $chr, $strand, $pos5, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $END, $ANY, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo),"\n";
+	print O join("\t", $id, $chr, $strand, $pos5, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo),"\n";
 }
 close(P);
 close(O);
@@ -151,7 +153,6 @@ open(B, $fbound) or die $!;
 while(<B>){
 	chomp;
 	my ($id, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
-	next if($end_match<$min_end_match);
 	my $len = length $seq;
 	my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
 	push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $seq];
@@ -198,7 +199,7 @@ if($ptype=~/face-to-face/){
 	push @title, "DisBetweenPairs";
 }
 push @title, ("ScoreTotal\tScorePair\tScoreOligo");
-push @title, ("Tm\tGC\tHairpin\tEND_Dimer\tANY_Dimer\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo");
+push @title, ("Tm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo");
 print O join("\t", @title),"\n";
 
 my %success;
@@ -301,10 +302,11 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				
 				# specificity, product 
 				my %prod;
-				if(!exists $bound{$p2}){
-					print "Warn: $p2 No bound info!\n";
+				if(!exists $bound{$p1} || !exists $bound{$p2}){
+					print "Warn: $p1 or $p2 No bound info!\n";
 					next;
 				}
+
 				&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
 				$record{"pro"}{$p1}{$p2}=1;
 				&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
@@ -564,10 +566,10 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 
 -rd: distance range of pair primers, (best_min, best_max, min, max) separted by ",", example:
-      face-to-face: |---> P1 x            dis_range: 100,150,70,200
+      face-to-face: |---> P1 x            dis_range: 120,160,80,200
          (SNP)               x  P2 <---|  
 
-      face-to-face: P1 |--->        x     dis_range:100,150,70,200
+      face-to-face: P1 |--->        x     dis_range:120,160,80,200
         (Region)     x        <---| P2    
                      ________________
 
