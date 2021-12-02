@@ -66,6 +66,7 @@ sub SNP_parse{
 
 
 ### add snp/indel info to sequence, convert as following:
+##Ref   Alt        to   
 #G       A         ==> R(degenerate)
 #G       A,T       ==> D(degenerate)
 #AAAG    A         ==> AEEE(D is degenerate)

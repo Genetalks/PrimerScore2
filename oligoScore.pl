@@ -22,7 +22,7 @@ my $fref_snp;
 my $fdatabases = $REF_GRCh37;
 my $step = 1;
 my $para_num = 10;
-my $stm = 48;
+my $stm = 45;
 my $opt_tm=60;
 my $opt_tm_probe=70;
 my $min_len=18;
@@ -112,6 +112,7 @@ if(!defined $fref_snp){
 	}
 }
 
+&print_parameter();
 
 my ($score_dis, $score_pos)=(10,10);
 my $sh;
@@ -314,6 +315,56 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # ------------------------------------------------------------------
 # sub function
 # ------------------------------------------------------------------
+sub print_parameter{
+	print "### Parameters:\n";
+	if(defined $ComeFromRefer){
+		print "--ComeFromRefer\n";
+	}
+	if(defined $probe){
+		print "--Probe\n";
+	}
+	if(defined $homology_check){
+		print "--Homology_check\n";
+	}
+	if(defined $NoFilter){
+		print "--NoFilter\n";
+	}
+	if(defined $Precise){
+		print "--Precise\n";
+	}
+
+	## oligo design
+	print "opttm  =    ",$opt_tm, "\n";
+	print "opttmp =    ",$opt_tm_probe, "\n";
+	print "minl   =    ",$min_len, "\n";
+	print "maxl   =    ",$max_len, "\n";
+	print "minlp  =    ",$min_len_probe, "\n";
+	print "maxlp  =    ",$max_len_probe, "\n";
+	print "scalel =    ",$scale_len, "\n";
+	
+	if(defined $regions){
+		print "regions =    ",$regions, "\n";
+	}
+	print "rdis   =    ",$dis_range, "\n";
+	print "rpos   =    ",$pos_range, "\n";
+
+	print "type   =    ",$type, "\n";
+	print "ptype  =    ",$plex, "\n";
+	print "ctype  =    ",$ctype, "\n";
+	print "ds     =    ",$dis_aver, "\n";
+	print "rf     =    ",$rfloat, "\n";
+	print "on     =    ",$onum, "\n";
+
+	print "stm    =    ",$stm, "\n";
+	print "pnum   =    ",$pnum, "\n";
+	print "size   =    ",$pcr_size, "\n";
+	print "meff   =    ",$min_eff, "\n";
+	print "mpro   =    ",$max_prodn, "\n";
+	print "para   =    ",$para_num, "\n";
+	print "thrd   =    ",$thread, "\n";
+	print "\n";
+}
+
 sub template_database_check{
 	my ($ftemplate, $fdatabases, $outdir, $fkey)=@_;
 	my $fpsl = "$outdir/$fkey.psl";
