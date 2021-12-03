@@ -25,7 +25,7 @@ our $BWA;
 # ------------------------------------------------------------------
 my ($foligo, $fkey,$detail,$outdir);
 my ($NoSpecificity,$NoFilter, $Precise);
-my $min_tm_spec = 48; #when caculate specificity
+my $min_tm_spec = 45; #when caculate specificity
 my $nohead;
 my $thread = 1;
 my $fdatabases = $REF_GRCh37;

@@ -22,7 +22,7 @@ my $fdatabases = $REF_GRCh37;
 my $ptype = "face-to-face";
 my $PCRsize=1000;
 my $min_eff=0.00001;
-my $min_tm_spec=48;
+my $min_tm_spec=45;
 my $opt_tm = 60;
 my $opt_tm_probe = 70;
 my $max_prodn=50;
@@ -87,7 +87,7 @@ if(!defined $fbound){
 	if($ftype ne "Common"){
 		die "Wrong file type: must be Common(2column: id seq) when not defined -ib!\n";
 	}
-	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm 45 --NoFilter -k $fkey -maxtime 100000000 -od $outdir");
+	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm $min_tm_spec --NoFilter -k $fkey -maxtime 100000000 -od $outdir");
 	$fevalue = "$outdir/$fkey.evaluation.out";
 	$fbound = "$outdir/$fkey.bound.info";
 }else{

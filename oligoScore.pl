@@ -278,7 +278,7 @@ if($step==3){
 	
 	### primer score and select
 	my $score_dis_range = $score_dis.",".$dis_range;
-	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd=$dis_range -ct $ctype -mine $min_eff -maxp $max_prodn -od $outdir";
+	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd=$dis_range -ct $ctype -stm $stm -mine $min_eff -maxp $max_prodn -od $outdir";
 	if(defined $NoFilter){
 		$cmd .= " --NoFilter";
 	}

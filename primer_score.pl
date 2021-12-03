@@ -33,9 +33,9 @@ my $onum = 3;
 my $max_probe_num=6;
 my $PCRsize=1000;
 my $NoFilter;
-my $min_eff=0.01;
+my $min_eff=0.00001;
 my $max_prodn=50;
-my $min_tm_spec=48;
+my $min_tm_spec=45;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -56,6 +56,7 @@ GetOptions(
 				"ct:s"=>\$ctype,
 				"ds:s"=>\$dis,
 				"rf:s"=>\$rfloat,
+				"stm:s"=>\$min_tm_spec,
 				"mine:s"=>\$min_eff,
 				"maxp:s"=>\$max_prodn,
 				"od:s"=>\$outdir,
@@ -605,6 +606,7 @@ Usage:
 	 -rf  <float>	distance float ratio when -ct "Full-covered", [0.2]
 	 -on  <int>     output num when -ct is "Single",[$onum]
 	 -pn  <int>     output probe num when design probe,[$max_probe_num]
+  -stm    <int>     min tm to be High_tm in specifity, [$min_tm_spec]
   -mine      <float> min efficiency to consider a product, [$min_eff]
   -maxp      <int>   maximum products number to be caculated, to reduce running time. [$max_prodn]
 
