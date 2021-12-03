@@ -80,20 +80,20 @@ sub caculate_product{
 					my $pos2 = $bds2[$j][$ixpos];
 					if($pos2>=$pmin && $pos2<=$pmax){
 						##
-						my ($eff1, $eff2);
-						my $b1=join(",", $p1, $chr, $sd, $bds[$i][0]);
+						my ($eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end);
+						my $b1=join(",",$chr, $sd, $bds[$i][0], $mvisual1);
 						if(exists $arecord->{"eff"}->{$b1}){
-							$eff1=$arecord->{"eff"}->{$b1};
+							($eff1, $eff1_tm, $eff1_end)=@{$arecord->{"eff"}->{$b1}};
 						}else{
-							($eff1)=&efficiency($tm1, $mvisual1, $opt_tm, $min_tm, $end3_base1);
-							$arecord->{"eff"}->{$b1}=$eff1;
+							($eff1, $eff1_tm, $eff1_end)=&efficiency($tm1, $mvisual1, $opt_tm, $min_tm, $end3_base1);
+							@{$arecord->{"eff"}->{$b1}}=($eff1, $eff1_tm, $eff1_end);
 						}
-						my $b2=join(",", $p2, $chr, $sd2, $bds2[$j][0]);
-						if(exists $aeff->{$b2}){
-							$eff2=$aeff->{$b2};
+						my $b2=join(",", $chr, $sd2, $bds2[$j][0], $mvisual2);
+						if(exists $arecord->{"eff"}->{$b2}){
+							($eff2, $eff2_tm, $eff2_end)=@{$arecord->{"eff"}->{$b2}};
 						}else{
 							($eff2, $eff2_tm, $eff2_end)=&efficiency($tm2, $mvisual2, $opt_tm, $min_tm, $end3_base2);
-							$aeff->{$b2}=$eff2;
+							@{$aeff->{$b2}}=($eff2, $eff2_tm, $eff2_end);
 						}
 						my $dis=$pos2-$pos;
 						if($sd eq "-"){

@@ -211,11 +211,11 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 	if(defined $fprobe){
 		my %probec=%{$probe{$tid}};
 		my $n=0;
-		my %record;
+		my %recordp;
 		foreach my $id (sort {$probec{$b}->[0]<=>$probec{$a}->[0]} keys %probec){
 			my ($subid)=$id=~/(\S+)_\d+$/;
-			next if(exists $record{$subid}); ## more probes with the same position will only keep one
-			$record{$subid}=1;
+			next if(exists $recordp{$subid}); ## more probes with the same position will only keep one
+			$recordp{$subid}=1;
 
 			my ($chr,$pos3, $pos5, $strand)=@{$oligo_info{$id}};
 			my ($pos3_min, $pos3_max, $pos3_bmin, $pos3_bmax);
@@ -346,7 +346,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		my @final;
 		if($ctype eq "Single"){
 			my @pair_sort = sort{$score_pair{$b}<=>$score_pair{$a}} keys %score_pair;
-			my %record;
+			my %recordt;
 			my $num = 0;
 			#LBR-1096-D-28-12,LBR-1096-D-26-32
 			for(my $i=0; $i<@pair_sort; $i++){
@@ -355,7 +355,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my $d2=$oligo_info{$p2}->[1]; 
 				my $min_dis1=100;
 				my $min_dis2=100;
-				foreach my $ds(keys %record){
+				foreach my $ds(keys %recordt){
 					my ($d1r, $d2r)=split /,/, $ds;
 					my $dis1 = abs($d1-$d1r);
 					my $dis2 = abs($d2-$d2r);
@@ -368,7 +368,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				}
 				next if($min_dis1<3 || $min_dis2<3 );
 				push @final, $pair_sort[$i];
-				$record{$d1.",".$d2}=1;
+				$recordt{$d1.",".$d2}=1;
 				$num++;
 				last if($num==$onum || defined $fprobe); ## probe: only one pair for one probe
 			}
