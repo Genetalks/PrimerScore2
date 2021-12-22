@@ -324,7 +324,7 @@ if(!defined $NoSpecificity){
 		if(defined $Precise){
 			$cmd="$BWA mem -D 0 -k 7 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
 		}
-		if(!defined $Nofilter){
+		if(!defined $NoFilter){
 			&Run_monitor_timeout($max_time, $cmd);
 		}else{
 			&Run($cmd);
