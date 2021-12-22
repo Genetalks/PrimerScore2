@@ -324,7 +324,11 @@ if(!defined $NoSpecificity){
 		if(defined $Precise){
 			$cmd="$BWA mem -D 0 -k 7 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
 		}
-		&Run_monitor_timeout($max_time, $cmd);
+		if(!defined $Nofilter){
+			&Run_monitor_timeout($max_time, $cmd);
+		}else{
+			&Run($cmd);
+		}
 		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
 		chomp $ret;
 		if($ret eq "Killed"){## time out
@@ -645,7 +649,7 @@ Usage:
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
-  -maxtime  <int>       max bwa running time, killed when time out, not killed please set 10000000000, [$max_time]
+  -maxtime  <int>       max bwa running time, killed and filtered when time out, [$max_time]
 
   --NoFilter             Not filter any oligos
   --NoSpecificity        Not evalue specificity

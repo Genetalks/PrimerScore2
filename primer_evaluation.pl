@@ -7,6 +7,7 @@ use FindBin qw($Bin $Script);
 use File::Basename qw(basename dirname);
 require "$Bin/common.pm";
 require "$Bin/product.pm";
+require "$Bin/self_lib.pm";
 require "$Bin/path.pm";
 
 my $BEGIN_TIME=time();
@@ -103,7 +104,7 @@ while(<I>){
 	next if(/^$/ || /^#/);
 	my @unit=split /\s+/, $_;
 	my $id=$unit[$idx];
-	my ($tid, $type)=$id=~/(\S+)-([12LRP])/;
+	my ($tid, $type)=$id=~/(\S+)-([12FRP])/;
 	$id{$id}=0;
 }
 close(I);
@@ -118,9 +119,9 @@ while(<B>){
 	my ($id, $strand, $chr, $pos3, $seq, $tm, $end3_base, $mvisual)=split /\t/, $_;
 	next if(!exists $id{$id});
 	$id{$id}=1;
-	my ($tid, $type)=$id=~/(\S+)-([12LRP])/;
+	my ($tid, $type)=$id=~/(\S+)-([12FRP])/;
 	if(!defined $tid || !defined $type){
-		die "Wrong oligo ID $id: Primer ID must end by -L/R/1/2, eg. xxx-L, xxx-R, xxx-1, xxx-2; Probe ID must end by -P, eg. xxx-P!\n";
+		die "Wrong oligo ID $id: Primer ID must end by -F/R/1/2, eg. xxx-F, xxx-R, xxx-1, xxx-2; Probe ID must end by -P, eg. xxx-P!\n";
 	}
 	my $len = length $seq;
 	my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
@@ -139,12 +140,12 @@ my @tps = sort {$a cmp $b} keys %bound;
 &SHOW_TIME("#Evalue");
 foreach my $tp1(@tps){
 	next if($tp1 eq "P"); 
-	## AllEvalue: L<->R L<->L R<->R
+	## AllEvalue: F<->R F<->F R<->R
 	next if($etype eq "SinglePlex" && !defined $AllEvalue && $tp1 ne $tps[0]); ## only evalue one type 
 	foreach my $tid1 (sort {$a cmp $b} keys %{$bound{$tp1}}){
 		foreach my $tp2(@tps){
 			next if($tp2 eq "P");
-			next if(!defined $AllEvalue && $tp2 eq $tp1); ## Only evalue product between pairs with different types, L<-->R; 1<-->2
+			next if(!defined $AllEvalue && $tp2 eq $tp1); ## Only evalue product between pairs with different types, F<-->R; 1<-->2
 			foreach my $tid2(keys %{$bound{$tp2}}){
 				next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
 				next if(exists $record{"pro"}{$tid2."-".$tp2}{$tid1."-".$tp1});
@@ -186,7 +187,7 @@ while(<I>){
 	my $sbeff=pop @info;
 	my $sbnum=pop @info;
 	my $sbd = $sbnum."|".$sbeff;
-	my ($tid,$tp)=$id=~/(\S+)-([12LRP])$/;
+	my ($tid,$tp)=$id=~/(\S+)-([12FRP])$/;
 	my ($pnum, $apeff, $apinfos);
 	if($tp ne "P"){
 		($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000);
@@ -243,11 +244,11 @@ if($etype eq "MultiPlex"){
 			next if($tid1 eq $tid2);
 			
 			my ($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid1}{$tid2}, 1000000);
-			print C ">$tid1\t$tid2\t$pnum\n";
+			print C ">$tid1\_$tid2\t$pnum\n";
 			my @peff=@{$apeff};
 			my @pinfo=@{$apinfos};
 			for(my $i=0; $i<@{$apeff}; $i++){
-				print C join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+				print C join("\t", $apeff->[$i], $apinfos->[$i]),"\n";
 			}
 		}
 	}
@@ -267,11 +268,11 @@ Program:
 Version: $version
 Contact:zeng huaping<huaping.zeng\@genetalks.com> 
 
-	-io: oligo file can be two format as following, ID must like: xxx-L, xxx-R, xxx-P, xxx-1, xxx-2.
+	-io: oligo file can be two format as following, ID must like: xxx-F, xxx-R, xxx-P, xxx-1, xxx-2.
 		Common Format:
-		ID1-1   AAAAAAAAAAAA
+		ID1-F   AAAAAAAAAAAA
 		ID1-P   AAAAAAAAAAAAAAAA
-		ID1-2   AAAAAAAAAAAA
+		ID1-R   AAAAAAAAAAAA
 		ID2-1   AAAAAAAAAAAA
 		ID2-P   AAAAAAAAAAAAAAAA
 		ID2-2   AAAAAAAAAAAA
@@ -310,7 +311,7 @@ Usage:
   -tp        <str>    primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
   -ep        <str>    evalue type, "SinglePlex", "MultiPlex", ["SinglePlex"]
   -mp        <int>    maximum products number to be caculated, to reduce running time. [$max_prodn]
-  --AllEvalue         All Evalue, not only L<->R, contain L<->L and R<->R.
+  --AllEvalue         All Evalue, not only F<->R, contain F<->F and R<->R.
   --OutAllProduct    Output All Product Info.
   -td        <int>    thread in bwa, [$thread]
   -od        <dir>	  Dir of output file, default ./

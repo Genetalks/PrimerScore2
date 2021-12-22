@@ -129,6 +129,24 @@ sub get_end_A{
 	return ($Anum);
 }
 
+sub G_content{
+	my ($seq)=@_;
+	$seq = uc($seq);
+	my @unit = split //, $seq;
+	my $is_G5 = $unit[0] eq "G"? 1: 0;
+	my ($n, $nc, $ng)=(0,0,0);
+
+	for(my $i=0; $i<@unit; $i++){
+		$n++;
+		if($unit[$i] eq "C"){
+			$nc++;
+		}elsif($unit[$i] eq "G"){
+			$ng++;
+		}
+	}
+	return($is_G5, ($nc-$ng)/$n);
+}
+
 
 
 ## eg:(off=6)  

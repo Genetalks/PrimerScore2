@@ -25,6 +25,7 @@ my $adapter2="CTGGAGTTCAGACGTGTGCTCTTCCGATCT"; ## remove 4 bp, for too long to n
 my $high_tm=50;
 my $sublen = 8; ## substr end3's seq to detect dimer, because primer3 always don't predict dimers with lowtm although end3 is matched exactly
 my $Nofilter;
+my $detail;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
@@ -39,6 +40,7 @@ GetOptions(
 				"MultiPlex:s"=>\$MultiPlex,
 				"Nofilter:s"=>\$Nofilter,
 				"SelfComplementary:s"=>\$SelfComplementary,
+				"Detail:s"=>\$detail,
 				"od:s"=>\$outdir,
 				) or &USAGE;
 &USAGE unless ($fIn and $fkey);
@@ -79,8 +81,9 @@ while(<I>){
 }
 close(I);
 
-
+my %record;
 open(O,">$outdir/$fkey.cross.dimer")or die $!;
+print O "ID1\tID2\tType\tSize\tEfficiency\n";
 foreach my $tid(sort {$a cmp $b} keys %seq){
 	my @seq=@{$seq{$tid}};
 	for(my $j=0; $j<@seq; $j++){
@@ -88,16 +91,6 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 		my $id = $id{$tid}->[$j];
 #		print O ">",$id,"\t",$oligo_seq,"\n";
 		if(defined $SelfComplementary){
-			my $HPinfo = `$ntthal -a HAIRPIN -s1 $oligo_seq`;
-			chomp $HPinfo;
-			if(!defined $HPinfo){
-				print $HPinfo;
-				my ($HPtm)=$HPinfo=~/t = (\S+)/;
-				if($HPtm >= $high_tm){
-					print O "#Hairpin\t$id\t$HPtm\n"; 
-					print O $HPinfo, "\n";
-				}
-			}
 			my ($is_amplify, $atype, $eff);
 			{
 			my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq`;
@@ -105,9 +98,11 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
 			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 			if($is_amplify || defined $Nofilter){
-				print O join("\t", "#Dimer", $id, $id, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
-				print O "$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq\n";
-				print O $info, "\n";
+				print O join("\t", $id, $id, $atype, $len, $eff),"\n";
+				if(defined $detail){
+					print O "$ntthal -a END1 -s1 $oligo_seq -s2 $oligo_seq\n";
+					print O $info, "\n";
+				}
 			}
 			}
 
@@ -120,9 +115,11 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3);
 			if($is_amplify || defined $Nofilter){
 				$amplen="NA";
-				print O join("\t", "#EndDimer", $id, $id, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
-				print O "$ntthal -a END1 -s1 $subseq -s2 $subseq\n";
-				print O $info, "\n";
+				print O join("\t", $id, $id, $atype, $len, $eff),"\n";
+				if(defined $detail){
+					print O "$ntthal -a END1 -s1 $subseq -s2 $subseq\n";
+					print O $info, "\n";
+				}
 			}
 			}
 
@@ -140,7 +137,7 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
 			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 			if($is_amplify || defined $Nofilter){
-				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
+				print O join("\t", $id, $id2, $atype, $len, $eff),"\n";
 				print O "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
 				print O $info, "\n";
 			}
@@ -151,9 +148,12 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
 			($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 			if($is_amplify || defined $Nofilter){
-				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
-				print O "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
-				print O $info, "\n";
+				print O join("\t", $id, $id2, $atype, $len, $eff),"\n";
+				if(defined $detail){
+					print O "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
+					print O $info, "\n";
+				}
+
 			}
 			}
 			
@@ -167,9 +167,12 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 			($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3);
 			if($is_amplify || defined $Nofilter){
 				$amplen="NA";
-				print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
-				print O "$ntthal -a END1 -s1 $subseq -s2 $subs\n";
-				print O $info, "\n";
+				print O join("\t", $id, $id2, $atype, $len, $eff),"\n";
+
+				if(defined $detail){
+					print O "$ntthal -a END1 -s1 $subseq -s2 $subs\n";
+					print O $info, "\n";
+				}
 			}
 			}
 		}
@@ -183,6 +186,10 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 				for(my $k=0; $k<@seq2; $k++){
 					my ($seq, $subs) = @{$seq{$tid2}->[$k]};
 					my $id2=$id{$tid2}->[$k];
+					next if(exists $record{$id}{$id2});
+					$record{$id}{$id2}=1;
+					$record{$id2}{$id}=1;
+
 					my ($is_amplify, $atype, $eff);
 					{
 					my $info = `$ntthal -a END1 -s1 $oligo_seq -s2 $seq`;
@@ -190,9 +197,16 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
 					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 					if($is_amplify || defined $Nofilter){
-						print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
-						print O "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
-						print O $info, "\n";
+						if($j<=$k){
+							print O join("\t", $id, $id2, $atype, $len, $eff),"\n";
+						}else{
+							print O join("\t", $id2, $id, $atype, $len, $eff),"\n";
+						}
+
+						if(defined $detail){
+							print O "$ntthal -a END1 -s1 $oligo_seq -s2 $seq\n";
+							print O $info, "\n";
+						}
 					}
 					}
 					
@@ -202,10 +216,16 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 					my ($tm, $end31, $end32, $amplen, $mlen3, $len, $msum, $indel)=&dimer_amplify($info);
 					($is_amplify, $atype, $eff)=&judge_amplify($tm, $end31, $end32, $amplen, $mlen3, $msum, $indel); 
 					if($is_amplify || defined $Nofilter){
-						
-						print O join("\t", "#Dimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
-						print O "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
-						print O $info, "\n";
+						if($j<=$k){
+							print O join("\t", $id, $id2, $atype, $len, $eff),"\n";
+						}else{
+							print O join("\t", $id2, $id, $atype, $len, $eff),"\n";
+						}
+
+						if(defined $detail){
+							print O "$ntthal -a END2 -s1 $oligo_seq -s2 $seq\n";
+							print O $info, "\n";
+						}
 					}
 					}
 
@@ -218,9 +238,15 @@ foreach my $tid(sort {$a cmp $b} keys %seq){
 					($is_amplify, $atype, $eff)=&judge_amplify_endmeet($tm, $end31, $end32, $mlen3);
 					if($is_amplify || defined $Nofilter){
 						$amplen="NA";
-						print O join("\t", "#EndDimer", $id, $id2, $atype, $eff, $len, $tm, $end31, $end32, $amplen, $mlen3, $msum),"\n";
-						print O "$ntthal -a END1 -s1 $subseq -s2 $subs\n";
-						print O $info, "\n";
+						if($j<=$k){
+							print O join("\t", $id, $id2, $atype, $len, $eff),"\n";
+						}else{
+							print O join("\t", $id2, $id, $atype, $len, $eff),"\n";
+						}
+						if(defined $detail){
+							print O "$ntthal -a END1 -s1 $subseq -s2 $subs\n";
+							print O $info, "\n";
+						}
 					}
 					}
 				}
@@ -295,6 +321,7 @@ Usage:
   -k  <str>	   Key of output file, forced
   --SelfComplementary   Evalue self-complementary
   --MultiPlex           Evalue dimer among different primer pairs
+  --Detail              Output detailed dimer info.
   --Nofilter            No filter and output all dimer info.
   -mv        <int>      concentration of monovalent cations in mM, [$mv]
   -dv        <float>    concentration of divalent cations in mM, [$dv]

@@ -1,6 +1,12 @@
 
 require "$Bin/score.pm";
-my $min_tm_omega = 17;
+#my $min_tm_omega = 17;
+my $min_tm_omega = 14;
+my $min_tm_omega_noindel = 14;
+#my $min_tm_omega_noindel = -15;
+my $min_tm_map=10;
+my $min_tm_map_noindel=0;
+my $min_tm_meet = -50;
 my $min_tm_amp = 29; ##Dis-7:26
 my $min_meetlen=3; ## min end3 match len when Enddimer
 my $min_amplen=15;
@@ -135,28 +141,28 @@ sub judge_amplify{
 	### judge is amplify or not
 	if($end31==0 && $end32==0){
 		if($msum==1){
-			@tm=(10,100,-50,100,-50,100); #$minb, $maxb, $min, $max, $minl, $maxl
+			@tm=(10,100,$min_tm_meet-1,100,$min_tm_meet-1,100); #$minb, $maxb, $min, $max, $minl, $maxl
 			$eff=&score_growth_curve($tm, 1, @tm);
 			$type = "AmpEndMeet";
 		}else{
 			if($indel==0){
-				@tm=(20,100,0,100,0,100);
+				@tm=(20,100,$min_tm_map_noindel-1,100,$min_tm_map_noindel-1,100);
 			}else{
-				@tm=(30,100,10,100,10,100);
+				@tm=(30,100,$min_tm_map,100,$min_tm_map,100);
 			}
 			$eff=&score_growth_curve($tm, 1, @tm);
 			$type = "AmpEndMap";
 		}
 	}elsif($end31<=1 || $end32<=1){
 		if($amplen>=$min_amplen){
-			if($tm>=$min_tm_omega){
-				if($indel==0){
-					@tm=(30,100,15,100,15,100); #$minb, $maxb, $min, $max, $minl, $maxl
-				}else{
-					@tm=(30,100,15,100,15,100); #$minb, $maxb, $min, $max, $minl, $maxl
-				}
-				my @alen=(30,100,$min_tm_omega-5,100,$min_tm_omega-5,100);
-				$eff=&score_growth_curve($tm, 1, @tm) * &score_growth_curve($amplen, 1, @alen);
+			if($indel==0){
+				@tm=(20,100,$min_tm_omega_noindel-1,100,$min_tm_omega_noindel-1,100);
+			}else{
+				@tm=(30,100,$min_tm_omega-1,100,$min_tm_omega-1,100); #$minb, $maxb, $min, $max, $minl, $maxl
+			}
+			my @alen=(30,100,$min_amplen-1,100,$min_amplen-1,100);
+			$eff=&score_growth_curve($tm, 1, @tm) * &score_growth_curve($amplen, 1, @alen);
+			if($eff>0){
 				$type = "AmpOmega";
 			}
 		}else{

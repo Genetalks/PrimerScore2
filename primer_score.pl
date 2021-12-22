@@ -200,7 +200,7 @@ if($ptype=~/face-to-face/){
 	push @title, "DisBetweenPairs";
 }
 push @title, ("ScoreTotal\tScorePair\tScoreOligo");
-push @title, ("Tm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo");
+push @title, ("Tm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestEff\tHighestInfo");
 print O join("\t", @title),"\n";
 
 my %success;
