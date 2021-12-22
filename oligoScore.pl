@@ -346,8 +346,9 @@ sub print_parameter{
 		print "regions =    ",$regions, "\n";
 	}
 	print "rdis   =    ",$dis_range, "\n";
-	print "rpos   =    ",$pos_range, "\n";
-
+	if(defined $pos_range){
+		print "rpos   =    ",$pos_range, "\n";
+	}
 	print "type   =    ",$type, "\n";
 	print "ptype  =    ",$plex, "\n";
 	print "ctype  =    ",$ctype, "\n";
