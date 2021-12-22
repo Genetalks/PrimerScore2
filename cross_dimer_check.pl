@@ -66,8 +66,8 @@ while(<I>){
 	chomp;
 	next if(/^$/ || /^#/);
 	my ($id, $seq)=(split /\s+/, $_)[$ix1, $ix2];
-	my ($tid, $LR)=$id=~/(\S+)-([12LRP])/;
-	$LR=~s/L/1/;
+	my ($tid, $LR)=$id=~/(\S+)-([12FRP])/;
+	$LR=~s/F/1/;
 	$LR=~s/R/2/;
 	$LR=~s/P/3/;
 	my $subseq = substr($seq, length($seq)-$sublen, $sublen);
