@@ -129,7 +129,7 @@ design Full-coverd primers:
 perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo -type face-to-face -rdis 120,160,80,200 -ptype MultiPlex -ctype Full-covered -ds 80 -rf 0.2 -od outdir  
 
 ## Input and Output
-[Detailed Description](http://primerscore.gtxlab.com/help.html)
+Detailed description see [Webserver-help](http://primerscore.gtxlab.com/help.html)
 
 ## Online Webserver  
 [PrimerScore2](http://primerscore.gtxlab.com/)
@@ -138,5 +138,5 @@ perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id da
 1. Because PrimerScore2 evaluates almost all candidate primers, it takes about 5-20 minutes to design one target.  
 2. PrimerScore2 can design full-covered primers, designated by parameter “Cover Type.” If “Cover Type” is set to “Full-covered,” the input content must be template sequences or regions, and each template will generate many primer pairs evenly distributed across the whole template. If “Cover Type” is set to “Single,” each target will return three (“# of pairs to return”) primer pairs with the highest scores.  
 3. PrimerScore2 analyzes a number of candidate oligos, which consumes time and computational resources. Therefore, each template length should be shorter than 3 times the product size of primers; for example, if product size is 200, the template length should be shorter than 600.  
-4. PrimerScore2 filters unqualified candidate oligos by default. If a target designs primers unsuccessfully (check in file “.design.status”), you can again design primers for the target by ticking “NoFilter.”  
+4. PrimerScore2 filters unqualified candidate oligos by default. If a target designs primers unsuccessfully (check in file “.design.status”), you can again design primers for the target by choosing “NoFilter.”  
 
