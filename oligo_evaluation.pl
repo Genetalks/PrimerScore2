@@ -38,8 +38,8 @@ my $probe;
 my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $olens;
 my $revcom;
-my $max_time=120;
 my $sublen = 8; ## substr end3's seq to detect dimer, because primer3 always don't predict dimers with lowtm although end3 is matched exactly
+my $max_time;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$foligo,
@@ -95,7 +95,9 @@ my $oligotm = "$PATH_PRIMER3/src/oligotm -mv $mv -dv $dv -n $dNTP -d $dna -tp $t
 my $ntthal = "$PATH_PRIMER3/src/ntthal -mv $mv -dv $dv -n $dNTP -d $dna";
 
 if(defined $Precise){
-	$max_time=3000;
+	$max_time=defined $max_time? $max_time: 3000;
+}else{
+	$max_time=defined $max_time? $max_time: 120;
 }
 
 ## creat oligo.fa
@@ -324,11 +326,11 @@ if(!defined $NoSpecificity){
 		if(defined $Precise){
 			$cmd="$BWA mem -D 0 -k 7 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
 		}
-		if(!defined $NoFilter){
+#		if(!defined $NoFilter){
 			&Run_monitor_timeout($max_time, $cmd);
-		}else{
-			&Run($cmd);
-		}
+#		}else{
+#			&Run($cmd); ## time is too long
+#		}
 		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
 		chomp $ret;
 		if($ret eq "Killed"){## time out
@@ -649,11 +651,11 @@ Usage:
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
   -thread    <int>      thread in bwa, [$thread]
-  -maxtime  <int>       max bwa running time, killed and filtered when time out, [$max_time]
+  -maxtime  <int>       max bwa running time, killed and filtered when time out, [120]
 
   --NoFilter             Not filter any oligos
   --NoSpecificity        Not evalue specificity
-  --Precise              Evalue specificity precisely, but will consume a long time
+  --Precise              Evalue specificity precisely, but will consume a long time, -maxtime sets 3000
   --Detail              Output Detail Info to xxx.evaluation.detail, optional
   -od        <dir>      Dir of output file, default ./
   -h		 Help

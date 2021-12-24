@@ -475,12 +475,12 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
     ############## OligoScore pipeline  ################
 
-    ###input file(target spot file) format:
-     format 1(first 5 columns of vcf format):
+    ###input file format:
+     format 1: target spot file(first 5 columns of vcf format)
 		 chr14    94847286     rs121912714	T              A
 		 chr15    44859635     rs312262781	CTCAA          C
 		 chr12    102912801    PAH_158G_A	C              T
-	format 2(bed format):
+	format 2: target region file(bed format)
 		chr1	100379097	100379597
 		chr10	50690735	50691035
 	
@@ -504,7 +504,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 Usage:
   Options:
-  -it        <file>   Input target file(SNP file or template fasta file with no non-ATCGatcg), forced
+  -it        <file>   Input target file(target spot or region file, or template fasta file with no non-ATCGatcg), forced
    --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
   -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
   -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
