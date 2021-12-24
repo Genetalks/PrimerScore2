@@ -6,53 +6,58 @@ PrimerScore2 is a robust high-throughput primer design tool that designs multipl
 ## Docker use (RECOMMENDED!)
 PrimerScore2 can be run as a [Docker](https://www.docker.com) image. In this way you only need to [install Docker](https://docs.docker.com/install/).
 
-Now users have two options of PrimerScore2 use in docker: (1) with already uploaded human reference genome GRCh37 and GRCh38, (2) without any reference genomes. The 1st variant is idead for use with GRCh37 and GRCh38 genome, but you will have to download about 4 Gb of data. The 2nd is ideal for use with other reference genomes, including other organisms. In this case you will have to download about only 0.5 Gb, but you also have to download reference genome files manually (see section "Reference genome for other organisms than human").
+Now users have two options of PrimerScore2 use in docker: 
+
+(1) with already uploaded human reference genome GRCh37 and GRCh38, 
+(2) without any reference genomes. 
+
+The 1st variant is idead for use with GRCh37 and GRCh38 genome, but you will have to download about 4 Gb of data. The 2nd is ideal for use with other reference genomes, including other organisms. In this case you will have to download about only 0.5 Gb, but you also have to download database and reference genome files manually.
 
 To use 1st variant, download docker image of PrimerScore2 as follows:
 
-1. Download docker image
-`docker pull zenghp88/primerscore2:latest`
+1. Download docker image 
+   `docker pull zenghp88/primerscore2:latest`
 
 2. Into the virtual machine command line 
-`docker run -it --entrypoint 'bash' --name primerscore2_ref -v '<directory where you are going to design new primers>:<name of this directory in the container>' zenghp88/primerscore2:latest`
-where -v option lets you to mount some of your local directory to the virtual machine (container), eg. '/data/primerscore2/design/:/design/'. This command will put you into the virtual machine command line.
+   `docker run -it --entrypoint 'bash' --name primerscore2_ref -v '<directory where you are going to design new primers>:<name of this directory in the container>' zenghp88/primerscore2:latest` 
+   where -v option lets you to mount some of your local directory to the virtual machine (container), eg. '/data/primerscore2/design/:/design/'. This command will put you into the virtual machine command line.
 
-3. Preprocessing
-`cd bin/database/`
-`gunzip *gz`
-`../third-party/bwa index GRCh37.fasta` or `../third-party/bwa index GRCh38.fasta` based on your needs, this will consume some time.
-
+3. Preprocessing 
+   `cd bin/database/` 
+   `gunzip *gz` 
+   `../third-party/bwa index GRCh37.fasta` or `../third-party/bwa index GRCh38.fasta` based on your needs, this will consume some time.
+   
 To use the 2nd variant, download docker image of PrimerScore2 as follows:
 
 1. Download docker image
-`docker pull zenghp88/primerscore2:native`
+   `docker pull zenghp88/primerscore2:native`
 
-2. Prepare files
-You need to prepare the following files and do some preprocessing.
-1) a database file to check specificity named 'database.fata'.
-`bin/third-party/bwa index database.fasta`
-
-2) maybe a reference genome to get template sequence when inputing a target spot file or a target region file(bed formate), named 'genome.fasta'.
-
-3) maybe a common SNP file to check SNP covered by oligos, named 'common.vcf.gz'.
-`perl bin/reference_add_snp.pl -ir genome.fasta -iv common.vcf.gz -k genome.fasta`.
-Note: It will consume a large memory, if your server doesn't have enough memory, you can split the genome file to more files and run them respectively, and cat the results into a whole result file.
+2. Prepare files 
+   You need to prepare the following files and do some preprocessing. 
+   1) a database file to check specificity named 'database.fata'. 
+   `bin/third-party/bwa index database.fasta` 
+   
+   2) maybe a reference genome to get template sequence when inputing a target spot file or a target region file(bed formate), named 'genome.fasta'.
+   
+   3) maybe a common SNP file to check SNP covered by oligos, named 'common.vcf.gz'. 
+      `perl bin/reference_add_snp.pl -ir genome.fasta -iv common.vcf.gz -k genome.fasta`. 
+      Note: It will consume a large memory, if your server doesn't have enough memory, you can split the genome file to more files and run them respectively, and cat the results into a whole result file. 
 
 ## Source code install
-1. Denpendencies
-PrimerScore2 needs some dependencies which should be attached to file ./path.pm  
-perl 5.22+  
-BWA 0.7.11+ 
-Samtools 1.5+
-Blat v.36+
-primer3 2.5.0+ 
+1. Denpendencies 
+   PrimerScore2 needs some dependencies which should be attached to file ./path.pm  
+   perl 5.22+  
+   BWA 0.7.11+ 
+   Samtools 1.5+ 
+   Blat v.36+ 
+   primer3 2.5.0+ 
 
-2. Install
-`git clone git@github.com:zenghp88/primerScore.git`
+2. Install 
+   `git clone git@github.com:zenghp88/primerScore.git`
 
-3. Prepare
- 1) download the denpendencies and modify file ./path.pm with their paths  
- 2) prepare files as in docker 2nd variant.
+3. Prepare 
+   1) download the denpendencies and modify file ./path.pm with their paths  
+   2) prepare files as in docker 2nd variant.
 
 ## Example Usage
 design generic primers targeting on template sequence:  
@@ -64,10 +69,10 @@ perl oligoScore.pl -it demo.txt -p demo -type face-to-face -rpos 10,20,5,45 -rdi
 design arms primers:  
 perl oligoScore.pl -it demo.txt -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo --Probe -type face-to-face -rpos 0,0,0,0 -rdis 120,160,80,200 -maxlp 40 -od outdir
 
-design Nested primers:
+design Nested primers: 
 perl oligoScore.pl -it demo.txt -p demo -type Nested -rpos 10,20,5,45 -rdis=-15,-10,-30,-5 -ptype MultiPlex -od outdir
 
-design Full-coverd primers:
+design Full-coverd primers: 
 perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo -type face-to-face -rdis 120,160,80,200 -ptype MultiPlex -ctype Full-covered -ds 80 -rf 0.2 -od outdir 
 
 ## Parameters description  
