@@ -3,11 +3,10 @@
 ## Introduction
 PrimerScore2 is a robust high-throughput primer design tool that designs multiple types of primers in one click, including face-to-face, back-to-back, and nested primers, as well as evenly full-covered primers on target regions. PrimerScore2 precisely evaluates candidate oligos′features, containing specificity, SNPs, dimers, and other basic features. Then it scores the oligos and pairs according to the features using growth curve piecewise function and weighted sum model. Finally, it provides the highest-scoring primer pairs or probes and examines for cross-products and cross-dimers among the outputted primers.
 
-## Docker use (RECOMMENDED!)
+## Docker download(RECOMMENDED!)
 PrimerScore2 can be run as a [Docker](https://www.docker.com) image. In this way you only need to [install Docker](https://docs.docker.com/install/).
 
 Now users have two options of PrimerScore2 use in docker:  
-
 (1) with already uploaded human reference genome GRCh37 and GRCh38,  
 (2) without any reference genomes.  
 
@@ -59,23 +58,7 @@ To use the 2nd variant, download docker image of PrimerScore2 as follows:
    1) download the denpendencies and modify file ./path.pm with their paths  
    2) prepare files as in docker 2nd variant.
 
-## Example Usage
-design generic primers targeting on template sequence:  
-perl oligoScore.pl -it demo.fasta --ComeFromRefer -p demo -rdis 120,160,80,200 -opttm 60 -opttmp 70 --Probe -od outdir
-
-design generic primers targeting SNPs:  
-perl oligoScore.pl -it demo.txt -p demo -type face-to-face -rpos 10,20,5,45 -rdis 120,160,80,200 -ptype MultiPlex -od outdir
-
-design arms primers:  
-perl oligoScore.pl -it demo.txt -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo --Probe -type face-to-face -rpos 0,0,0,0 -rdis 120,160,80,200 -maxlp 40 -od outdir
-
-design Nested primers:  
-perl oligoScore.pl -it demo.txt -p demo -type Nested -rpos 10,20,5,45 -rdis=-15,-10,-30,-5 -ptype MultiPlex -od outdir
-
-design Full-coverd primers:  
-perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo -type face-to-face -rdis 120,160,80,200 -ptype MultiPlex -ctype Full-covered -ds 80 -rf 0.2 -od outdir  
-
-## Parameters description  
+## Usage 
 
 ```
   -it        <file>   Input target file(SNP file or template fasta file with no non-ATCGatcg), forced
@@ -128,9 +111,31 @@ perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id da
   -h                Help
 ```
 
-## note
-Because PrimerScore2 evaluates almost all candidate primers, it takes about 5-20 minutes to design one target.
+#Examples
+design generic primers targeting on template sequence:  
+perl oligoScore.pl -it demo.fasta --ComeFromRefer -p demo -rdis 120,160,80,200 -opttm 60 -opttmp 70 --Probe -od outdir
+
+design generic primers targeting SNPs:  
+perl oligoScore.pl -it demo.txt -p demo -type face-to-face -rpos 10,20,5,45 -rdis 120,160,80,200 -ptype MultiPlex -od outdir
+
+design arms primers:  
+perl oligoScore.pl -it demo.txt -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo --Probe -type face-to-face -rpos 0,0,0,0 -rdis 120,160,80,200 -maxlp 40 -od outdir
+
+design Nested primers:  
+perl oligoScore.pl -it demo.txt -p demo -type Nested -rpos 10,20,5,45 -rdis=-15,-10,-30,-5 -ptype MultiPlex -od outdir
+
+design Full-coverd primers:  
+perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo -type face-to-face -rdis 120,160,80,200 -ptype MultiPlex -ctype Full-covered -ds 80 -rf 0.2 -od outdir  
+
+## Input and Output
+[Detailed description about Input and Output] (http://primerscore.gtxlab.com/help.html)
 
 ## Online Webserver  
 [PrimerScore2](http://primerscore.gtxlab.com/)
+
+## Note
+1. Because PrimerScore2 evaluates almost all candidate primers, it takes about 5-20 minutes to design one target.  
+2. PrimerScore2 can design full-covered primers, designated by parameter “Cover Type.” If “Cover Type” is set to “Full-covered,” the input content must be template sequences or regions, and each template will generate many primer pairs evenly distributed across the whole template. If “Cover Type” is set to “Single,” each target will return three (“# of pairs to return”) primer pairs with the highest scores.  
+3. PrimerScore2 analyzes a number of candidate oligos, which consumes time and computational resources. Therefore, each template length should be shorter than 3 times the product size of primers; for example, if product size is 200, the template length should be shorter than 600.  
+4. PrimerScore2 filters unqualified candidate oligos by default. If a target designs primers unsuccessfully (check in file “.design.status”), you can again design primers for the target by ticking “NoFilter.”  
 
