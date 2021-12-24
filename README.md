@@ -111,7 +111,8 @@ To use the 2nd variant, download docker image of PrimerScore2 as follows:
   -h                Help
 ```
 
-#Examples
+#Examples uasge:  
+
 design generic primers targeting on template sequence:  
 perl oligoScore.pl -it demo.fasta --ComeFromRefer -p demo -rdis 120,160,80,200 -opttm 60 -opttmp 70 --Probe -od outdir
 
@@ -128,7 +129,7 @@ design Full-coverd primers:
 perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo -type face-to-face -rdis 120,160,80,200 -ptype MultiPlex -ctype Full-covered -ds 80 -rf 0.2 -od outdir  
 
 ## Input and Output
-[Detailed description about Input and Output] (http://primerscore.gtxlab.com/help.html)
+[Detailed Description](http://primerscore.gtxlab.com/help.html)
 
 ## Online Webserver  
 [PrimerScore2](http://primerscore.gtxlab.com/)
