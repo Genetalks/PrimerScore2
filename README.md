@@ -129,7 +129,7 @@ design Full-coverd primers:
 perl oligoScore.pl -it demo.bed -ir genome.fasta -is genome_add_snp.fasta -id database.fasta -p demo -type face-to-face -rdis 120,160,80,200 -ptype MultiPlex -ctype Full-covered -ds 80 -rf 0.2 -od outdir  
 
 ## Input and Output
-Detailed description see [Webserver-help](http://primerscore.gtxlab.com/help.html)
+Detailed description see [Webserver-help](http://primerscore.gtxlab.com/help.html#inputs)
 
 ## Online Webserver  
 [PrimerScore2](http://primerscore.gtxlab.com/)
