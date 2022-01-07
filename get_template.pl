@@ -66,6 +66,7 @@ my $ftype;
 	}
 }
 my %target;
+my %idcheck;
 open(T, $ftarget) or die $!;
 while (<T>){
 	chomp;
@@ -88,24 +89,37 @@ while (<T>){
 		next;
 	}
 
+	if(!defined $id || $id eq "" || $id eq "-" || $id eq "NA"){
+		$id=join("_", $chr, $s);
+	}
+
 	## check ref base
 	if($ref ne "-"){
 		my $rinfo = `$SAMTOOLS faidx $fref $chr:$s-$e`;
-		my ($id, @seq)=split /\n/, $rinfo;
+		my (undef, @seq)=split /\n/, $rinfo;
 		my $seq = join("", @seq);
 		$seq = uc($seq);
 		if($ref ne $seq){
-			print "Wrong: ref base $ref($chr:$s-$e $seq) is not right!\n";
+			print "Wrong: ref base $ref($chr:$s-$e $seq) of $id is not right!\n";
 			$check_success=0;
 			next;
 		}
 	}
-
+	
+	$idcheck{$id}++;
 	push @{$target_start{$chr}{$s}},[$id];
 	push @{$target_end{$chr}{$e}}, [$id];
 	@{$target{$id}}=($s, $e, $chr, $ref, $alt);
 }
 close (T);
+
+#### check id
+#foreach my $id(keys %idcheck){
+#	if($idcheck{$id}>1){
+#		print STDERR "Repeat ID: $id, please correct and run again!\n";
+#		die;
+#	}
+#}
 
 if($check_success==0 && $die_check){
 	print "ref base check failed!\n";
