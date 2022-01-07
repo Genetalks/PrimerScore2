@@ -192,7 +192,7 @@ if($ftype eq "SNP"){
 		chomp;
 		next if(/^$/);
 		my ($c, $s, $e, $id)=split /\s+/, $_;
-		if(!defined $id){
+		if(!defined $id || $id eq ""){
 			$id=join("_", $c, $s, $e);
 		}
 		my $info=`$SAMTOOLS faidx $fref $c:$s-$e`;
