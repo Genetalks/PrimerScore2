@@ -32,8 +32,10 @@ GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$ftem,
 				"is:s"=>\$ftem_snp,
+				"im:s"=>\$fmark,
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
+				"Methylation:s"=>\$Methylation,
 				"Probe:s"=>\$probe,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"FilterRepeat:s"=>\$FiterRepeat,
@@ -57,6 +59,11 @@ my $oligotm = "$PATH_PRIMER3/src/oligotm";
 my ($min_len, $max_len, $scale_len)=split /,/, $range_len;
 my %seq;
 
+##check
+if(defined $Methylation && !defined $fmark){
+	die "Wrong: -im mark_file must be given when designing Methylation primers!";
+}
+
 my $n=0;
 my @rregion=split /,/, $regions;
 
@@ -74,6 +81,21 @@ if(defined $ftem_snp){
 		$seq_snp{$id}=$seq;
 	}
 }
+## get mark seq when -Methylation
+my %seq_mark;
+if(defined $Methylation && defined $fmark){
+	open(I, $fmark) or die $!;
+	$/=">";
+	while(<I>){
+		chomp;
+		next if(/^$/);
+		my ($id_info, @line)=split /\n/, $_;
+		my $seq = join("", @line);
+		my ($id)=split /\s+/, $id_info;
+		$seq_mark{$id}=$seq;
+	}
+}
+
 
 my %record;
 ## get oligo seq
@@ -140,14 +162,19 @@ while(<I>){
 					my @match = ($oligo=~/[atcg]/g);
 					next if(scalar @match > length($oligo)*0.4);
 				}
+				my @oseq=($oligo);
+				my $oligo_snp="NA";
 				if(defined $ftem_snp){
-					my ($oligo_snp)=&get_oligo($p, $l, $seq_snp{$id}, $pori);
-					print P $id_new,"\t",$oligo,":", $oligo_snp, "\n";
-					print PT $id_new,"\t",$oligo,":", $oligo_snp, "\n";
-				}else{
-					print P $id_new,"\t",$oligo,"\n";
-					print PT $id_new,"\t",$oligo,"\n";
+					($oligo_snp)=&get_oligo($p, $l, $seq_snp{$id}, $pori);
 				}
+				push @oseq, $oligo_snp;
+				if(defined $Methylation){
+					my ($seq_mark)=&get_oligo($p, $l, $seq_mark{$id}, $pori);
+					push @oseq, $seq_mark;
+				}
+				print P $id_new,"\t", join(":", @oseq), "\n";
+				print PT $id_new,"\t", join(":", @oseq), "\n";
+
 				$seq{$id_new}=$oligo;
 				last; ##  oligos of different length are evalued in oligo_evaluation.pl
 			}
@@ -159,6 +186,9 @@ while(<I>){
 			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
 			if($fr eq "FR"){
 				$cmd .= " --Revcom";
+			}
+			if(defined $Methylation){
+				$cmd .= " --Methylation";
 			}
 			if(defined $probe){
 				$cmd .= " --Probe -opttmp $opt_tm_probe";

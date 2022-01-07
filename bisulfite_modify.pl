@@ -103,11 +103,11 @@ sub bisulfite_modify{
 			$ct[$i]="C";
 			$ct[$i+1]="G";
 			$ctm[$i]="+";
-			$ctm[$i+1]="+";
+			$ctm[$i+1]="*";
 
 			$ga[$i]="C";
 			$ga[$i+1]="G";
-			$gam[$i]="+";
+			$gam[$i]="*";
 			$gam[$i+1]="+";
 			$i++;
 			next;
