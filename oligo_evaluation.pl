@@ -24,7 +24,7 @@ our $BWA;
 # GetOptions
 # ------------------------------------------------------------------
 my ($foligo, $fkey,$detail,$outdir);
-my ($NoSpecificity,$NoFilter, $Precise);
+my ($Methylation,$NoSpecificity,$NoFilter, $Precise);
 my $min_tm_spec = 45; #when caculate specificity
 my $nohead;
 my $thread = 1;
@@ -46,6 +46,7 @@ GetOptions(
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
 				"Revcom:s"=>\$revcom,
+				"Methylation:s"=>\$Methylation,
 				"Probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
 				"Precise:s"=>\$Precise,
@@ -120,13 +121,13 @@ while (<P>){
 	next if(/^$/);
 	$_=~s/\s+$//;
 	my ($id0, $seq)=split /\s+/, $_;
-	my ($oligo_seq0, $oligo_seq_snp0, $oligo_seq_mark0) = split /:/, $seq;
+	my ($oligo_seq0, $oligo_seq_snp0, $oligo_seq_mark0) = split /,/, $seq;
 	$oligo_seq0=uc $oligo_seq0;
-	if($oligo_seq_snp0 eq "NA"){
+	if(!defined $oligo_seq_snp0 || $oligo_seq_snp0 eq "NA"){
 		$oligo_seq_snp0=$oligo_seq0;
 	}
 	$oligo_seq_snp0=uc $oligo_seq_snp0;
-	if(!defined $oligo_seq_mark0){
+	if(!defined $oligo_seq_mark0 || $oligo_seq_mark0 eq "NA"){
 		$oligo_seq_mark0="|" x length($oligo_seq0);
 	}
 	if(!defined $oligo_seq0){
@@ -175,7 +176,7 @@ while (<P>){
 	}
 	my $is_all_filter=1;
 	for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
-		my ($id, $ori, $off, $oligo_seq, $oligo_seq_snp)=@{$olen_oligo{$id0}->[$i]};
+		my ($id, $ori, $off, $oligo_seq, $oligo_seq_snp, $oligo_seq_mark)=@{$olen_oligo{$id0}->[$i]};
 		my $len = length($oligo_seq);
 		print L $id,"\n";
 		my $ftype;
@@ -417,7 +418,10 @@ if(!defined $NoSpecificity){
 			}
 			foreach my $id0t(@id0){
 				my $bound_num = 0;
-				my $map_num = scalar @{$mapping{$id0t}{$dname}};
+				my $map_num = 0;
+				if(exists $mapping{$id0t}{$dname}){
+					$map_num = scalar @{$mapping{$id0t}{$dname}};
+				}
 				for (my $i=0; $i<$map_num; $i++){
 					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
 					my ($emis3)=&get_3end1_mismatch($is_reverse, $cigar, $md);
@@ -450,8 +454,8 @@ if(!defined $NoSpecificity){
 					shift @seq_info;
 					my $seq = join("",@seq_info);
 					if($seq!~/[ATCGatcg]+/){ ## seq is NNN...NNN, false mapping, because bwa will convert N to one of ATCG randomly
-						print "Warn: extract aligned region sequence failed\n";
-						print join("\t", $chr, $start, $end, $fdatabase),"\n";
+				#		print "Warn: extract aligned region sequence failed\n";
+				#		print join("\t", $chr, $start, $end, $fdatabase),"\n";
 						next;
 					}
 					$seq=uc($seq);
@@ -664,6 +668,7 @@ Usage:
   -k  <str>              Key of output file, forced
 
   --Revcom               Also evalue revcom oligos
+  --Methylation          Design methylation oligos
   --Probe                Design probe and will consider mapping region where oligo 3end not matched exactly when caculate specificity
   -olen   <int,int,int>  Evalue other length's oligos, <min,max,scale> of length, optional
   -opttm     <int>       optimal tm of oligo, [$opt_tm]

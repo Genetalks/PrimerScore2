@@ -14,12 +14,14 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($fIn,$fkey,$outdir);
-my $Unmeth;
+my ($fIn,$fsnp, $fkey,$outdir);
+my ($Unmeth, $RevOwn);
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
+				"isnp:s"=>\$fsnp,
 				"k:s"=>\$fkey,
+				"RevOwn:s"=>\$RevOwn,
 				"Unmeth:s"=>\$Unmeth,
 				"od:s"=>\$outdir,
 				) or &USAGE;
@@ -36,8 +38,10 @@ if(defined $Unmeth){
 $/=">";
 open(O, ">$outdir/$fkey.bisulfite.fasta") or die $!;
 open(M, ">$outdir/$fkey.bisulfite.mark.fasta") or die $!;
-open(RO, ">$outdir/$fkey.rev.bisulfite.fasta") or die $!;
-open(RM, ">$outdir/$fkey.rev.bisulfite.mark.fasta") or die $!;
+if(defined $RevOwn){
+	open(RO, ">$outdir/$fkey.rev.bisulfite.fasta") or die $!;
+	open(RM, ">$outdir/$fkey.rev.bisulfite.mark.fasta") or die $!;
+}
 open (I, $fIn) or die $!;
 while(<I>){
 	chomp;
@@ -52,21 +56,18 @@ while(<I>){
 	print O join("\n", @{$aseqct}), "\n";
 	print M ">$id\n";
 	print M join("\n", @{$amarkct}), "\n";
-	
-	print RO ">$id\n";
-	print RO join("\n", @{$aseqga}), "\n";
-	print RM ">$id\n";
-	print RM join("\n", @{$amarkga}), "\n";
+	if(defined $RevOwn){
+		print RO ">$id\n";
+		print RO join("\n", @{$aseqga}), "\n";
+		print RM ">$id\n";
+		print RM join("\n", @{$amarkga}), "\n";
+	}else{
+		print O ">$id\_GA\n";
+		print O join("\n", @{$aseqga}), "\n";
+		print M ">$id\_GA\n";
+		print M join("\n", @{$amarkga}), "\n";
+	}
 
-	#print ">$id\n";
-	#print $seq,"\n";
-	#print join("", @{$amarkct}), "\n";
-	#print  join("", @{$aseqct}), "\n";
-	#print "\n";	
-	#print $seq,"\n";
-	#print  join("", @{$amarkga}), "\n";
-	#print  join("", @{$aseqga}), "\n";
-	#print "\n";	
 	undef $seq;
 	undef @{$aseqct};
 	undef @{$amarkct};
@@ -77,10 +78,31 @@ close(I);
 
 close(O);
 close(M);
-close(RO);
-close(RM);
+if(defined $RevOwn){
+	close(RO);
+	close(RM);
+}
 
-
+if(defined $fsnp){
+	if(defined $RevOwn){
+		`ln -s $fsnp $outdir/$fkey.bisulfite_snp.fasta`;
+	}else{
+		open(I, $fsnp) or die $!;
+		open(O, ">$outdir/$fkey.bisulfite_snp.fasta") or die $!;
+		while(<I>){
+			chomp;
+			next if(/^$/);
+			my ($head, @line)=split /\n/, $_;
+			my ($id)=split /\s+/, $head;
+			print O ">$id\n";
+			print O join("\n", @line),"\n";
+			print O ">$id\_GA\n";
+			print O join("\n", @line),"\n";
+		}
+		close(I);
+		close(O);
+	}
+}
 
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
@@ -164,8 +186,10 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 Usage:
   Options:
   -i  <file>   Input fasta file, forced
+  -is <file>   Input fasta added snp file, optional
   -k  <str>	   Key of output file, forced
   --Unmeth     Un-methylation
+  --RevOwn     Reverse file(G->A convert) output to another file
   -od <dir>	   Dir of output file, default ./
   -h		   Help
 

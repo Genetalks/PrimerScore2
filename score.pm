@@ -1,6 +1,5 @@
 sub probe_meth_score{
-	my ($opt_tm, $len, $tm, $gc, $hairpin, $snp, $poly, $bnum, $btm, $is_G5, $CGd, $cpgs, $cs)=@_;
-
+	my ($opt_tm, $len, $tm, $gc, $hairpin, $dimert, $dimers, undef, undef, $snp, $poly, $cpgs, $cs, $bnumtm, $is_G5, $CGd)=@_;
 	my @tm = ($opt_tm, $opt_tm+1, $opt_tm-3, $opt_tm+5);
 	my @gc = (0.48, 0.6, 0.4, 0.7);
 	my @self = (-50, 40, -50, 55); ## self tm
@@ -23,9 +22,13 @@ sub probe_meth_score{
 	my $csn=scalar(split /,/, $cs);
 	my $scpg=int(&score_growth_curve($cpgn, $fulls, @cpg)+0.5);
 	my $scs=int(&score_growth_curve($csn, $fulls, @cs)+0.5);
-	my $sbound=&bound_score($bnum, $btm, $fulls, "Probe_Tm");
-
-	my @score = ($stm, $sgc, $sself, $sCGd, $sG5, $ssnp, $spoly, $scpg, $scd, $sbound);
+	my $sbound=$fulls;
+	if(defined $bnumtm){
+		my ($bnum, $btm)=split /\|/, $bnumtm;
+		$sbound = &bound_score($bnum, $btm, $fulls, "Probe_Tm");
+	}
+	
+	my @score = ($stm, $sgc, $sself, $sCGd, $sG5, $ssnp, $spoly, $scpg, $scs, $sbound);
 	my @weight =( 1.5,   1,     1,      1,    1,    0.8,    0.2,   1.5,  1.5,  0.5);
 	my $sadd=0;
 	for(my $i=0; $i<@score; $i++){
@@ -40,7 +43,7 @@ sub probe_meth_score{
 
 
 sub probe_oligo_score{
-	my ($opt_tm, $len, $tm, $gc, $hairpin, $snp, $poly, $bnum, $btm, $is_G5, $CGd)=@_;
+	my ($opt_tm, $len, $tm, $gc, $hairpin, $dimert, $dimers, undef, undef, $snp, $poly, $bnumtm, $is_G5, $CGd)=@_;
 
 	my @tm = ($opt_tm, $opt_tm+1, $opt_tm-3, $opt_tm+5);
 	my @gc = (0.48, 0.6, 0.4, 0.7);
@@ -58,7 +61,11 @@ sub probe_oligo_score{
 	my $sCGd=int(&score_single($CGd, $fulls, @CGd)+0.5);
 	my $sG5=int(&score_single($is_G5, $fulls, @G5)+0.5);
 	#specificity: bound
-	my $sbound=&bound_score($bnum, $btm, $fulls, "Probe_Tm");
+	my $sbound=$fulls;
+	if(defined $bnumtm){
+		my ($bnum, $btm)=split /\|/, $bnumtm;
+		$sbound = &bound_score($bnum, $btm, $fulls, "Probe_Tm");
+	}
 	my @score = ($stm, $sgc, $sself, $sCGd, $sG5, $ssnp, $spoly, $sbound);
 	my @weight =( 2,   1.5,     1,      1,    1,    1.5,    0.5,      1.5);
 	my $sadd=0;
@@ -72,8 +79,57 @@ sub probe_oligo_score{
 }
 
 ## score_growth_curve
+sub primer_meth_score{
+	my ($opt_tm, $len, $tm, $gc, $hairpin, $dimert, $dimers, $nendA, $enddG, $snp, $poly, $cpgs, $cs, $bnumtm)=@_;
+	my $fulls = 10;
+	my @nendA = (1, 1, -1, 3, -1, 8);
+	my @enddG = (-9,-7,-12,-6.2,-14,-5);
+	my @gc = (0.52, 0.6, 0.42, 0.7, 0.32, 0.8);
+	my @tm = ($opt_tm, $opt_tm+1, $opt_tm-2, $opt_tm+6, $opt_tm-4, $opt_tm+11);
+	my @self = (-50, 47, -50, 52, -50, 57); ## self tm
+	my @cpg=(4,100,2,100,0,100);
+	my @cs=(8,100,4,100,0,100);
+
+	my $snendA=int(&score_growth_curve($nendA, $fulls, @nendA)+0.5);
+	my $senddG=int(&score_single($enddG, $fulls, @enddG)+0.5);
+	my $stm=int(&score_growth_curve($tm, $fulls, @tm)+0.5);
+	my $sgc=int(&score_growth_curve($gc, $fulls, @gc)+0.5);
+	my $sself=int(&score_growth_curve($hairpin, $fulls, @self)+0.5);
+	my ($snpv)=split /:/, $snp; 
+	my $ssnp = int(&SNP_score($snpv, $len, "Primer")*$fulls +0.5);
+	my $spoly = int(&poly_score($poly, $len, "Primer")*$fulls +0.5);
+#	int(&cpgs_score("0", 24) *$fulls +0.5);
+#	int(&cpgs_score("3", 24) *$fulls +0.5);
+#	int(&cpgs_score("5", 24) *$fulls +0.5);
+#	int(&cpgs_score("10", 24) *$fulls +0.5);
+#	int(&cpgs_score("15", 24) *$fulls +0.5);
+#	int(&cpgs_score("20", 24) *$fulls +0.5);
+#	int(&cpgs_score("0,1", 24) *$fulls +0.5);
+#	int(&cpgs_score("5,8,11,13,15", $len) *$fulls +0.5);
+#	int(&cpgs_score("1,11,17", $len) *$fulls +0.5);
+#	die;
+	my $scpgs = int(&cpgs_score($cpgs, $len) *$fulls +0.5);
+	my $scs = int(&cpgs_score($cs, $len) *$fulls +0.5);
+	my $sbound=10;
+	if(defined $bnumtm){
+		my ($bnum, $btm)=split /\|/, $bnumtm;
+		$sbound=&bound_score($bnum, $btm, $fulls, "Primer_Tm");
+	}
+	my @score = ($stm, $sgc, $sself, $snendA, $senddG, $ssnp, $spoly, $scpgs, $scs, $sbound);
+	my @weight =(1,    1.5,    1,    0.5,      1,       1,     0.5,   1.5,    1.5,   0.5);
+	my $sadd=0;
+	for(my $i=0; $i<@score; $i++){
+#		$score[$i]=$score[$i]<0? 0: $score[$i];
+		$sadd+=$weight[$i]*$score[$i];
+	}
+	my $score_info=join(",", @score);
+	return ($sadd, $score_info);
+}
+
+
+## score_growth_curve
 sub primer_oligo_score{
-	my ($opt_tm, $len, $tm, $gc, $hairpin, $nendA, $enddG, $snp, $poly, $bnum, $btm)=@_;
+	my ($opt_tm, $len, $tm, $gc, $hairpin, $dimert, $dimers, $nendA, $enddG, $snp, $poly, $bnumtm)=@_;
 	my $fulls = 10;
 	my @nendA = (1, 1, -1, 3, -1, 8);
 	my @enddG = (-9,-7,-12,-6.2,-14,-5);
@@ -89,7 +145,11 @@ sub primer_oligo_score{
 	my ($snpv)=split /:/, $snp; 
 	my $ssnp = int(&SNP_score($snpv, $len, "Primer")*$fulls +0.5);
 	my $spoly = int(&poly_score($poly, $len, "Primer")*$fulls +0.5);
-	my $sbound=&bound_score($bnum, $btm, $fulls, "Primer_Tm");
+	my $sbound= $fulls;
+	if(defined $bnumtm){
+		my ($bnum, $btm)= split /\|/, $bnumtm;
+		$sbound=&bound_score($bnum, $btm, $fulls, "Primer_Tm");
+	}
 	my @score = ($stm, $sgc, $sself, $snendA, $senddG, $ssnp, $spoly, $sbound);
 	my @weight =(1.5,     2,    1.5,    0.5,      1,    1.5,   1.5,   0.5);
 	my $sadd=0;
@@ -257,6 +317,23 @@ sub get_poly_value{
 	return $value;
 }
 
+sub cpgs_score{
+	my ($info, $len)=@_;
+	my @units=split /,/, $info;
+	my $qua=int($len/4);
+	my $min=-2*$qua;
+	my @pos=($min,$min,$min,$len,$min,$len);
+	## first score 
+	my $score0=0;
+	for(my $i=0; $i<@units; $i++){
+		$score0+=&score_growth_curve($units[$i], 100, @pos);
+	}
+
+	# score final
+	@score=(150,1000,75,1000,0,1000);
+	my $score=&score_growth_curve($score0, 1, @score);
+	return $score;
+}
 
 sub SNP_score{
 	my ($info, $len, $type)=@_;
@@ -321,6 +398,10 @@ sub score_growth_curve{
 	}elsif($v<=$maxb){
 		$s = $score;
 	}else{
+		if($maxl-$maxb==0){
+			print join("\t", ($v, $score, $minb, $maxb, $min, $max, $minl, $maxl)),"\n";
+			die;
+		}
 		#down curve2
 		$x = ($maxb-$v)/(($maxl-$maxb)/10)+5;
 		my $y2 = $K/(1+$b*$e**(-1*$a*$x));

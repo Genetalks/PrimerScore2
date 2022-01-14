@@ -15,8 +15,8 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($NoSpecificity, $FiterRepeat, $NoFilter, $Precise);
-my ($ftem,$ftem_snp,$fkey,$outdir);
+my ($Methylation, $NoSpecificity, $FiterRepeat, $NoFilter, $Precise);
+my ($ftem,$ftem_snp,$fmark,$fkey,$outdir);
 my $para_num = 10;
 my $stm = 45;
 my $opt_tm=60;
@@ -172,8 +172,8 @@ while(<I>){
 					my ($seq_mark)=&get_oligo($p, $l, $seq_mark{$id}, $pori);
 					push @oseq, $seq_mark;
 				}
-				print P $id_new,"\t", join(":", @oseq), "\n";
-				print PT $id_new,"\t", join(":", @oseq), "\n";
+				print P $id_new,"\t", join(",", @oseq), "\n";
+				print PT $id_new,"\t", join(",", @oseq), "\n";
 
 				$seq{$id_new}=$oligo;
 				last; ##  oligos of different length are evalued in oligo_evaluation.pl
@@ -217,11 +217,15 @@ Run("parallel -j $para_num  < $outdir/$fkey.oligo.evalue.sh");
 my @dirs = glob("$outdir/split_*");
 foreach my $dir (@dirs){
 	Run("cat $dir/*.evaluation.out > $dir/evaluation.out");
-	Run("cat $dir/*.bound.info > $dir/bound.info");
+	if(!defined $NoSpecificity){
+		Run("cat $dir/*.bound.info > $dir/bound.info");
+	}
 	Run("cat $dir/*.filter.list > $dir/filter.list");
 }
 Run("cat $outdir/*/evaluation.out >$outdir/$fkey.oligo.evaluation.out");
-Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info");
+if(!defined $NoSpecificity){
+	Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info");
+}
 Run("cat $outdir/*/filter.list >$outdir/$fkey.oligo.filter.list");
 
 
@@ -315,17 +319,18 @@ Usage:
   -d  <files>       Input database files separated by "," to evalue specificity, [$fdatabases]
   -k  	<str>		Key of output file, forced
 
-  --Probe           Design probe
-  --NoFilter        Not filter any oligos
-  --Precise         Evalue specificity precisely, but will consume a long time
-  --FilterRepeat	Filter oligos with repeat region(lowercase in fdatabases) more than 40%
-  --NoSpecificity   not evalue specificity
+  --Methylation         Design methylation oligos
+  --Probe               Design probe
+  --NoFilter            Not filter any oligos
+  --Precise             Evalue specificity precisely, but will consume a long time
+  --FilterRepeat	    Filter oligos with repeat region(lowercase in fdatabases) more than 40%
+  --NoSpecificity       not evalue specificity
 
-  -ptype     <str>       oligo type, "face-to-face", "back-to-back", "Nested", [$ptype]
+  -ptype     <str>      oligo type, "face-to-face", "back-to-back", "Nested", [$ptype]
   -opttm    <int>       optimal tm, [$opt_tm]
   -opttmp   <int>       optimal tm of probe, [$opt_tm_probe]
   -rlen     <str>       oligo len ranges(start,end,scale), start <= end, [$range_len]
-  -regions  <str>     interested regions of candidate oligos walking on template(the min pos on template of oligo), format is "start,end,step,strand,start2,end2,step2,strand2...", strand(F: forward, R: reverse, FR: both forward and reverse), "Len" is total length, (1,Len,1,FR) when not given, optional
+  -regions  <str>       interested regions of candidate oligos walking on template(the min pos on template of oligo), format is "start,end,step,strand,start2,end2,step2,strand2...", strand(F: forward, R: reverse, FR: both forward and reverse), "Len" is total length, (1,Len,1,FR) when not given, optional
   		                Example: 
 			               sanger sequence oligo: 100,150,2,R,400,500,5,R
 			               ARMS PCR oligo: 0,0,1,R,40,140,2,R

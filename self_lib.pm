@@ -58,6 +58,7 @@ sub CpG_info{
 	my ($mark)=@_;
 	my @unit =split //, $mark;
 	my $d3=0;
+	my (@cpgs, @cs);
 	for(my $i=$#unit; $i>=0; $i--){
 		if($unit[$i] eq "+"){
 			push @cpgs, $d3;

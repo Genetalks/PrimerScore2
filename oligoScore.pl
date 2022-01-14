@@ -17,6 +17,8 @@ require "$Bin/math.pm";
 # ------------------------------------------------------------------
 our ($VCF_dbSNP, $REF_GRCh37, $REF_GRCh37_SNP, $REF_GRCh38, $REF_GRCh38_SNP, $BLAT, $SAMTOOLS);
 my ($ftarget, $fkey,$outdir, $NoFilter, $ComeFromRefer, $Precise);
+my ($Methylation, $NoSpecificity);
+my $mtype="MSP";
 my $fref = $REF_GRCh37;
 my $fref_snp;
 my $fdatabases = $REF_GRCh37;
@@ -55,10 +57,12 @@ GetOptions(
 				"is:s"=>\$fref_snp,
 				"id:s"=>\$fdatabases,
 				"p:s"=>\$fkey,
+				"Methylation:s"=>\$Methylation,
 				"Probe:s"=>\$probe,
 				"Homology_check:s"=>\$homology_check,
 				"NoFilter:s"=>\$NoFilter,
 				"Precise:s"=>\$Precise,
+				"NoSpecificity:s"=>\$NoSpecificity,
 
 				## oligo design
 				"opttm:s"=>\$opt_tm,
@@ -79,6 +83,7 @@ GetOptions(
 				"ds:s"=>\$dis_aver,
 				"rf:s"=>\$rfloat,
 				"on:s"=>\$onum,
+				"mtype:s"=>\$mtype,
 
 				"stm:s"=>\$stm,
 				"pnum:s"=>\$pnum,
@@ -222,13 +227,20 @@ if($ftype eq "SNP"){
 	exit();
 }
 
-
 ### homology check
 if($step==1){
 	if(defined $homology_check){
 		&Run("perl $Bin/homology_check.pl -it $ftemplate -ir $fdatabases -k $fkey -od $outdir/homology_check", $sh);
 	}
 	$step++;
+}
+
+my $fmark;
+if(defined $Methylation){
+	&Run("perl $Bin/bisulfite_modify.pl -i $ftemplate -isnp $ftemplate_snp -k $fkey -od $outdir", $sh);
+	$ftemplate = "$outdir/$fkey.bisulfite.fasta";
+	$fmark = "$outdir/$fkey.bisulfite.mark.fasta";
+	$ftemplate_snp = "$outdir/$fkey.bisulfite_snp.fasta";
 }
 
 ### oligo design
@@ -253,6 +265,9 @@ if($step==2){
 	if(defined $ftemplate_snp){
 		$dcmd .= " -is $ftemplate_snp";
 	}
+	if(defined $Methylation){
+		$dcmd .= " -im $fmark --Methylation";
+	}
 	if(defined $probe){
 		$dcmd.=" --Probe -opttmp $opt_tm_probe";
 	}
@@ -262,6 +277,9 @@ if($step==2){
 	if(defined $Precise){
 		$dcmd .= " --Precise";
 	}
+	if(defined $NoSpecificity){
+		$dcmd .= " --NoSpecificity";
+	}
 	&Run($dcmd, $sh);
 	$step++;
 }
@@ -270,6 +288,12 @@ if($step==3){
 	### probe score
 	if(defined $probe){
 		my $cmd = "perl $Bin/probe_score.pl -i $odir/$fkey.oligo.evaluation.out -k $fkey -minl $min_len_probe -maxl $max_len_probe -opttm $opt_tm_probe -od $outdir";
+		if(defined $Methylation){
+			$cmd .= " --Methylation";
+		}
+		if(defined $NoSpecificity){
+			$cmd .= " --NoSpecificity";
+		}
 		if(defined $NoFilter){
 			$cmd .= " --NoFilter";
 		}
@@ -278,7 +302,15 @@ if($step==3){
 	
 	### primer score and select
 	my $score_dis_range = $score_dis.",".$dis_range;
-	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -ib $odir/$fkey.oligo.bound.info -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd=$dis_range -ct $ctype -stm $stm -mine $min_eff -maxp $max_prodn -od $outdir";
+	my $cmd = "perl $Bin/primer_score.pl -io $odir/$fkey.oligo.evaluation.out -it $ftemplate -k $fkey -tp $type -minl $min_len -maxl $max_len -opttm $opt_tm -PCRsize $pcr_size -rd=$dis_range -ct $ctype -stm $stm -mine $min_eff -maxp $max_prodn -od $outdir";
+	if(defined $Methylation){
+		$cmd .= " --Methylation";
+	}
+	if(defined $NoSpecificity){
+		$cmd .= " --NoSpecificity";
+	}else{
+		$cmd .= " -ib $odir/$fkey.oligo.bound.info";
+	}
 	if(defined $NoFilter){
 		$cmd .= " --NoFilter";
 	}
@@ -301,7 +333,7 @@ if($step==4){
 	### primers multiplex check
 	if($plex eq "MultiPlex"){
 		my $range = join(",", $rdiss[-2], $rdiss[-1]);
-		&Run("perl $Bin/primer_evaluation.pl -io $outdir/$fkey.final.result -ib $outdir/$fkey.final.bound.info -k $fkey -tp $type -ep MultiPlex -mp $max_prodn -AllEvalue -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd=$range -me $min_eff -od $outdir");
+		&Run("perl $Bin/primer_evaluation.pl -io $outdir/$fkey.final.result -ib $outdir/$fkey.final.bound.info -k $fkey -tp $type -ep MultiPlex -mp $max_prodn --OutAllProduct --AllEvalue -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd=$range -me $min_eff -od $outdir");
 		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey.final -od $outdir", $sh);
 	}
 
@@ -456,7 +488,12 @@ sub caculate_rregion{
 	}else{
 		if($ctype eq "Single"){## usually is generic:Region
 			$min = 1;
-			$max = $min+$step0*$pnum;
+			$max = $min+$step0*$pnum*2; ## some FR primers are limited by distance
+			my $max0=int($bmind*1.5+0.5);
+			if($max<$max0){
+				$max=$max0;
+				$step0=int(($max-$min)/$pnum+0.5);
+			}
 		}elsif($ctype eq "Full-covered"){
 			$min = 1;
 			$max="Len"; ## total length of template
@@ -504,15 +541,18 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 
 Usage:
   Options:
-  -it        <file>   Input target file(target spot or region file, or template fasta file with no non-ATCGatcg), forced
+  -it       <file>    Input target file(target spot or region file, or template fasta file with no non-ATCGatcg), forced
    --ComeFromRefer    Sequences in target file(-it) come from reference file(-ir) when -it is fasta file, optional
-  -ir        <file>   Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
-  -is        <file>   Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
+  -ir       <file>    Input reference file to extract template sequence of SNP, needed when target file(-it) is SNP file, [$fref]
+  -is       <file>    Input reference file containing snps to check SNP of oligos when -it is SNP file, optional
   -id       <files>   Input database files separated by "," to check specificity, [$fdatabases]
-  -p         <str>    prefix of output file, forced
+  -p        <str>     prefix of output file, forced
+
+  --Methylation       Design methylation oligos
   --Probe             Design probe when -type "face-to-face", optional
   --NoFilter          Not filter any oligos
   --Precise           Evalue specificity precisely, but will consume a long time(reach to 100 times longer)
+  --NoSpecificity     Not evalue specificity of oligos
   --Homology_check    Check homologous sequence of template sequence when design for NGS primers, optional
 
   ### oligo parameters
@@ -523,35 +563,38 @@ Usage:
   -minlp    <int>     minimum length of probe, [$min_len_probe]
   -maxlp    <int>     maximum length of probe, [$max_len_probe]
   -scalel   <str>     candidate oligo length scale, [$scale_len]
+
+  ### type parameters
+  -type     <str>     primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
+  -ptype    <str>     plex type, "SinglePlex" or "MultiPlex", [$plex]
+  -ctype    <str>     primer covered type, "Single" or "Full-covered", ["Single"]
+     -ds    <int>     average distance between adjacent primers when -ctype "Full-covered", [500]
+     -rf    <float>   ratio of distance between adjacent primers can float when -ctype "Full-covered", [0.2]
+     -on    <int>     output num when -ctype "Single",[$onum]
+  -mtype    <str>     methylation type, "MSP" or "BSP", [$mtype]
+
+  ### design parameters 
   -rpos     <str>     position range, distance of p1 to the detected site, (opt_min, opt_max, min, max) separted by ",", must be given when -it is SNP file
   -rdis     <str>     distance range between pair primers, that is product size range when -type is "face-to-face", (opt_min, opt_max, min, max) separted by ",", [$dis_range]
   -regions  <str>     interested regions of candidate primers walking on template, format is "start,end,scale,fr,start2,end2,scale2,fr2...", if not given, will caculate automatically, fr:F/R/FR, optional
+  -pnum     <int>     position num of candidate oligos, [$pnum]
 
-  ### design parameters
-  -type   <str>     primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
-  -ptype  <str>     plex type, "SinglePlex" or "MultiPlex", [$plex]
-  -ctype  <str>     primer covered type, "Single" or "Full-covered", ["Single"]
-     -ds  <int>     average distance between adjacent primers when -ctype "Full-covered", [500]
-     -rf  <float>   ratio of distance between adjacent primers can float when -ctype "Full-covered", [0.2]
-     -on  <int>     output num when -ctype "Single",[$onum]
-  -pnum   <int>     position num of candidate oligos, [$pnum]
- 
   ### specificity parameters
-  -stm    <int>     min tm to be High_tm in specifity, [$stm]
-  -size   <int>     max PCR size, [$pcr_size]
-  -mpro   <int>     maximum products number to be caculated, to reduce running time. [$max_prodn]
-  -meff   <float>   min efficiency to consider a product, [$min_eff]
+  -stm      <int>     min tm to be High_tm in specifity, [$stm]
+  -size     <int>     max PCR size, [$pcr_size]
+  -mpro     <int>     maximum products number to be caculated, to reduce running time. [$max_prodn]
+  -meff     <float>   min efficiency to consider a product, [$min_eff]
 
   ### run parameters
-  -para   <int>      parallel num, [$para_num]
-  -thrd   <int>      thread in bwa, [$thread]
-  -step   <int>      step, [$step]
-                     1: homology check
-                     2: creat and evalue candidate oligos 
-                     3: score for probe and primer
-                     4: multiplex check
-  -od     <dir>      Dir of output file, default ./
-  -h                Help
+  -para     <int>      parallel num, [$para_num]
+  -thrd     <int>      thread in bwa, [$thread]
+  -step     <int>      step, [$step]
+                       1: homology check
+                       2: creat and evalue candidate oligos 
+                       3: score for probe and primer
+                       4: multiplex check
+  -od       <dir>      Dir of output file, default ./
+  -h                  Help
 
 USAGE
     print $usage;

@@ -11,6 +11,8 @@ require "$Bin/self_lib.pm";
 require "$Bin/average.pm";
 require "$Bin/math.pm";
 require "$Bin/product.pm";
+require "$Bin/io.pm";
+
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -20,6 +22,7 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 my ($foligo,$ftm,$fbound,$fprobe,$fkey,$outdir);
+my ($Methylation,$NoSpecificity,$NoFilter);
 my $min_len=20;
 my $max_len=30;
 my $opt_tm=60;
@@ -32,7 +35,6 @@ my $ctype = "Single";
 my $onum = 3;
 my $max_probe_num=6;
 my $PCRsize=1000;
-my $NoFilter;
 my $min_eff=0.00001;
 my $max_prodn=50;
 my $min_tm_spec=45;
@@ -43,6 +45,8 @@ GetOptions(
 				"ib:s"=>\$fbound,
 				"ip:s"=>\$fprobe,
 				"k:s"=>\$fkey,
+				"Methylation:s"=>\$Methylation,
+				"NoSpecificity:s"=>\$NoSpecificity,
 				"NoFilter:s"=>\$NoFilter,
 				"maxl:s"=>\$max_len,
 				"minl:s"=>\$min_len,
@@ -65,9 +69,10 @@ GetOptions(
 $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
-
+my $min_cpgs=1;
+my $min_cs=3;
 my $max_best_dis_primer_probe=3;
-my $max_dis_primer_probe=20;
+my $max_dis_primer_probe=30;
 my $end_len=10;
 my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
 my @lendif=(0,4,0,8); ## tm diff between F and R primer
@@ -120,7 +125,10 @@ while(<F>){
 $/="\n";
 close(F);
 open(O,">$outdir/$fkey.primer.score") or die $!;
-print O "##Score: scores of length, tm, self-complementary, end3 A num, end3 stability, snp, poly, bounding\n";
+open(F,">$outdir/$fkey.primer.filter") or die $!;
+print F "#Filter\tID\tTarget\tStrand\tPos5\tSeq\tLen\t",join("\t", &features("Head", $Methylation, $NoSpecificity)),"\n";
+print O "##Score: ". &score_des("Primer", $Methylation)."\n";
+print O "#ID\tTarget\tStrand\tPos5\tSeq\tLen\tScore\tScoreInfo\t",join("\t", &features("Head", $Methylation, $NoSpecificity)),"\n";
 my %oligo_info;
 my %oligo_pos;
 my %oligo_score;
@@ -128,38 +136,70 @@ open(P, $foligo) or die $!;
 &SHOW_TIME("#Primer Score");
 while(<P>){
 	chomp;
-	my ($id, $seq, $len, $tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo)=split /\t/, $_;
+	#($id, $seq, $len), ($tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly), ($CpGs, $Cs), ($bnum, $btm, $binfo);
+	my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info(0, $_, $Methylation, $NoSpecificity);
+	my ($id, $seq, $len)=@{$abase};
+	my $tm = $afeature->[0];
 	my ($tid, $dis, $chr, $pos3, $pos5, $strand)=&get_position_info($id, $len, \%tempos);
-	@{$oligo_info{$id}}=($chr, $pos3, $pos5, $strand, $dis, $seq, $len, $tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly, $bnum."|".$btm);
-	next if(!defined $NoFilter && ($len>$max_len || $len<$min_len));
-	next if(!defined $NoFilter && ($tm<$opt_tm-5 || $tm>$opt_tm+5));
+	@{$oligo_info{$id}}=($chr, $pos3, $pos5, $strand, $dis, $seq, $len, @{$afeature}, @{$ameth});
+	if(defined $bnumtm){
+		push @{$oligo_info{$id}}, $bnumtm;
+	}
+	my @out=($id, $chr, $strand, $pos5, $seq, $len, @{$afeature}, @{$ameth}, @{$aspec});
+	if(!defined $NoFilter && ($len>$max_len || $len<$min_len)){
+		print F join("\t", "Len", @out),"\n";
+		next;
+	}
+	if(!defined $NoFilter && ($tm<$opt_tm-5 || $tm>$opt_tm+5)){
+		print F join("\t", "Tm", @out),"\n";
+		next;
+	}
+	if(!defined $NoFilter && defined $Methylation){
+		my $cpgs=scalar(split /,/, $ameth->[0]);
+		if($cpgs<$min_cpgs){
+			print F join("\t", "CpGs", @out),"\n";
+			next;
+		}
+		my $cs=scalar(split /,/, $ameth->[1]);
+		if($cs<$min_cs){
+			print F join("\t", "Cs", @out),"\n";
+			next;
+		}
+	}
 
 	if($ftype eq "SNP"){
 		$tid=~s/-[UD]$//;
 	}
 	@{$oligo_pos{$tid}{$strand}{$id}}=($dis, $pos3, $pos5);
-
+	
 	## score
-	my ($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $nendA, $enddG, $snp, $poly, $bnum, $btm);
-	#my ($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $nendA, $enddG, $snp, $poly, $bnum, $btm);
+	my ($sadd, $score_info);
+	if(defined $Methylation){
+		($sadd, $score_info)=&primer_meth_score($opt_tm, $len, @{$afeature}, @{$ameth}, $bnumtm);
+	}else{
+		($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, @{$afeature}, $bnumtm);
+	}
 	@{$oligo_score{$id}}=($sadd, $score_info);
-	print O join("\t", $id, $chr, $strand, $pos5, $seq, $len, $sadd, $score_info, $tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly, $bnum, $btm, $binfo),"\n";
+	print O join("\t", $id, $chr, $strand, $pos5, $seq, $len, $sadd, $score_info, @{$afeature}, @{$ameth}, @{$aspec}),"\n";
 }
 close(P);
 close(O);
+close(F);
 
 my %bound;
-&SHOW_TIME("#Read in Bound file");
-open(B, $fbound) or die $!;
-while(<B>){
-	chomp;
-	my ($id, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
-	my $len = length $seq;
-	my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
-	push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $seq];
+if(!defined $NoSpecificity){
+	&SHOW_TIME("#Read in Bound file");
+	open(B, $fbound) or die $!;
+	while(<B>){
+		chomp;
+		my ($id, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
+		my $len = length $seq;
+		my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
+		push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $seq];
+	}
+	close(B);
 }
-close(B);
-
+	
 my %probe;
 if(defined $fprobe){
 	&SHOW_TIME("#Read in Probe file");
@@ -181,27 +221,15 @@ if(defined $fprobe){
 
 #### score pair and output
 open(O,">$outdir/$fkey.final.result") or die $!;
-print O "##ScorePair: scores of P1 position to target(Probe 5'end), distance between pair, length diff, tm diff, specificity of primer pair\n";
+print O "##ScorePair: " . &score_des("PairPrimer", $Methylation)."\n";
 if(defined $fprobe){
-	print O "##ScorePair(Probe) : score of probe boundings\n";
+	print O "##ScorePair(Probe): " . &score_des("PairProbe", $Methylation)."\n";
 }
-#($slen, $stm, $sself,$snendA, $senddG, $ssnp, $spoly, $sbound)
-print O "##ScoreOligo: total score | scores of tm, gc, self-complementary, end3 A num, end3 stability, snp, poly, bounding\n";
+print O "##ScoreOligo: total score | ". &score_des("Primer", $Methylation)."\n";
 if(defined $fprobe){
-	print O "##ScoreOligo(Probe) : total score | scores of tm, gc, self-complementary, CG content diff, snp, poly, bounding\n";
+	print O "##ScoreOligo(Probe): total score | " . &score_des("Probe", $Methylation)."\n";
 }
-my @title=("#Chr\tStart\tStrand\tID\tSeq\tLen");
-if(defined $range_pos){
-	push @title, "Dis2Target";
-}
-if($ptype=~/face-to-face/){
-	push @title, "ProductSize";
-}else{
-	push @title, "DisBetweenPairs";
-}
-push @title, ("ScoreTotal\tScorePair\tScoreOligo");
-push @title, ("Tm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestEff\tHighestInfo");
-print O join("\t", @title),"\n";
+print O &final_head($Methylation, $NoSpecificity, $range_pos, $ptype),"\n";
 
 my %success;
 my %output;
@@ -302,32 +330,38 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my $sdis=int(&score_single($dis, $fulls_dis, @rdis)+0.5);
 				
 				# specificity, product 
+				my $sprod=$fulls_prod;
 				my %prod;
-				if(!exists $bound{$p1} || !exists $bound{$p2}){
-					print "Warn: $p1 or $p2 No bound info!\n";
-					next;
+				if(!defined $NoSpecificity){
+					if(!exists $bound{$p1} || !exists $bound{$p2}){
+						print "Warn: $p1 or $p2 No bound info!\n";
+						next;
+					}
+	
+					&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
+					$record{"pro"}{$p1}{$p2}=1;
+					&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
+					$record{"pro"}{$p1}{$p1}=1;
+					&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
+					$record{"pro"}{$p2}{$p2}=1;
+					my @effs = sort{$b<=>$a} values %{$prod{$tid}{$tid}};
+					my $pnum=scalar @effs;
+					$sprod = &bound_score($pnum, join(",",@effs), $fulls_prod, "Eff");
 				}
-
-				&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
-				$record{"pro"}{$p1}{$p2}=1;
-				&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
-				$record{"pro"}{$p1}{$p1}=1;
-				&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
-				$record{"pro"}{$p2}{$p2}=1;
-				my @effs = sort{$b<=>$a} values %{$prod{$tid}{$tid}};
-				my $pnum=scalar @effs;
-				my $sprod = &bound_score($pnum, join(",",@effs), $fulls_prod, "Eff");
-				
+					
 				# score pair
 				my $stotal=$score+$score2;
 				if(defined $fprobe){#Probe
 					# probe num on products
 					my %pdr;
 					my $pb=$condv[$i][4];
-					my ($pdnum)= &probe_bounds_on_products($pb, $bound{$pb}, $prod{$tid}{$tid}, \%pdr, $PCRsize, $opt_tm+8, $min_tm_spec+8); #my ($id, $abound, $aprod, $aresult)=@_;
-					my @pdeffs = sort{$b<=>$a} values %{$pdr{$pb}};
-					my $spdr = &bound_score($pdnum, join(",", @pdeffs), $fulls_prod, "Eff"); ## probe specificity
-					$sprod=($sprod*1+$spdr*2)/3; ## specificity weight is primer:probe=1:2
+					my $spdr=$fulls_prod;
+					if(!defined $NoSpecificity){
+						my ($pdnum)= &probe_bounds_on_products($pb, $bound{$pb}, $prod{$tid}{$tid}, \%pdr, $PCRsize, $opt_tm+8, $min_tm_spec+8); #my ($id, $abound, $aprod, $aresult)=@_;
+						my @pdeffs = sort{$b<=>$a} values %{$pdr{$pb}};
+						$spdr = &bound_score($pdnum, join(",", @pdeffs), $fulls_prod, "Eff"); ## probe specificity
+						$sprod=($sprod*1+$spdr*2)/3; ## specificity weight is primer:probe=1:2
+					}
 					$stotal+=$probe{$tid}{$pb}->[0];
 					@{$probe_final{$p1.",".$p2}}=($spdr, $pdr{$pb});
 				}
@@ -403,13 +437,17 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			my $p2_new=$pname."-2";
 			$output{$p1_new}=$p1;
 			$output{$p2_new}=$p2;
-			my ($pdnum, $apdeffs, $apdinfos)=&get_highest_bound($aprod, 3);
-			my $pdeffs=join(",", @{$apdeffs});
-			my $pdinfos=join(";", @{$apdinfos});
+			my @prod_info=();
+			if(!defined $NoSpecificity){
+				my ($pdnum, $apdeffs, $apdinfos)=&get_highest_bound($aprod, 3);
+				my $pdeffs=join(",", @{$apdeffs});
+				my $pdinfos=join(";", @{$apdinfos});
+				@prod_info=($pdnum, $pdeffs, $pdinfos);
+			}
 			my @opos=($chr, $pos5, $strand, $p1_new, $seq, $len);
-			my @oinfo=($stotal, join(",", @{$score_pair_info{$pair}}), $score."|".$score_info, @info, $pdnum, $pdeffs, $pdinfos);
+			my @oinfo=($stotal, join(",", @{$score_pair_info{$pair}}), $score."|".$score_info, @info, @prod_info);
 			my @opos2=($chr2, $pos52, $strand2, $p2_new, $seq2, $len2);
-			my @oinfo2=($stotal, join(",", @{$score_pair_info{$pair}}), $score2."|".$score_info2, @info2, $pdnum, $pdeffs, $pdinfos);
+			my @oinfo2=($stotal, join(",", @{$score_pair_info{$pair}}), $score2."|".$score_info2, @info2, @prod_info);
 			if(defined $range_pos){
 				print O join("\t", @opos, $dis, $size, @oinfo),"\n";
 			}else{
@@ -422,13 +460,17 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my ($pbs, $pbsi)=@{$probe{$tid}{$pb}};
 				my ($chrp, $pos3p, $pos5p, $strandp, $disp, $seqp, $lenp, @infop)=@{$oligo_info{$pb}};
 				my ($spdr, $apdr)=@{$probe_final{$pair}};
-				my ($pdpnum, $apdpeffs, $apdpinfos)=&get_highest_bound($apdr, 3);
-				my $pdpeffs=join(",", @{$apdpeffs});
-				my $pdpinfos=join(";", @{$apdpinfos});
+				my @pdprod_info=();
+				if(!defined $NoSpecificity){
+					my ($pdpnum, $apdpeffs, $apdpinfos)=&get_highest_bound($apdr, 3);
+					my $pdpeffs=join(",", @{$apdpeffs});
+					my $pdpinfos=join(";", @{$apdpinfos});
+					@pdprod_info=($pdpnum, $pdpeffs, $pdpinfos);
+				}
 				$infop[6]=0; ##end stability
 
 				my @oposp=($chrp, $pos5p, $strandp, $pb_new, $seqp, $lenp);
-				my @oinfop=($stotal, $spdr, $pbs."|".$pbsi, @infop, $pdpnum, $pdpeffs, $pdpinfos);
+				my @oinfop=($stotal, $spdr, $pbs."|".$pbsi, @infop, @pdprod_info);
 				if(defined $range_pos){
 					print O join("\t", @oposp, $disp, 0, @oinfop),"\n";
 				}else{
@@ -594,7 +636,9 @@ Usage:
   -k   <str>	Key of output file, forced
   -tp  <str>    primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
 
-  --NoFilter    Not filter any primers
+  --Methylation     Design methylation oligos
+  --NoSpecificity   Not evalue specificity
+  --NoFilter        Not filter any primers
   -minl      <int>  min len of primer, [$min_len]
   -maxl      <int>  max len of primer, [$max_len]
   -opttm     <int>  opt tm of primer, [$opt_tm]
