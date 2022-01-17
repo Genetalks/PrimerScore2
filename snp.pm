@@ -42,7 +42,7 @@ sub SNP_parse{
 	}
 
 	for(my $i=0; $i<@u; $i++){
-		if(exists $snp{$u[$i]}){
+		if(exists $snp{$u[$i]}){ ##SNP 
 			push @snp, $i."S1";
 		}elsif($u[$i] eq "E"){
 			my $l=1;
@@ -69,6 +69,7 @@ sub SNP_parse{
 ##Ref   Alt        to   
 #G       A         ==> R(degenerate)
 #G       A,T       ==> D(degenerate)
+#GA      AT        ==> RW(MNP is several SNPs)
 #AAAG    A         ==> AEEE(D is degenerate)
 #G       GA        ==> I
 #G       GAA       ==> J
@@ -98,13 +99,19 @@ sub sequence_convert_snp{
 		}
 	}
 	if($p-1>=0 && $p-1<=$seqlen-1){ ## the pos is on the sequence 
-		if($polym eq "S"){
+		if($polym eq "S" || $polym eq "P"){ ##SNP MNP
 			$alt=~s/<[xX]>//;
-			my $dg=&snp_to_degenerate($ref.",".$alt);
-			if($dg eq "Error"){
-				return;
+			my @uref=split //, $ref;
+			my @ualt=split //, $alt;
+			for(my $i=$off; $i<@uref; $i++){
+				next if($uref[$i] eq $ualt[$i]);
+				my $dg=&snp_to_degenerate($uref[$i].",".$ualt[$i]);
+				if(!defined $dg || $dg eq "Error"){
+					print STDERR join("\t", $uref[$i], $ualt[$i], $ref, $alt, $type, $off),"\n";
+					return;
+				}
+				$aseq->[$p-1+$i]=$dg;
 			}
-			$aseq->[$p-1]=$dg;
 		}elsif($polym eq "I"){
 			my $ix=($len-1)>=3? 3: ($len-1);
 			$aseq->[$p-1]=$Ins[$ix];
@@ -129,8 +136,20 @@ sub mutant_type{
 	foreach my $at(@alts){
 		my $type;
 		my $lena = $at eq "-"? 0: length $at;
-		if($lenr == $lena){ ## SNP
-			$type="S_0_0";
+		if($lenr == $lena){ 
+			if($lenr==1){ ##SNP
+				$type="S_0_0";
+			}else{ ##MNP
+				my @unitr=split //, $ref;
+				my @unita=split //, $at;
+				my $off=0;
+				for(my $i=0; $i<@unitr; $i++){
+					last if($unitr[$i] ne $unita[$i]);
+					$off++;
+				}
+				my $l=$lenr-$off;
+				$type="P_".$l."_".$off;
+			}
 		}else{
 			my $dl=abs($lenr-$lena);
 			if($lenr > $lena){## Del

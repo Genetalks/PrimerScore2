@@ -24,7 +24,7 @@ our $BWA;
 # GetOptions
 # ------------------------------------------------------------------
 my ($foligo, $fkey,$detail,$outdir);
-my ($NoSpecificity,$NoFilter, $Precise);
+my ($Methylation,$NoSpecificity,$NoFilter, $Precise);
 my $min_tm_spec = 45; #when caculate specificity
 my $nohead;
 my $thread = 1;
@@ -46,6 +46,7 @@ GetOptions(
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
 				"Revcom:s"=>\$revcom,
+				"Methylation:s"=>\$Methylation,
 				"Probe:s"=>\$probe,
 				"NoFilter:s"=>\$NoFilter,
 				"Precise:s"=>\$Precise,
@@ -89,6 +90,8 @@ my $MIN_tm = $opt_tm-5;
 my $MAX_tm = defined $opt_tm_probe? $opt_tm_probe+5: $opt_tm+5;
 my $MIN_gc = 0.2;
 my $MAX_gc = 0.8;
+my $MinCpG = 1;
+my $MinC = 3;
 my @tm = ($opt_tm*0.8, $opt_tm*2, $opt_tm*0.6, $opt_tm*2);
 	
 my $oligotm = "$PATH_PRIMER3/src/oligotm -mv $mv -dv $dv -n $dNTP -d $dna -tp $tp -sc $sc";
@@ -101,7 +104,9 @@ if(defined $Precise){
 }
 
 ## creat oligo.fa
-open(PN, ">$outdir/$fkey.oligo.fa") or die $!;
+if(!defined $NoSpecificity){
+	open(PN, ">$outdir/$fkey.oligo.fa") or die $!;
+}
 open(F, ">$outdir/$fkey.filter.list") or die $!;
 open(L, ">$outdir/$fkey.oligo.list") or die $!;
 my %evalue;
@@ -116,24 +121,28 @@ while (<P>){
 	next if(/^$/);
 	$_=~s/\s+$//;
 	my ($id0, $seq)=split /\s+/, $_;
-	my ($oligo_seq0, $oligo_seq_snp0) = split /:/, $seq;
+	my ($oligo_seq0, $oligo_seq_snp0, $oligo_seq_mark0) = split /,/, $seq;
 	$oligo_seq0=uc $oligo_seq0;
-	if(!defined $oligo_seq_snp0){
+	if(!defined $oligo_seq_snp0 || $oligo_seq_snp0 eq "NA"){
 		$oligo_seq_snp0=$oligo_seq0;
 	}
 	$oligo_seq_snp0=uc $oligo_seq_snp0;
+	if(!defined $oligo_seq_mark0 || $oligo_seq_mark0 eq "NA"){
+		$oligo_seq_mark0="|" x length($oligo_seq0);
+	}
 	if(!defined $oligo_seq0){
 		print $_,"\n";
 		die;
 	}
 	my $id0new=defined $olens? $id0."_F_0": $id0;
-	push @{$olen_oligo{$id0}}, [$id0new,"+", 0, $oligo_seq0, $oligo_seq_snp0];
-	my ($oligo_seq0r, $oligo_seq_snp0r);
+	push @{$olen_oligo{$id0}}, [$id0new,"+", 0, $oligo_seq0, $oligo_seq_snp0, $oligo_seq_mark0];
+	my ($oligo_seq0r, $oligo_seq_snp0r, $oligo_seq_mark0r);
 	if(defined $revcom){
 		$oligo_seq0r=&revcom($oligo_seq0);
 		$oligo_seq_snp0r=&revcom($oligo_seq_snp0);
+		$oligo_seq_mark0r=reverse($oligo_seq_mark0);
 		my $id0newR=defined $olens? $id0."_R_0": $id0;
-		push @{$olen_oligo{$id0}}, [$id0newR, "-", 0, $oligo_seq0r, $oligo_seq_snp0r];
+		push @{$olen_oligo{$id0}}, [$id0newR, "-", 0, $oligo_seq0r, $oligo_seq_snp0r, $oligo_seq_mark0r];
 	}
 	if(defined $olens){
 		my ($min, $max, $scale)=split /,/, $olens;
@@ -144,12 +153,14 @@ while (<P>){
 			my $id=$id0."_F"."_".$off;
 			my $seq = substr($oligo_seq0, $off);
 			my $seq_snp = substr($oligo_seq_snp0, $off);
-			push @{$olen_oligo{$id0}}, [$id, "+", $off, $seq, $seq_snp];
+			my $seq_mark = substr($oligo_seq_mark0, $off);
+			push @{$olen_oligo{$id0}}, [$id, "+", $off, $seq, $seq_snp, $seq_mark];
 			if(defined $revcom){
 				$id=$id0."_R"."_".$off;
 				my $seq = substr($oligo_seq0r, $off);
 				my $seq_snp = substr($oligo_seq_snp0r, $off);
-				push @{$olen_oligo{$id0}}, [$id,"-", $off, $seq, $seq_snp];
+				my $seq_mark = substr($oligo_seq_mark0r, $off);
+				push @{$olen_oligo{$id0}}, [$id,"-", $off, $seq, $seq_snp, $seq_mark];
 			}
 		}
 	}
@@ -165,10 +176,11 @@ while (<P>){
 	}
 	my $is_all_filter=1;
 	for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
-		my ($id, $ori, $off, $oligo_seq, $oligo_seq_snp)=@{$olen_oligo{$id0}->[$i]};
+		my ($id, $ori, $off, $oligo_seq, $oligo_seq_snp, $oligo_seq_mark)=@{$olen_oligo{$id0}->[$i]};
 		my $len = length($oligo_seq);
 		print L $id,"\n";
 		my $ftype;
+
 		## filter endA and end stability
 		my ($nendA, $dG_end3) = $ori eq "+"? ($nendA0, $dG_end30): ($nendA0r, $dG_end30r);
 		if(!defined $probe && !defined $NoFilter){## Primer filter
@@ -263,12 +275,34 @@ while (<P>){
 				next;
 			}
 		}
+
+		## Methylation oligos filter
+		my ($CpGs, $nonCpG_Cs);
+		if(defined $Methylation){
+			($CpGs, $nonCpG_Cs)=&CpG_info($oligo_seq_mark);
+			my @cpg=split /,/, $CpGs;
+			my @cs=split /,/, $nonCpG_Cs;
+			if(!defined $NoFilter){
+				if(scalar @cpg < $MinCpG){
+					print F join("\t", $id, $oligo_seq, "CpG",$CpGs),"\n";
+					next;
+				}
+				if(scalar @cs < $MinC){
+					print F join("\t", $id, $oligo_seq, "nonCpG_C",$nonCpG_Cs),"\n";
+					next;
+				}
+			}
+		}
+		
 		push @{$evalue{$id}},($oligo_seq, $len, $Tm, sprintf("%.3f",$GC), sprintf("%.2f",$hairpin_tm), $dimertype, $dimersize,$nendA,$dG_end3, $SNP_info, $poly_info);
+		if(defined $Methylation){
+			push @{$evalue{$id}}, ($CpGs, $nonCpG_Cs);
+		}
 		$is_all_filter=0;
 	}
 	
 	
-	if($is_all_filter==0){
+	if(!defined $NoSpecificity && $is_all_filter==0){
 		my $off = (length $oligo_seq0)-$len_map;
 		$off=$off>0? $off: 0;
 		my $mseq = substr($oligo_seq0, $off);
@@ -290,7 +324,6 @@ while (<P>){
 	}
 	
 }
-close(PN);
 
 exit(0) if(scalar keys %evalue==0);
 foreach my $id(keys %evalue){
@@ -299,12 +332,13 @@ foreach my $id(keys %evalue){
 close(L);
 #&SHSHOW_TIME("Specificity analysis:");
 
-if(defined $detail){
-	open (Detail, ">$outdir/$fkey.evaluation.detail") or die $!;
-}
 my $DB;
 my %bound;
 if(!defined $NoSpecificity){
+	close(PN);
+	if(defined $detail){
+		open (Detail, ">$outdir/$fkey.evaluation.detail") or die $!;
+	}
 	my %db_region;
 	### bwa
 	my %mapping;
@@ -326,11 +360,7 @@ if(!defined $NoSpecificity){
 		if(defined $Precise){
 			$cmd="$BWA mem -D 0 -k 7 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
 		}
-#		if(!defined $NoFilter){
-			&Run_monitor_timeout($max_time, $cmd);
-#		}else{
-#			&Run($cmd); ## time is too long
-#		}
+		&Run_monitor_timeout($max_time, $cmd);
 		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
 		chomp $ret;
 		if($ret eq "Killed"){## time out
@@ -388,7 +418,10 @@ if(!defined $NoSpecificity){
 			}
 			foreach my $id0t(@id0){
 				my $bound_num = 0;
-				my $map_num = scalar @{$mapping{$id0t}{$dname}};
+				my $map_num = 0;
+				if(exists $mapping{$id0t}{$dname}){
+					$map_num = scalar @{$mapping{$id0t}{$dname}};
+				}
 				for (my $i=0; $i<$map_num; $i++){
 					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
 					my ($emis3)=&get_3end1_mismatch($is_reverse, $cigar, $md);
@@ -414,8 +447,6 @@ if(!defined $NoSpecificity){
 						$start=$pos-$extend;
 						$end=$pos+$len_map+$off+$extend;
 					}
-#					my $start = $pos-$extend;
-#					my $end = $pos+$len+$extend;
 					#print join("\t", $pos, $is_reverse, $start, $end),"\n";
 					$start=$start>1? $start: 1;
 					my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
@@ -423,8 +454,8 @@ if(!defined $NoSpecificity){
 					shift @seq_info;
 					my $seq = join("",@seq_info);
 					if($seq!~/[ATCGatcg]+/){ ## seq is NNN...NNN, false mapping, because bwa will convert N to one of ATCG randomly
-						print "Warn: extract aligned region sequence failed\n";
-						print join("\t", $chr, $start, $end, $fdatabase),"\n";
+				#		print "Warn: extract aligned region sequence failed\n";
+				#		print join("\t", $chr, $start, $end, $fdatabase),"\n";
 						next;
 					}
 					$seq=uc($seq);
@@ -493,7 +524,8 @@ if(!defined $NoSpecificity){
 							$strandn=$strand eq "+"? "-": "+";
 						}
 						my ($mvn) = &map_visual_trim($mvisualn, $off); 
-						my $tmn=&tm_estimate($mvn, $pseqn, $tm_coe);
+					#	my $tmn=&tm_estimate($mvn, $pseqn, $tm_coe);
+						my $tmn=`$ntthal -r -s1 $pseqn -s2 $seqn`;
 						next if($tmn<$min_tm_spec);
 						if(defined $detail){
 							print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $mvn),"\n";
@@ -518,22 +550,26 @@ close(F);
 ### output
 open (O, ">$outdir/$fkey.evaluation.out") or die $!;
 if(!defined $nohead){
-	print O "#ID\tSeq\tLen\tTm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tBoundNum\tHighestTm\tHighestInfo\n";
+	print O &evaluation_head($Methylation, $NoSpecificity), "\n";
 }
 
 foreach my $id (sort {$a cmp $b} keys %evalue){
-	## get bounds info of the max tm
-	my $bnum=0;
-	my ($abtms, $abinfos);
-	if(exists $bound{$id}){## when tm too low, not exists
-		($bnum, $abtms, $abinfos)=&get_highest_bound($bound{$id}, 3);
+	print O join("\t",$id, @{$evalue{$id}});
+	if(!defined $NoSpecificity){
+		## get bounds info of the max tm
+		my $bnum=0;
+		my ($abtms, $abinfos);
+		if(exists $bound{$id}){## when tm too low, not exists
+			($bnum, $abtms, $abinfos)=&get_highest_bound($bound{$id}, 3);
+		}
+		my ($btms, $binfos)=("NA", "NA"); ## all bound tm < min_sepc_tm
+		if(defined $abtms){
+			$btms = join(",", @{$abtms});
+			$binfos = join(";", @{$abinfos});
+		}
+		print O "\t", join("\t", $bnum, $btms, $binfos);
 	}
-	my ($btms, $binfos)=("NA", "NA"); ## all bound tm < min_sepc_tm
-	if(defined $abtms){
-		$btms = join(",", @{$abtms});
-		$binfos = join(";", @{$abinfos});
-	}
-	print O join("\t",$id, @{$evalue{$id}}, $bnum, $btms, $binfos), "\n";
+	print O "\n";
 }
 close(O);
 #######################################################################################
@@ -633,6 +669,7 @@ Usage:
   -k  <str>              Key of output file, forced
 
   --Revcom               Also evalue revcom oligos
+  --Methylation          Design methylation oligos
   --Probe                Design probe and will consider mapping region where oligo 3end not matched exactly when caculate specificity
   -olen   <int,int,int>  Evalue other length's oligos, <min,max,scale> of length, optional
   -opttm     <int>       optimal tm of oligo, [$opt_tm]

@@ -54,6 +54,21 @@ sub get_eff_rank{
 
 }
 
+sub CpG_info{
+	my ($mark)=@_;
+	my @unit =split //, $mark;
+	my $d3=0;
+	my (@cpgs, @cs);
+	for(my $i=$#unit; $i>=0; $i--){
+		if($unit[$i] eq "+"){
+			push @cpgs, $d3;
+		}elsif($unit[$i] eq ":"){
+			push @cs, $d3;
+		}
+		$d3++;
+	}
+	return (join(",", @cpgs),join(",", @cs));
+}
 
 sub poly_check{
 	my ($seq)=@_;

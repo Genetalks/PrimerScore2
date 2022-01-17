@@ -15,8 +15,8 @@ my $version="1.0.0";
 # ------------------------------------------------------------------
 # GetOptions
 # ------------------------------------------------------------------
-my ($NoSpecificity, $FiterRepeat, $NoFilter, $Precise);
-my ($ftem,$ftem_snp,$fkey,$outdir);
+my ($Methylation, $NoSpecificity, $FiterRepeat, $NoFilter, $Precise);
+my ($ftem,$ftem_snp,$fmark,$fkey,$outdir);
 my $para_num = 10;
 my $stm = 45;
 my $opt_tm=60;
@@ -32,8 +32,10 @@ GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$ftem,
 				"is:s"=>\$ftem_snp,
+				"im:s"=>\$fmark,
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
+				"Methylation:s"=>\$Methylation,
 				"Probe:s"=>\$probe,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"FilterRepeat:s"=>\$FiterRepeat,
@@ -57,6 +59,11 @@ my $oligotm = "$PATH_PRIMER3/src/oligotm";
 my ($min_len, $max_len, $scale_len)=split /,/, $range_len;
 my %seq;
 
+##check
+if(defined $Methylation && !defined $fmark){
+	die "Wrong: -im mark_file must be given when designing Methylation primers!";
+}
+
 my $n=0;
 my @rregion=split /,/, $regions;
 
@@ -74,6 +81,21 @@ if(defined $ftem_snp){
 		$seq_snp{$id}=$seq;
 	}
 }
+## get mark seq when -Methylation
+my %seq_mark;
+if(defined $Methylation && defined $fmark){
+	open(I, $fmark) or die $!;
+	$/=">";
+	while(<I>){
+		chomp;
+		next if(/^$/);
+		my ($id_info, @line)=split /\n/, $_;
+		my $seq = join("", @line);
+		my ($id)=split /\s+/, $id_info;
+		$seq_mark{$id}=$seq;
+	}
+}
+
 
 my %record;
 ## get oligo seq
@@ -140,14 +162,19 @@ while(<I>){
 					my @match = ($oligo=~/[atcg]/g);
 					next if(scalar @match > length($oligo)*0.4);
 				}
+				my @oseq=($oligo);
+				my $oligo_snp="NA";
 				if(defined $ftem_snp){
-					my ($oligo_snp)=&get_oligo($p, $l, $seq_snp{$id}, $pori);
-					print P $id_new,"\t",$oligo,":", $oligo_snp, "\n";
-					print PT $id_new,"\t",$oligo,":", $oligo_snp, "\n";
-				}else{
-					print P $id_new,"\t",$oligo,"\n";
-					print PT $id_new,"\t",$oligo,"\n";
+					($oligo_snp)=&get_oligo($p, $l, $seq_snp{$id}, $pori);
 				}
+				push @oseq, $oligo_snp;
+				if(defined $Methylation){
+					my ($seq_mark)=&get_oligo($p, $l, $seq_mark{$id}, $pori);
+					push @oseq, $seq_mark;
+				}
+				print P $id_new,"\t", join(",", @oseq), "\n";
+				print PT $id_new,"\t", join(",", @oseq), "\n";
+
 				$seq{$id_new}=$oligo;
 				last; ##  oligos of different length are evalued in oligo_evaluation.pl
 			}
@@ -159,6 +186,9 @@ while(<I>){
 			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
 			if($fr eq "FR"){
 				$cmd .= " --Revcom";
+			}
+			if(defined $Methylation){
+				$cmd .= " --Methylation";
 			}
 			if(defined $probe){
 				$cmd .= " --Probe -opttmp $opt_tm_probe";
@@ -187,11 +217,15 @@ Run("parallel -j $para_num  < $outdir/$fkey.oligo.evalue.sh");
 my @dirs = glob("$outdir/split_*");
 foreach my $dir (@dirs){
 	Run("cat $dir/*.evaluation.out > $dir/evaluation.out");
-	Run("cat $dir/*.bound.info > $dir/bound.info");
+	if(!defined $NoSpecificity){
+		Run("cat $dir/*.bound.info > $dir/bound.info");
+	}
 	Run("cat $dir/*.filter.list > $dir/filter.list");
 }
 Run("cat $outdir/*/evaluation.out >$outdir/$fkey.oligo.evaluation.out");
-Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info");
+if(!defined $NoSpecificity){
+	Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info");
+}
 Run("cat $outdir/*/filter.list >$outdir/$fkey.oligo.filter.list");
 
 
@@ -285,17 +319,18 @@ Usage:
   -d  <files>       Input database files separated by "," to evalue specificity, [$fdatabases]
   -k  	<str>		Key of output file, forced
 
-  --Probe           Design probe
-  --NoFilter        Not filter any oligos
-  --Precise         Evalue specificity precisely, but will consume a long time
-  --FilterRepeat	Filter oligos with repeat region(lowercase in fdatabases) more than 40%
-  --NoSpecificity   not evalue specificity
+  --Methylation         Design methylation oligos
+  --Probe               Design probe
+  --NoFilter            Not filter any oligos
+  --Precise             Evalue specificity precisely, but will consume a long time
+  --FilterRepeat	    Filter oligos with repeat region(lowercase in fdatabases) more than 40%
+  --NoSpecificity       not evalue specificity
 
-  -ptype     <str>       oligo type, "face-to-face", "back-to-back", "Nested", [$ptype]
+  -ptype     <str>      oligo type, "face-to-face", "back-to-back", "Nested", [$ptype]
   -opttm    <int>       optimal tm, [$opt_tm]
   -opttmp   <int>       optimal tm of probe, [$opt_tm_probe]
   -rlen     <str>       oligo len ranges(start,end,scale), start <= end, [$range_len]
-  -regions  <str>     interested regions of candidate oligos walking on template(the min pos on template of oligo), format is "start,end,step,strand,start2,end2,step2,strand2...", strand(F: forward, R: reverse, FR: both forward and reverse), "Len" is total length, (1,Len,1,FR) when not given, optional
+  -regions  <str>       interested regions of candidate oligos walking on template(the min pos on template of oligo), format is "start,end,step,strand,start2,end2,step2,strand2...", strand(F: forward, R: reverse, FR: both forward and reverse), "Len" is total length, (1,Len,1,FR) when not given, optional
   		                Example: 
 			               sanger sequence oligo: 100,150,2,R,400,500,5,R
 			               ARMS PCR oligo: 0,0,1,R,40,140,2,R
