@@ -270,7 +270,9 @@ if($etype eq "MultiPlex" && !defined $NoSpecificity){
 	open(C, ">$outdir/$fkey.final.cross.product") or die $!;
 	foreach my $tid1(keys %product){
 		foreach my $tid2(keys %{$product{$tid1}}){
-			next if($tid1 eq $tid2);
+			my ($tid1_t)=$tid1=~/(\S+)-[UD]-/;
+			my ($tid2_t)=$tid2=~/(\S+)-[UD]-/;
+			next if($tid1_t eq $tid2_t);
 			
 			my ($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid1}{$tid2}, 1000000);
 			print C ">$tid1\_$tid2\t$pnum\n";

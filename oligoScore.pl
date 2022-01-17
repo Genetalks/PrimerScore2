@@ -333,7 +333,7 @@ if($step==4){
 	### primers multiplex check
 	if($plex eq "MultiPlex"){
 		my $range = join(",", $rdiss[-2], $rdiss[-1]);
-		&Run("perl $Bin/primer_evaluation.pl -io $outdir/$fkey.final.result -ib $outdir/$fkey.final.bound.info -k $fkey -tp $type -ep MultiPlex -mp $max_prodn --OutAllProduct --AllEvalue -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd=$range -me $min_eff -od $outdir");
+		&Run("perl $Bin/primer_evaluation.pl -io $outdir/$fkey.final.result -ib $outdir/$fkey.final.bound.info -k $fkey -tp $type -ep MultiPlex -mp $max_prodn --OutAllProduct --AllEvalue -sz $pcr_size -tm $opt_tm -tmb $opt_tm_probe -rd=$range -me $min_eff -od $outdir", $sh);
 		&Run("perl $Bin/cross_dimer_check.pl -i $outdir/$fkey.final.result -k $fkey.final -od $outdir", $sh);
 	}
 
