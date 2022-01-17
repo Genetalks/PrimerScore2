@@ -9,6 +9,7 @@ require "$Bin/common.pm";
 require "$Bin/product.pm";
 require "$Bin/self_lib.pm";
 require "$Bin/path.pm";
+require "$Bin/io.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -28,9 +29,9 @@ my $opt_tm = 60;
 my $opt_tm_probe = 70;
 my $max_prodn=50;
 my $range;
-my $thread = 3;
+my $thread = 10;
 my $etype="SinglePlex";
-my ($AllEvalue, $OutAllProduct);
+my ($AllEvalue, $OutAllProduct, $Methylation, $NoSpecificity);
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -41,6 +42,8 @@ GetOptions(
 				"ep:s"=>\$etype,
 				"AllEvalue:s"=>\$AllEvalue,
 				"OutAllProduct:s"=>\$OutAllProduct,
+				"Methylation:s"=>\$Methylation,
+				"NoSpecificity:s"=>\$NoSpecificity,
 				"rd:s"=>\$range,
 				"tm:s"=>\$opt_tm,
 				"tmb:s"=>\$opt_tm_probe,
@@ -88,7 +91,14 @@ if(!defined $fbound){
 	if($ftype ne "Common"){
 		die "Wrong file type: must be Common(2column: id seq) when not defined -ib!\n";
 	}
-	&Run("perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm $min_tm_spec --NoFilter -k $fkey -maxtime 100000000 -od $outdir");
+	my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm $min_tm_spec --NoFilter -k $fkey -maxtime 100000000 -od $outdir";
+	if(defined $Methylation){
+		$cmd .= " --Methylation";
+	}
+	if(defined $NoSpecificity){
+		$cmd .= " --NoSpecificity";
+	}
+	&Run($cmd);
 	$fevalue = "$outdir/$fkey.evaluation.out";
 	$fbound = "$outdir/$fkey.bound.info";
 }else{
@@ -97,7 +107,8 @@ if(!defined $fbound){
 	}
 }
 
-my %id;
+my %record;
+my $is_probe=0;
 open(I, $foligo) or die $!;
 while(<I>){
 	chomp;
@@ -105,139 +116,157 @@ while(<I>){
 	my @unit=split /\s+/, $_;
 	my $id=$unit[$idx];
 	my ($tid, $type)=$id=~/(\S+)-([12FRP])/;
-	$id{$id}=0;
+	if($type eq "P"){
+		$is_probe=1;
+	}
+	$record{$id}=0;
 }
 close(I);
 
 ### evalue combination oligos
 my %bound;
-my %boundm;
-&SHOW_TIME("#Read in Bound file");
-open(B, $fbound) or die $!;
-while(<B>){
-	chomp;
-	my ($id, $strand, $chr, $pos3, $seq, $tm, $end3_base, $mvisual)=split /\t/, $_;
-	next if(!exists $id{$id});
-	$id{$id}=1;
-	my ($tid, $type)=$id=~/(\S+)-([12FRP])/;
-	if(!defined $tid || !defined $type){
-		die "Wrong oligo ID $id: Primer ID must end by -F/R/1/2, eg. xxx-F, xxx-R, xxx-1, xxx-2; Probe ID must end by -P, eg. xxx-P!\n";
-	}
-	my $len = length $seq;
-	my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
-	push @{$bound{$type}{$tid}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end3_base, $mvisual, $tid];
-}
-close(B);
-foreach my $id(keys %id){
-	if($id{$id}==0){
-		print "Warn: $id not exist bound info and cannot evalue its products!\n";
-	}
-}
-
 my %product;
-my %record;
-my @tps = sort {$a cmp $b} keys %bound;
-&SHOW_TIME("#Evalue");
-foreach my $tp1(@tps){
-	next if($tp1 eq "P"); 
-	## AllEvalue: F<->R F<->F R<->R
-	next if($etype eq "SinglePlex" && !defined $AllEvalue && $tp1 ne $tps[0]); ## only evalue one type 
-	foreach my $tid1 (sort {$a cmp $b} keys %{$bound{$tp1}}){
-		foreach my $tp2(@tps){
-			next if($tp2 eq "P");
-			next if(!defined $AllEvalue && $tp2 eq $tp1); ## Only evalue product between pairs with different types, F<-->R; 1<-->2
-			foreach my $tid2(keys %{$bound{$tp2}}){
-				next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
-				next if(exists $record{"pro"}{$tid2."-".$tp2}{$tid1."-".$tp1});
-				&caculate_product($tid1, $tid1."-".$tp1, $tid2, $tid2."-".$tp2, $bound{$tp1}{$tid1}, $bound{$tp2}{$tid2}, $ptype,\%product, \%record, $PCRsize, $opt_tm, $min_tm_spec, $mind, $maxd, $min_eff, $max_prodn);
-				$record{"pro"}{$tid1."-".$tp1}{$tid2."-".$tp2}=1;
+my %productp;
+if(!defined $NoSpecificity){
+	my %boundm;
+	&SHOW_TIME("#Read in Bound file");
+	open(B, $fbound) or die $!;
+	while(<B>){
+		chomp;
+		my ($id, $strand, $chr, $pos3, $seq, $tm, $end3_base, $mvisual)=split /\t/, $_;
+		next if(!exists $record{$id});
+		$record{$id}=1;
+		my ($tid, $type)=$id=~/(\S+)-([12FRP])/;
+		if(!defined $tid || !defined $type){
+			die "Wrong oligo ID $id: Primer ID must end by -F/R/1/2, eg. xxx-F, xxx-R, xxx-1, xxx-2; Probe ID must end by -P, eg. xxx-P!\n";
+		}
+		my $len = length $seq;
+		my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
+		push @{$bound{$type}{$tid}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end3_base, $mvisual, $tid];
+	}
+	close(B);
+	foreach my $id(keys %record){
+		if($record{$id}==0){
+			print "Warn: $id not exist bound info and cannot evalue its products!\n";
+		}
+	}
+	
+	my %record;
+	my @tps = sort {$a cmp $b} keys %bound;
+	&SHOW_TIME("#Evalue");
+	foreach my $tp1(@tps){
+		next if($tp1 eq "P"); 
+		## AllEvalue: F<->R F<->F R<->R
+		next if($etype eq "SinglePlex" && !defined $AllEvalue && $tp1 ne $tps[0]); ## only evalue one type 
+		foreach my $tid1 (sort {$a cmp $b} keys %{$bound{$tp1}}){
+			foreach my $tp2(@tps){
+				next if($tp2 eq "P");
+				next if(!defined $AllEvalue && $tp2 eq $tp1); ## Only evalue product between pairs with different types, F<-->R; 1<-->2
+				foreach my $tid2(keys %{$bound{$tp2}}){
+					next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
+					next if(exists $record{"pro"}{$tid2."-".$tp2}{$tid1."-".$tp1});
+					&caculate_product($tid1, $tid1."-".$tp1, $tid2, $tid2."-".$tp2, $bound{$tp1}{$tid1}, $bound{$tp2}{$tid2}, $ptype,\%product, \%record, $PCRsize, $opt_tm, $min_tm_spec, $mind, $maxd, $min_eff, $max_prodn);
+					$record{"pro"}{$tid1."-".$tp1}{$tid2."-".$tp2}=1;
+				}
 			}
 		}
 	}
-}
-
-my %productp;
-if(exists $bound{"P"}){#Probe
-	foreach my $tid(keys %{$bound{"P"}}){
-		# probe num on products
-		&probe_bounds_on_products($tid."-P", $bound{"P"}{$tid}, $product{$tid}{$tid}, \%productp, $PCRsize, $opt_tm_probe, $min_tm_spec+8); #my ($id, $abound, $aprod, $aresult)=@_;
+	
+	if($is_probe==1){#Probe
+		foreach my $tid(keys %{$bound{"P"}}){
+			# probe num on products
+			&probe_bounds_on_products($tid."-P", $bound{"P"}{$tid}, $product{$tid}{$tid}, \%productp, $PCRsize, $opt_tm_probe, $min_tm_spec+8); #my ($id, $abound, $aprod, $aresult)=@_;
+		}
 	}
 }
-
-### output
-open(I, $fevalue) or die $!;
-
-if($ftype eq "Common"){
+	
+### output final.result
+if($ftype eq "Common"){ ## score
+	open(I, $fevalue) or die $!;
+	if(defined $OutAllProduct){
+		open(P, ">$outdir/$fkey.final.pair.product") or die $!;
+	}
 	open(O, ">$outdir/$fkey.final.result") or die $!;
-	print O "##ScoreOligo: total score | scores of tm, gc, self-complementary, end3 A num, end3 stability, snp, poly, bounding\n";
-	if(exists $bound{"P"}){
-		print O "##ScoreOligo(Probe) : total score | scores of tm, gc, self-complementary, CG content diff, snp, poly, bounding\n";
+	print O "##ScoreOligo: total score | ". &score_des("Primer", $Methylation)."\n";
+	if($is_probe==1){
+		print O "##ScoreOligo(Probe) : total score | ". &score_des("Probe", $Methylation)."\n";
 	}
-	print O "#ID\tSeq\tLen\tScore\tScoreInfo\tTm\tGC\tHairpin\tDimerType\tDimerSize\tEndANum\tEndStability\tSNP\tPoly\tOligoBound\tBoundNum\tHighestTm\tHighestInfo\n";
-}
-if(defined $OutAllProduct){
-	open(P, ">$outdir/$fkey.final.pair.product") or die $!;
-}
-while(<I>){
-	chomp;
-	next if(/^$/ || /^#/);
-	my (@info)=split /\t/, $_;
-	my $id=$info[$idx];
-	my $sbinfo=pop @info;
-	my $sbeff=pop @info;
-	my $sbnum=pop @info;
-	my $sbd = $sbnum."|".$sbeff;
-	my ($tid,$tp)=$id=~/(\S+)-([12FRP])$/;
-	my ($pnum, $apeff, $apinfos);
-	if($tp ne "P"){
-		($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000);
-	}else{
-		($pnum, $apeff, $apinfos)=&get_highest_bound($productp{$id}, 1000000);
-	}
-	my ($peffs, $pinfos);
-	if($pnum!~/\+/ && $pnum<=3){
-		$peffs = join(",", @{$apeff});
-		$pinfos = join(";", @{$apinfos});
-	}else{
-		$peffs = join(",", @{$apeff}[0..2]);
-		$pinfos = join(";", @{$apinfos}[0..2]);
-	}
-
-	if($ftype eq "Common"){## score for primer
-		my ($len, $tm, $gc, $hairpin, $dimert, $dimers, $nendA, $enddG, $snp, $poly)=@info[2..$#info];
+	print O &final_evalue_head($Methylation, $NoSpecificity)."\n";
+	while(<I>){
+		chomp;
+		next if(/^$/ || /^#/);
+		my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info($idx, $_, $Methylation, $NoSpecificity); #spec: ($bnum,$btm,$binfo)
+		my ($id, $seq, $len) =@{$abase}[$idx..($idx+2)];
+		my ($tid,$tp)=$id=~/(\S+)-([12FRP])$/;
+		
+		## score
 		my ($sadd, $score_info);
 		if($tp ne "P"){
-			($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $nendA, $enddG, $snp, $poly, $sbnum, $sbeff);
-		}else{
-			my ($is_G5, $CGd) = &G_content($info[1]);
-			($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, $tm, $gc, $hairpin, $snp, $poly, $sbnum, $sbeff, $is_G5, $CGd);
-		}
-		print O join("\t", $info[0], $info[1], $info[2], $sadd, $score_info, $tm, $gc, $hairpin, $dimert, $dimers, $nendA, $enddG, $snp, $poly, $sbd, $pnum, $peffs, $pinfos),"\n";
-	}
-	if(defined $OutAllProduct){
-		if($tp!~/[2R]/){
-			if($tp eq "P"){
-				print P ">$id\t$pnum\n";
+			if(defined $Methylation){
+				($sadd, $score_info)=&primer_meth_score($opt_tm, $len, @{$afeature}, @{$ameth}, $bnumtm);
 			}else{
-				print P ">$tid\t$pnum\n";
+				($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, @{$afeature}, $bnumtm);
 			}
-			my @peff=@{$apeff};
-			my @pinfo=@{$apinfos};
-			for(my $i=0; $i<@{$apeff}; $i++){
-				print P join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+		}else{
+			my ($is_G5, $CGd) = &G_content($seq);
+			if(defined $Methylation){
+				($sadd, $score_info)=&probe_meth_score($opt_tm_probe, $len, @{$afeature}, @{$ameth}, $bnumtm, $is_G5, $CGd);
+			}else{
+				($sadd, $score_info)=&probe_oligo_score($opt_tm_probe, $len, @{$afeature}, $bnumtm, $is_G5, $CGd);
 			}
 		}
+		
+		## product
+		my @prods;
+		if(!defined $NoSpecificity){
+			my $sbd = $aspec->[0]."|".$aspec->[1];
+			push @prods, $sbd;
+			my ($pnum, $apeff, $apinfos);
+			if($tp ne "P"){
+				($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000);
+			}else{
+				($pnum, $apeff, $apinfos)=&get_highest_bound($productp{$id}, 1000000);
+			}
+			push @prods, ($pnum, $apeff, $apinfos);
+			my ($peffs, $pinfos);
+			if($pnum!~/\+/ && $pnum<=3){
+				$peffs = join(",", @{$apeff});
+				$pinfos = join(";", @{$apinfos});
+			}else{
+				$peffs = join(",", @{$apeff}[0..2]);
+				$pinfos = join(";", @{$apinfos}[0..2]);
+			}
+
+			if(defined $OutAllProduct){
+				if($tp!~/[2R]/){
+					if($tp eq "P"){
+						print P ">$id\t$pnum\n";
+					}else{
+						print P ">$tid\t$pnum\n";
+					}
+					my @peff=@{$apeff};
+					my @pinfo=@{$apinfos};
+					for(my $i=0; $i<@{$apeff}; $i++){
+						print P join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+					}
+				}
+			}
+
+		}
+	
+		print O join("\t", @{$abase}, $sadd, $score_info, @{$afeature}, @{$ameth},@prods),"\n";
+		
 	}
-}
-close(I);
-if($ftype eq "Common"){
+	close(I);
 	close(O);
-}
-if(defined $OutAllProduct){
-	close(P);
+	if(defined $OutAllProduct){
+		close(P);
+	}
 }
 
-if($etype eq "MultiPlex"){
+
+## output cross product
+if($etype eq "MultiPlex" && !defined $NoSpecificity){
 	open(C, ">$outdir/$fkey.final.cross.product") or die $!;
 	foreach my $tid1(keys %product){
 		foreach my $tid2(keys %{$product{$tid1}}){
@@ -311,8 +340,10 @@ Usage:
   -tp        <str>    primer type, "face-to-face", "back-to-back", "Nested", ["face-to-face"]
   -ep        <str>    evalue type, "SinglePlex", "MultiPlex", ["SinglePlex"]
   -mp        <int>    maximum products number to be caculated, to reduce running time. [$max_prodn]
-  --AllEvalue         All Evalue, not only F<->R, contain F<->F and R<->R.
-  --OutAllProduct    Output All Product Info.
+  --Methylation       Design methylation oligos
+  --NoSpecificity     Not evalue specificity
+  --AllEvalue         Evalue all possible products, not only F<->R, contain F<->F and R<->R.
+  --OutAllProduct     Output All Product Info.
   -td        <int>    thread in bwa, [$thread]
   -od        <dir>	  Dir of output file, default ./
 
