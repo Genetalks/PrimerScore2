@@ -15,12 +15,14 @@ my $version="1.0.0";
 # GetOptions
 # ------------------------------------------------------------------
 my ($fIn,$fsnp, $fkey,$outdir);
-my ($Unmeth, $RevOwn);
+my ($Unmeth, $RevOwn, $suffix);
 GetOptions(
 				"help|?" =>\&USAGE,
 				"i:s"=>\$fIn,
 				"isnp:s"=>\$fsnp,
 				"k:s"=>\$fkey,
+				"sx:s"=>\$suffix,
+				
 				"RevOwn:s"=>\$RevOwn,
 				"Unmeth:s"=>\$Unmeth,
 				"od:s"=>\$outdir,
@@ -51,7 +53,10 @@ while(<I>){
 	my $seq=join("", @line);
 	$seq=uc($seq);
 	my ($aseqct, $amarkct, $aseqga, $amarkga)=&bisulfite_modify($seq, length $line[0], $Unmeth);
-
+	
+	if(defined $suffix){
+		$id.="_".$suffix;
+	}
 	print O ">$id\n";
 	print O join("\n", @{$aseqct}), "\n";
 	print M ">$id\n";
@@ -188,6 +193,8 @@ Usage:
   -i  <file>   Input fasta file, forced
   -is <file>   Input fasta added snp file, optional
   -k  <str>	   Key of output file, forced
+  -sx <str>    suffix of sequence ID, optional
+
   --Unmeth     Un-methylation
   --RevOwn     Reverse file(G->A convert) output to another file
   -od <dir>	   Dir of output file, default ./
