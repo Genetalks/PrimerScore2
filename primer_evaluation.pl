@@ -60,11 +60,11 @@ $outdir||="./";
 $outdir=AbsolutePath("dir",$outdir);
 
 if($ptype eq "face-to-face"){
-	$range=defined $range? $range:"70,200";
+	$range=defined $range? $range:"80,200";
 }elsif($ptype eq "Nested"){
-	$range=defined $range? $range:"5,30";
+	$range=defined $range? $range:"-30,-5";
 }elsif($ptype eq "back-to-back"){
-	$range=defined $range? $range:"0,15";
+	$range=defined $range? $range:"-15,0";
 }else{
 	die "Wrong primer type! Must be face-to-face, back-to-back or Nested!\n";
 }
@@ -98,7 +98,7 @@ if(!defined $fbound){
 	if(defined $NoSpecificity){
 		$cmd .= " --NoSpecificity";
 	}
-	&Run($cmd);
+#	&Run($cmd);
 	$fevalue = "$outdir/$fkey.evaluation.out";
 	$fbound = "$outdir/$fkey.bound.info";
 }else{
@@ -227,7 +227,6 @@ if($ftype eq "Common"){ ## score
 			}else{
 				($pnum, $apeff, $apinfos)=&get_highest_bound($productp{$id}, 1000000);
 			}
-			push @prods, ($pnum, $apeff, $apinfos);
 			my ($peffs, $pinfos);
 			if($pnum!~/\+/ && $pnum<=3){
 				$peffs = join(",", @{$apeff});
@@ -236,6 +235,7 @@ if($ftype eq "Common"){ ## score
 				$peffs = join(",", @{$apeff}[0..2]);
 				$pinfos = join(";", @{$apinfos}[0..2]);
 			}
+			push @prods, ($pnum, $peffs, $pinfos);
 
 			if(defined $OutAllProduct){
 				if($tp!~/[2R]/){
@@ -353,9 +353,9 @@ Usage:
   -tmb       <int>    optimal tm of probe, [$opt_tm_probe]
   -rd      <int,int>  distance range between primer pair, optional
                       default:
-                      when -tp is "face-to-face", [70,200]
-                                  "back-to-back", [0,15]
-                                  "Nested",       [5,30]
+                      when -tp is "face-to-face", [80,200]
+                                  "back-to-back", [-15,0]
+                                  "Nested",       [-30,-5]
   -stm      <int>     min tm to amplify when caculate specifity, [$min_tm_spec]
   -me       <float>   min efficiency to consider a product, [$min_eff]
 
