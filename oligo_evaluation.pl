@@ -514,17 +514,17 @@ if(!defined $NoSpecificity){
 						next if(!exists $evalue{$idn});
 						my $end3_basen=substr($pseqn, length($pseqn)-1, 1);
 						my $posn = $pos3;
-						my $seqn=$seq;
+						my $seqn=$seqrv;
 						my $strandn=$strand;
 						my $mvisualn=$mvisual;
 						if($ori eq "-"){
 							$mvisualn=reverse($mvisual);
-							$seqn=&revcom($seq);
+							$seqn=&revcom($seqrv);
 							$posn = $pos5;
 							$strandn=$strand eq "+"? "-": "+";
 						}
 						my ($mvn) = &map_visual_trim($mvisualn, $off); 
-					#	my $tmn=&tm_estimate($mvn, $pseqn, $tm_coe);
+#						my $tmn=&tm_estimate($mvn, $pseqn, $tm_coe);
 						my $tmn=`$ntthal -r -s1 $pseqn -s2 $seqn`;
 						chomp $tmn;
 						next if($tmn<$min_tm_spec);
@@ -561,7 +561,7 @@ foreach my $id (sort {$a cmp $b} keys %evalue){
 		my $bnum=0;
 		my ($abtms, $abinfos);
 		if(exists $bound{$id}){## when tm too low, not exists
-			($bnum, $abtms, $abinfos)=&get_highest_bound($bound{$id}, 3);
+			($bnum, $abtms, $abinfos)=&get_highest_bound($bound{$id}, 3, "Tm");
 		}
 		my ($btms, $binfos)=("NA", "NA"); ## all bound tm < min_sepc_tm
 		if(defined $abtms){

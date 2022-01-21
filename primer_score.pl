@@ -439,7 +439,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			$output{$p2_new}=$p2;
 			my @prod_info=();
 			if(!defined $NoSpecificity){
-				my ($pdnum, $apdeffs, $apdinfos)=&get_highest_bound($aprod, 3);
+				my ($pdnum, $apdeffs, $apdinfos)=&get_highest_bound($aprod, 3, "Eff");
 				my $pdeffs=join(",", @{$apdeffs});
 				my $pdinfos=join(";", @{$apdinfos});
 				@prod_info=($pdnum, $pdeffs, $pdinfos);
@@ -462,7 +462,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my ($spdr, $apdr)=@{$probe_final{$pair}};
 				my @pdprod_info=();
 				if(!defined $NoSpecificity){
-					my ($pdpnum, $apdpeffs, $apdpinfos)=&get_highest_bound($apdr, 3);
+					my ($pdpnum, $apdpeffs, $apdpinfos)=&get_highest_bound($apdr, 3, "Eff");
 					my $pdpeffs=join(",", @{$apdpeffs});
 					my $pdpinfos=join(";", @{$apdpinfos});
 					@pdprod_info=($pdpnum, $pdpeffs, $pdpinfos);

@@ -487,8 +487,9 @@ sub caculate_rregion{
 		}
 	}else{
 		if($ctype eq "Single"){## usually is generic:Region
+			$pnum*=2; ## 2 primers of face-to-face:region are designed in one region
 			$min = 1;
-			$max = $min+$step0*$pnum*2; ## some FR primers are limited by distance
+			$max = $min+$step0*$pnum; ## some FR primers are limited by distance
 			my $max0=int($bmind*1.5+0.5);
 			if($max<$max0){
 				$max=$max0;

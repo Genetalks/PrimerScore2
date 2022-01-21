@@ -207,7 +207,7 @@ sub get_3end_mismatch{
 }
 
 sub get_highest_bound{
-	my ($abound, $maxn)=@_;
+	my ($abound, $maxn, $type)=@_;
 	my %bound=%{$abound};
 	my $is_max=0;
 	if(exists $bound{"Max"}){
@@ -221,7 +221,11 @@ sub get_highest_bound{
 	my @binfos;
 	foreach $binfo(@binfo){
 		push @binfos, $binfo;
-		push @bvalue, sprintf("%.5f",$bound{$binfo});
+		if($type eq "Eff"){
+			push @bvalue, sprintf("%.5f", $bound{$binfo});
+		}else{
+			push @bvalue, sprintf("%.2f", $bound{$binfo});
+		}
 		$n++;
 		last if($n==$maxn);
 	}

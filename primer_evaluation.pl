@@ -223,9 +223,9 @@ if($ftype eq "Common"){ ## score
 			push @prods, $sbd;
 			my ($pnum, $apeff, $apinfos);
 			if($tp ne "P"){
-				($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000);
+				($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000, "Eff");
 			}else{
-				($pnum, $apeff, $apinfos)=&get_highest_bound($productp{$id}, 1000000);
+				($pnum, $apeff, $apinfos)=&get_highest_bound($productp{$id}, 1000000, "Eff");
 			}
 			my ($peffs, $pinfos);
 			if($pnum!~/\+/ && $pnum<=3){
@@ -274,7 +274,7 @@ if($etype eq "MultiPlex" && !defined $NoSpecificity){
 			my ($tid2_t)=$tid2=~/(\S+)-[UD]-/;
 			next if($tid1_t eq $tid2_t);
 			
-			my ($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid1}{$tid2}, 1000000);
+			my ($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid1}{$tid2}, 1000000, "Eff");
 			print C ">$tid1\_$tid2\t$pnum\n";
 			my @peff=@{$apeff};
 			my @pinfo=@{$apinfos};
