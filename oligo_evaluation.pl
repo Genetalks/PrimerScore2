@@ -526,6 +526,7 @@ if(!defined $NoSpecificity){
 						my ($mvn) = &map_visual_trim($mvisualn, $off); 
 					#	my $tmn=&tm_estimate($mvn, $pseqn, $tm_coe);
 						my $tmn=`$ntthal -r -s1 $pseqn -s2 $seqn`;
+						chomp $tmn;
 						next if($tmn<$min_tm_spec);
 						if(defined $detail){
 							print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $mvn),"\n";
