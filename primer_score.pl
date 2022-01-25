@@ -412,7 +412,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		}
 	
 		##output
-		my @mk=("A","B","C","D","E","F","G");
+		my @mk=("A","B","C","D","E","F","G","H","I","J","K","L","M","N");
 		my $n=0;
 		foreach my $pair (@final){
 			my ($size, $aprod)=@{$pair_info{$pair}};
@@ -428,7 +428,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my $UD=$strand eq "+"? "U":"D";
 				$pname=$target."-".$UD."-".$mk[$n];
 				if(defined $fprobe){
-					$pname=$target."-"."B".($pbnum+1);
+					$pname=$target."-"."P"."-".$mk[$pbnum];
 				}
 			}else{
 				$pname=$target."-".($n+1);
@@ -455,7 +455,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			}
 			if(defined $fprobe){#probe
 				my $pb=$condv[$i][4];
-				my $pb_new = $target."-"."B".($pbnum+1)."-P";
+				my $pb_new = $target."-"."P"."-".$mk[$pbnum]."-P";
 				$output{$pb_new}=$pb;
 				my ($pbs, $pbsi)=@{$probe{$tid}{$pb}};
 				my ($chrp, $pos3p, $pos5p, $strandp, $disp, $seqp, $lenp, @infop)=@{$oligo_info{$pb}};
