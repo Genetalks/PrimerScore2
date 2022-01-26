@@ -454,7 +454,7 @@ sub caculate_rregion{
 	my $alen = int(($minl+$maxl)/2);
 	my ($min, $max);
 	my $step0 = int(($bmaxd-$bmind)/$choose_num+0.5); ## max step for distance range $dis_range
-	if(defined $pos_range){
+	if($ftype eq "SNP"){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
 		my $step=int(($maxp-$minp)/$pnum+0.5);
 		$step=$step>=1? $step: 1;
