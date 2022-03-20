@@ -1,0 +1,11 @@
+#define __TBB_VERSION_STRINGS(N) \
+#N": BUILD_HOST		eb803cede822 (x86_64)" ENDL \
+#N": BUILD_OS		Ubuntu 16.04.7 LTS" ENDL \
+#N": BUILD_KERNEL	Linux 5.11.0-40-generic #44~20.04.2-Ubuntu SMP Tue Oct 26 18:07:44 UTC 2021" ENDL \
+#N": BUILD_GCC		g++ (Ubuntu 9.4.0-1ubuntu1~16.04) 9.4.0" ENDL \
+#N": BUILD_LIBC	2.23" ENDL \
+#N": BUILD_LD		" ENDL \
+#N": BUILD_TARGET	intel64 on cc5.4.0_libc2.23_kernel5.11.0" ENDL \
+#N": BUILD_COMMAND	g++ -O2 -g -DUSE_PTHREAD -pthread -m64 -mrtm -fPIC -D__TBB_BUILD=1 -Wall -Wextra -Wno-parentheses -Wno-sized-deallocation -fPIC -std=c++11 -DTBB_TOTAL -DTBB_SUPPRESS_DEPRECATED_MESSAGES=1 -I/stitch/vendor/oneTBB/src -I/stitch/vendor/oneTBB/src/rml/include -I/stitch/vendor/oneTBB/include -I." ENDL \
+
+#define __TBB_DATETIME "Thu Nov 25 01:28:58 UTC 2021"

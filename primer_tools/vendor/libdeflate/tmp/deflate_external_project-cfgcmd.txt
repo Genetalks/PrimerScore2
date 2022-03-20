@@ -1,0 +1,1 @@
+cmd='COMMAND;make;clean;&&;make;-j;CFLAGS=-fPIC;libdeflate.a'

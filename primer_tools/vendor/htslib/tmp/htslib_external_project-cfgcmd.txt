@@ -1,0 +1,1 @@
+cmd='autoheader;COMMAND;autoconf;COMMAND;/stitch/vendor/htslib/configure;CFLAGS=-I/stitch/vendor/libdeflate -O2 -g;--disable-bz2;--disable-lzma;--with-libdeflate;--disable-gcs;--disable-s3;--disable-libcurl;--disable-plugins;LDFLAGS=-L/stitch/vendor/libdeflate;--prefix=/stitch/vendor/htslib'
