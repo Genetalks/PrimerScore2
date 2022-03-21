@@ -16,12 +16,13 @@ namespace pt {
 
 class primer {
 public:
-    primer(const std::string &id, const std::string &tid, int32_t start, int32_t end, bool is_rev):
+    primer(const std::string &id, const std::string &tid, int32_t start, int32_t end, bool is_rev, const std::string &seq):
         id(id),
         tid(tid),
         start(start),
         end(end),
-        is_rev_strand(is_rev)
+        is_rev_strand(is_rev),
+		seq(seq)
     {
     }
 
@@ -30,6 +31,12 @@ public:
     }
     const std::string &get_tid() const {
         return this->tid;
+    }
+    const std::string &get_seq() const {
+        return this->seq;
+    }
+    int32_t get_len() const {
+        return this->seq.size();
     }
     int32_t get_start() const {
         return this->start;
@@ -51,6 +58,7 @@ private:
     int32_t start;  // start pos of primer on template
     int32_t end;    // end pos of primer on template 
     bool is_rev_strand;  // is negative strand
+    std::string seq; // primer sequence
 };
 
 typedef std::shared_ptr<primer> primer_ptr;
@@ -60,6 +68,7 @@ struct primer_interval_t {
     int32_t pe;
     int64_t rs;
     int64_t re;
+	char strand;
     std::string chr;
     std::string pseq;
     std::string rseq;
@@ -70,6 +79,7 @@ struct primer_interval_t {
 
         oss << this->ps << "\t"
             << this->pe << "\t"
+            << this->strand << "\t"
             << this->chr << "\t"
             << this->rs << "\t"
             << this->re << "\t"
@@ -166,32 +176,44 @@ public:
 
     // calcaute one hits
     void calculate_primer_interval(const primer_ptr &p, const alignment_info_ptr &template_alignment_info, primer_interval_t &primer_hits_interval){
-        int32_t ps = p->get_start();
-        int32_t pe = p->get_end();
-        int32_t ts = template_alignment_info->get_template_start();
+        int32_t ps = p->get_start()+1; //1-based
+        int32_t pe = p->get_end()+1;
+        int32_t plen = p->get_len();
+		bool is_prev = p->is_rev();
+        std::string seqp = p->get_seq();
+		int32_t ts = template_alignment_info->get_template_start();
         int32_t te = template_alignment_info->get_template_end();
         int64_t rs = template_alignment_info->get_ref_start();
         int64_t re = template_alignment_info->get_ref_end();
         primer_hits_interval.chr = template_alignment_info->get_chromosome();
 		bool is_rev = template_alignment_info->is_rev_strand();
-
+		std::cout<<">>"<<p->get_id()<<"\t"<<seqp<<"\t"<<ps<<"\t"<<pe<<"\t"<<plen<<"\t"<<is_prev<<"\t";
+		
         // overlap section
-        int32_t s = std::max(ps, ts);
-        int32_t e = std::min(pe, te);
-        primer_hits_interval.ps = s-ps+1;
-        primer_hits_interval.pe = e-ps+1;
-        s -= ts; // relative offset on aligned section, 0-based
-        e -= ts;
-
+        int32_t s = std::max(ps, ts); // start pos of alignment on template
+        int32_t e = std::min(pe, te); // end pos of alignment on template
+        int32_t asp = s-ps+1; // start pos of alignment on primer, 1-based
+        int32_t aep = e-ps+1; // end pos of alignment on primer, 1-based
+		primer_hits_interval.ps = asp;
+        primer_hits_interval.pe = aep;
+		primer_hits_interval.strand = is_rev==is_prev? '+': '-';
+        s -= ts; // start pos of primer on aligned template region, 0-based
+        e -= ts; // end pos of primer on aligned template region, 0-based
+		std::cout<<asp<<"\t"<<aep<<"\t"<<s<<"\t"<<e<<std::endl;
+		std::cout<<ts<<"\t"<<te<<"\t"<<rs<<"\t"<<re<<"\t"<<is_rev<<"\t"<<std::endl;
+		
         assert(e >= s);
-
+		
         // s and e offset on aligned query string
+		// t: pos on template; r: pos on ref
         int32_t as = 0, ae = 0, t = 0, r = 0;
-
-        auto &astring = template_alignment_info->get_aligned_str();
+		
+		// aligned template info
+        auto &astring = template_alignment_info->get_aligned_str(); 
         auto &ars = template_alignment_info->get_aligned_ref_seq();
         auto &ats = template_alignment_info->get_aligned_seq();
-        for (size_t i = 0; i < astring.size(); ++i){
+        std::cout<<ats<<"\n"<<astring<<"\n"<<ars<<std::endl<<std::endl;
+		for (size_t i = 0; i < astring.size(); ++i){
             if (astring[i] != ' '){ // MATCH and mismatch
                 ++t;
                 ++r;
@@ -219,11 +241,19 @@ public:
 				}
 			}
         }
-		primer_hits_interval.pseq = std::move(ats.substr(as, ae - as + 1));
-        primer_hits_interval.rseq = std::move(ars.substr(as, ae - as + 1));
-        primer_hits_interval.astr = std::move(astring.substr(as, ae - as + 1));
-       //std::cout <<  primer_hits_interval.pseq<<"\t"<<as<<","<<ae<<";"<<primer_hits_interval.rs<<","<<primer_hits_interval.re<<":\t"<< ps << "\t" << pe << "\t" << ts << "\t" << te <<"\t" << rs <<"\t" << s << "\t" << e << std::endl; 
-    }
+		
+		std::string prefixp = seqp.substr(0,asp-1);
+		std::string prefixr (asp-1, 'N'); 
+		std::string prefixa (asp-1, '#'); 
+		std::string sufixp = seqp.substr(aep);
+		std::string sufixr ((plen-aep), 'N'); 
+		std::string sufixa ((plen-aep), '#'); 
+		primer_hits_interval.pseq = prefixp+ats.substr(as, ae - as + 1)+sufixp;
+        primer_hits_interval.rseq = prefixr+ars.substr(as, ae - as + 1)+sufixr;
+        primer_hits_interval.astr = prefixa+astring.substr(as, ae - as + 1)+sufixa;
+		std::cout<<prefixp<<","<<sufixp<<";"<<prefixr<<","<<sufixr<<std::endl;
+		std::cout<<primer_hits_interval.pseq<<"\n"<<primer_hits_interval.astr<<"\n"<<primer_hits_interval.rseq<<std::endl;
+	}
 
     void calculate_primer_intervals(){
         this->primers_intervals.resize(this->primers.size());
