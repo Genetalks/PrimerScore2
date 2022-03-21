@@ -1,3 +1,41 @@
+
+sub get_position_info{
+	my ($id, $atpos)=@_;
+	my ($tid, $tori, $startt, $endt, $pori, $off)=$id=~/^(\S+)-([FR])-(\d+)_(\d+)_([FR])_(\d+)$/; ## primer pos
+	if(!defined $tid){
+		die "Wrong oligo ID: $id\n";
+	}
+	my $strandp = $tori ne $pori? "-": "+";
+	my ($pos3t, $pos5t); # pos3/5 on tid
+	my $plen = $endt-$startt+1-$off;
+	if($strandp eq "+"){
+		$pos3t = $endt;
+		$pos5t = $pos3t-$plen+1;
+	}else{
+		$pos3t = $startt;
+		$pos5t = $pos3t+$plen-1;
+	}
+	if(!defined $atpos){
+		return ($tid, $pos3t, $pos5t, $strandp);
+	}else{
+		my ($tidt, $start, $end, $strandt)=@{$atpos->{$tid}}; ## templet pos
+		my $dis = $pos3t; #dis to target
+		my ($pos3, $pos5, $strand);
+		if($strandt eq "+"){
+			$pos3=$start+$pos3t;
+			$pos5=$start+$pos5t;
+			$strand = $strandp;
+		}else{
+			$pos3=$end-$pos3t;
+			$pos5=$end-$pos5t;
+			$strand = $strandp eq "+"? "-": "+";
+		}
+		return ($tid, $dis, $tidt, $pos3, $pos5, $strand);
+	}
+}
+
+
+
 #my @rank_end=(3,   5,   8); #  PCR efficiency when dis of mismatch pos to 3end <= @rank_end
 #my @eff_end =(0.1, 0.4, 0.8 );
 #my $max_end3_eff = $rank_end[-1];
@@ -338,6 +376,8 @@ sub map_visual_from_sw{
 
 	my ($pos3, $pos5);
 	my $mvisual=substr($align, $tleft, $maplen);
+	my $seq=substr($line[0], $tleft, $maplen);
+	my $dseq=substr($line[2], $tleft, $maplen);
 	if($is_reverse){
 		$pos5=$end-$tleft;
 		$pos3=$start+$tright;
@@ -346,7 +386,7 @@ sub map_visual_from_sw{
 		$pos3=$end-$tright;
 	}
 	
-	return ($mvisual, $pos3, $pos5);
+	return ($mvisual, $pos3, $pos5, $seq, $dseq);
 
 }
 

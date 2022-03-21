@@ -1,7 +1,7 @@
 $BLAT = "$Bin/third-party/blat";
 $SAMTOOLS = "$Bin/third-party/samtools";
 $BWA = "$Bin/third-party/bwa";
-$PATH_PRIMER3 = "$Bin/third-party/primer3-2.5.0/";
+$PATH_PRIMER3 = "$Bin/third-party/primer3/";
 $REF_GRCh37 = "$Bin/database/GRCh37.fasta";
 $REF_GRCh37_SNP = "$Bin/database/GRCh37_add_snp_b151.fasta";
 $REF_GRCh38 = "$Bin/database/GRCh38.fasta";

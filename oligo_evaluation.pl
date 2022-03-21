@@ -43,6 +43,7 @@ my $max_time;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"p:s"=>\$foligo,
+				"t:s"=>\$ftemplate,
 				"d:s"=>\$fdatabases,
 				"k:s"=>\$fkey,
 				"Revcom:s"=>\$revcom,
@@ -330,6 +331,7 @@ foreach my $id(keys %evalue){
 	print L "Final: $id\n";
 }
 close(L);
+
 #&SHSHOW_TIME("Specificity analysis:");
 
 my $DB;
@@ -340,6 +342,13 @@ if(!defined $NoSpecificity){
 		open (Detail, ">$outdir/$fkey.evaluation.detail") or die $!;
 	}
 	my %db_region;
+	### blast
+	if(!defined $ftemplate){
+		$ftemplate = $foligo;
+	}
+
+
+
 	### bwa
 	my %mapping;
 	my $fa_oligo = "$outdir/$fkey.oligo.fa";

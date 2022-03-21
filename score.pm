@@ -28,8 +28,8 @@ sub probe_meth_score{
 		$sbound = &bound_score($bnum, $btm, $fulls, "Probe_Tm");
 	}
 	
-	my @score = ($stm, $sgc, $sself, $sCGd, $sG5, $ssnp, $spoly, $scpg, $scs, $sbound);
-	my @weight =( 1.5,   1,     1,      1,    1,    0.8,    0.2,   1.5,  1.5,  0.5);
+	my @score = ($stm, $sgc, $sself, $sCGd, $sG5, $ssnp, $spoly, $sbound, $scpg, $scs);
+	my @weight =( 1.5,   1,     1,      1,    1,    0.8,    0.2,   0.5,  1.5,  1.5);
 	my $sadd=0;
 	for(my $i=0; $i<@score; $i++){
 #		$score[$i]=$score[$i]<0? 0: $score[$i];
@@ -115,8 +115,8 @@ sub primer_meth_score{
 		my ($bnum, $btm)=split /\|/, $bnumtm;
 		$sbound=&bound_score($bnum, $btm, $fulls, "Primer_Tm");
 	}
-	my @score = ($stm, $sgc, $sself, $snendA, $senddG, $ssnp, $spoly, $scpgs, $scs, $sbound);
-	my @weight =(1,    1.5,    1,    0.5,      1,       1,     0.5,   1.5,    1.5,   0.5);
+	my @score = ($stm, $sgc, $sself, $snendA, $senddG, $ssnp, $spoly, $sbound,$scpgs, $scs);
+	my @weight =(1,    1.5,    1,    0.5,      1,       1,     0.5,   0.5,    1.5,   1.5);
 	my $sadd=0;
 	for(my $i=0; $i<@score; $i++){
 #		$score[$i]=$score[$i]<0? 0: $score[$i];

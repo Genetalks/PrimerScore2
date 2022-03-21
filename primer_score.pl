@@ -140,7 +140,7 @@ while(<P>){
 	my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info(0, $_, $Methylation, $NoSpecificity);
 	my ($id, $seq, $len)=@{$abase};
 	my $tm = $afeature->[0];
-	my ($tid, $dis, $chr, $pos3, $pos5, $strand)=&get_position_info($id, $len, \%tempos);
+	my ($tid, $dis, $chr, $pos3, $pos5, $strand)=&get_position_info($id, \%tempos);
 	@{$oligo_info{$id}}=($chr, $pos3, $pos5, $strand, $dis, $seq, $len, @{$afeature}, @{$ameth});
 	if(defined $bnumtm){
 		push @{$oligo_info{$id}}, $bnumtm;
@@ -568,36 +568,6 @@ sub get_candidate{
 
 	}
 	return @final;
-}
-
-sub get_position_info{
-	my ($id, $plen, $atpos)=@_;
-	my ($tid, $tori, $startt, $endt, $pori, $off)=$id=~/^(\S+)-([FR])-(\d+)_(\d+)_([FR])_(\d+)$/; ## primer pos
-	if(!defined $tid){
-		die "Wrong oligo ID: $id\n";
-	}
-	my $strandp = $tori ne $pori? "-": "+";
-	my ($tidt, $start, $end, $strandt)=@{$atpos->{$tid}}; ## templet pos
-	my ($pos3t, $pos5t); # pos3/5 on tid
-	if($strandp eq "+"){
-		$pos3t = $endt;
-		$pos5t = $pos3t-$plen+1;
-	}else{
-		$pos3t = $startt;
-		$pos5t = $pos3t+$plen-1;
-	}
-	my $dis = $pos3t; #dis to target
-	my ($pos3, $pos5, $strand);
-	if($strandt eq "+"){
-		$pos3=$start+$pos3t;
-		$pos5=$start+$pos5t;
-		$strand = $strandp;
-	}else{
-		$pos3=$end-$pos3t;
-		$pos5=$end-$pos5t;
-		$strand = $strandp eq "+"? "-": "+";
-	}
-	return ($tid, $dis, $tidt, $pos3, $pos5, $strand);
 }
 
 
