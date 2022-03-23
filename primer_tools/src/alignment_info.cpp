@@ -13,25 +13,25 @@ pt::alignment_info::alignment_info(const bam1_t *b, int32_t template_len):
     this->initialize_from_bam_record(b, template_len);
 }
 
-std::string pt::alignment_info::to_string(){
-    std::ostringstream oss;
-
-    oss << "[" << this->qs << ","
-        << this->qe << "]|"
-        << this->chr << ":"
-        << this->rs << "-"
-        << this->re << "|"
-        << (this->is_rev ? "-" : "+") << "|";
-    for (auto &c : cigar){
-        oss << bam_cigar_oplen(c) << bam_cigar_opchr(c);
-    }
-    oss << "\n" << this->aligned_ref_seq;
-    oss << "\n" << this->aligned_str;
-    oss << "\n" << this->aligned_seq; 
-
-    return oss.str();
-}
-
+//std::string pt::alignment_info::to_string(){
+//    std::ostringstream oss;
+//
+//    oss << "[" << this->qs << ","
+//        << this->qe << "]|"
+//        << this->chr << ":"
+//        << this->rs << "-"
+//        << this->re << "|"
+//        << (this->is_rev ? "-" : "+") << "|";
+//    for (auto &c : cigar){
+//        oss << bam_cigar_oplen(c) << bam_cigar_opchr(c);
+//    }
+//    oss << "\n" << this->aligned_ref_seq;
+//    oss << "\n" << this->aligned_str;
+//    oss << "\n" << this->aligned_seq; 
+//
+//    return oss.str();
+//}
+//
 
 void pt::alignment_info::initialize_from_bam_record(const bam1_t *b, int32_t template_len){
 
@@ -119,7 +119,7 @@ void pt::alignment_info::calculate_aligned_blocks(const std::string &template_se
                 assert(tlen + op_len <= template_seq.size());
                 this->aligned_ref_seq.append(op_len, '-');
                 this->aligned_seq.append(template_seq.substr(tlen, op_len));
-                this->aligned_str.append(op_len, ' ');
+                this->aligned_str.append(op_len, '^');
                 tlen += op_len;
                 break;
             }
@@ -128,7 +128,7 @@ void pt::alignment_info::calculate_aligned_blocks(const std::string &template_se
                 assert(rlen + op_len <= this->seq.size());
                 this->aligned_ref_seq.append(this->seq.substr(rlen, op_len));
                 this->aligned_seq.append(op_len, '-');
-                this->aligned_str.append(op_len, ' ');
+                this->aligned_str.append(op_len, '-');
                 rlen += op_len;
                 break;
             }

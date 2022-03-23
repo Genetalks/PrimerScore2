@@ -48,6 +48,36 @@ static void pt_cmdline(CLI::App &app, int32_t argc, char *argv[], pt::options &o
     );
 
     app.add_option(
+	"-mv,--monovalent_conc",
+	opt.mv, 
+	"concentration of monovalent cations in mM. Default [50]"
+    );
+
+    app.add_option(
+	"-dv,--divalent_conc", 
+	opt.dv,
+	"concentration of divalent cations in mM. Default [1.5]"
+    );
+
+    app.add_option(
+	"-n,--dNTP_conc", 
+	opt.dntp,
+	"concentration of deoxynycleotide triphosphate in mM. Default [0.6]"
+    );
+
+    app.add_option(
+	"-d,--dna_conc", 
+	opt.dna,
+	"concentration of DNA strands in nM. Default [50]"
+    );
+
+    app.add_option(
+	"-t,--temp", 
+	opt.temp,
+	"temperature at which duplex is calculated. Default [37]"
+    );
+
+    app.add_option(
 	"-t,--threads", 
 	opt.nthreads, 
 	"The number of threads."
@@ -193,14 +223,18 @@ pt::primer_template_ptr query_filter::operator()(pt::primer_template_ptr primer_
 
 
 struct cal_primer_interval_filter {
+    const pt::options *opt;
+	cal_primer_interval_filter(const pt::options *opt);
     pt::primer_template_ptr operator()(pt::primer_template_ptr primer_template) const;
 };
+
+cal_primer_interval_filter::cal_primer_interval_filter(const pt::options *opt):opt(opt) {}
 
 pt::primer_template_ptr cal_primer_interval_filter::operator()(pt::primer_template_ptr primer_template) const {
     if (nullptr == primer_template){
         return nullptr;
     }
-    primer_template->calculate_primer_intervals();
+    primer_template->calculate_primer_intervals(this->opt->mv, this->opt->dv, this->opt->dntp, this->opt->dna, this->opt->temp);
     return primer_template;
 }
 
@@ -268,7 +302,7 @@ int main(int argc, char *argv[]){
     tbb::filter_t<pt::primer_template_ptr, pt::primer_template_ptr> make_alignment_info(tbb::filter::parallel, build_alignment_info_filter(header.get()));
     tbb::filter_t<pt::primer_template_ptr, pt::primer_template_ptr> make_db(tbb::filter::parallel, index_filter(&opt));
     tbb::filter_t<pt::primer_template_ptr, pt::primer_template_ptr> query_primers(tbb::filter::parallel, query_filter(&opt));
-    tbb::filter_t<pt::primer_template_ptr, pt::primer_template_ptr> get_primer_intervals(tbb::filter::parallel, cal_primer_interval_filter());
+    tbb::filter_t<pt::primer_template_ptr, pt::primer_template_ptr> get_primer_intervals(tbb::filter::parallel, cal_primer_interval_filter(&opt));
     tbb::filter_t<pt::primer_template_ptr, void> output(tbb::filter::serial_out_of_order, output_filter(&opt, &ofs));
     tbb::filter_t<void, void> pipeline = emit_template & read_bam & make_alignment_info & make_db & query_primers & get_primer_intervals & output;
 

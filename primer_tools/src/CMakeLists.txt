@@ -24,6 +24,7 @@ file(GENERATE OUTPUT ${VERSION_FILE}
 
 file(GLOB pt_src
     "*.cpp"
+	"*.c"
 )
 set(PROG ptools)
 add_executable(${PROG} ${pt_src})

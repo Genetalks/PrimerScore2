@@ -16,6 +16,11 @@ struct options {
 	int32_t min_overlap_3_end = 12;
     int32_t nthreads = std::thread::hardware_concurrency();
     bool probe_mode = false;
+	double mv = 50;
+	double dv = 1.5;
+	double dntp = 0.6;
+	double dna = 50;
+	double temp = 37;
 };
 
 

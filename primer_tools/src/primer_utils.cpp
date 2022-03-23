@@ -9,9 +9,6 @@
 using namespace std;
 pt::primer_template_db_ptr pt::primer_utils::get_primer_template_from_file(const std::string &primer_list_file)
 {
-    // primer file is a 5-colomn tsv file
-    // eg: primer_id    template_id     start   end     strand
-    
     primer_template_db_ptr db = std::make_shared<primer_template_db_t>();
 
     std::ifstream ifs(primer_list_file.c_str());
@@ -21,28 +18,13 @@ pt::primer_template_db_ptr pt::primer_utils::get_primer_template_from_file(const
     }
 
     std::string line;
-//    std::vector<std::string> columns;
-//    const std::regex re("\\s+");
 
     while (std::getline(ifs, line)){
-   //     columns.clear();
-   //     std::copy(std::sregex_token_iterator(line.begin(), line.end(), re, -1), std::sregex_token_iterator(), std::back_inserter(columns));
-   //     if (columns.size() != 5){
-   //         std::cerr << "primer list file format error, 5 columns required, " << columns.size() << " columns detected.\n";
-   //         std::cerr << "line: " << line << "\n";
-   //         exit(EXIT_FAILURE);
-   //     }
 
 		smatch m;
 		regex_search(line, m, regex("^(\\S+)-([FR])-(\\d+)_(\\d+)_([FR])_(\\d+)\\t(\\S+)"));
 
         // query tamplate in db
-//        const std::string &template_id = columns[1];
-//        const std::string &primer_id = columns[0];
-//        int32_t start = std::stoi(columns[2]);
-//        int32_t end = std::stoi(columns[3]);
-//        bool is_rev = columns[4][0] == '-' ? true : false;
-
         const std::string &primer_id = m[0];
         const std::string &template_id = m[1];
         const std::string &seq = m[7];
