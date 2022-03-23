@@ -133,7 +133,7 @@ if(!defined $NoSpecificity){
 	open(B, $fbound) or die $!;
 	while(<B>){
 		chomp;
-		my ($id, $strand, $chr, $pos3, $seq, $tm, $end3_base, $mvisual)=split /\t/, $_;
+		my ($id, $strand, $chr, $pos5, $seq, $tm, $end3_base, $mvisual)=split /\t/, $_;
 		next if(!exists $record{$id});
 		$record{$id}=1;
 		my ($tid, $type)=$id=~/(\S+)-([12FRP])/;
@@ -141,7 +141,7 @@ if(!defined $NoSpecificity){
 			die "Wrong oligo ID $id: Primer ID must end by -F/R/1/2, eg. xxx-F, xxx-R, xxx-1, xxx-2; Probe ID must end by -P, eg. xxx-P!\n";
 		}
 		my $len = length $seq;
-		my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
+		my $pos3=$strand eq "+"? $pos5+$len-1: $pos5-$len+1;
 		push @{$bound{$type}{$tid}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end3_base, $mvisual, $tid];
 	}
 	close(B);

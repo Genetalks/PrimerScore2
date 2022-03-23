@@ -44,7 +44,7 @@ pt::primer_template_db_ptr pt::primer_utils::get_primer_template_from_file(const
 			start = startt;
 			end = start+len-1;
 		}
-		cout<<primer_id<<","<<template_id<<","<<start<<","<<end<<","<<is_rev<<","<<seq<<endl;
+		//cout<<primer_id<<","<<template_id<<","<<start<<","<<end<<","<<is_rev<<","<<seq<<endl;
 
         primer_ptr p = std::make_shared<primer>(primer_id, template_id, start, end, is_rev, seq);
 

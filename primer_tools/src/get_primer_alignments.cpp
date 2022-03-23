@@ -44,17 +44,17 @@ static void pt_cmdline(CLI::App &app, int32_t argc, char *argv[], pt::options &o
     app.add_option(
 	"-u,--max-non-overlap-3-end", 
 	opt.max_non_overlap_3_end, 
-	"Maximum non-overlap length between primer and aligned template blocks. Default [5]"
+	"Maximum non-overlap length between primer and aligned template blocks. Default [1]"
     );
 
     app.add_option(
-	"-mv,--monovalent_conc",
+	"-m,--monovalent_conc",
 	opt.mv, 
 	"concentration of monovalent cations in mM. Default [50]"
     );
 
     app.add_option(
-	"-dv,--divalent_conc", 
+	"-v,--divalent_conc", 
 	opt.dv,
 	"concentration of divalent cations in mM. Default [1.5]"
     );
@@ -72,10 +72,16 @@ static void pt_cmdline(CLI::App &app, int32_t argc, char *argv[], pt::options &o
     );
 
     app.add_option(
-	"-t,--temp", 
+	"-T,--temp", 
 	opt.temp,
 	"temperature at which duplex is calculated. Default [37]"
     );
+
+	app.add_option(
+	"-p,--path", 
+	opt.path,
+	"the path to the thermodynamic parameter files."
+    )->required();
 
     app.add_option(
 	"-t,--threads", 
@@ -234,7 +240,7 @@ pt::primer_template_ptr cal_primer_interval_filter::operator()(pt::primer_templa
     if (nullptr == primer_template){
         return nullptr;
     }
-    primer_template->calculate_primer_intervals(this->opt->mv, this->opt->dv, this->opt->dntp, this->opt->dna, this->opt->temp);
+    primer_template->calculate_primer_intervals(this->opt->mv, this->opt->dv, this->opt->dntp, this->opt->dna, this->opt->temp, this->opt->path);
     return primer_template;
 }
 
@@ -261,8 +267,10 @@ void output_filter::operator()(pt::primer_template_ptr primer_template) const{
     for (size_t i = 0; i < primers.size(); ++i){
         auto &p = primers[i];
         for (auto &itv : hits[i]){
-            *os << p->get_id() << "\t"
-                << itv.to_string() << "\n";
+			if(itv.is_valid){
+	            *os << p->get_id() << "\t"
+		            << itv.to_string() << "\n";
+			}
         }
     }
 }

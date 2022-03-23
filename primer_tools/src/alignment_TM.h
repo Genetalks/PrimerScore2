@@ -1,5 +1,5 @@
-#ifndef ALIGNMENT_TM_H
-#define ALIGNMENT_TM_H
+#ifndef _ALIGNMENT_TM_H
+#define _ALIGNMENT_TM_H
 
 #include <limits.h>
 #include <errno.h>
@@ -40,15 +40,18 @@ extern "C"{
 
 
 /*** BEGIN CONSTANTS ***/
+extern const double _INFINITY;
+/*
 # ifdef INTEGER
-const double _INFINITY = 999999.0;
+static const double _INFINITY = 999999.0;
 # else
 # ifdef INFINITY
-const double _INFINITY = INFINITY;
+static const double _INFINITY = INFINITY;
 # else
-const double _INFINITY = 1.0 / 0.0;
+static const double _INFINITY = 1.0 / 0.0;
 # endif
 # endif
+*/
 
 static const double R = 1.9872; /* cal/Kmol */
 static const double ILAS = (-300 / 310.15); /* Internal Loop Entropy ASymmetry correction -0.3kcal/mol*/
@@ -58,8 +61,8 @@ static const double AT_S = 6.9; /* AT penalty */
 static const double MinEntropyCutoff = -2500.0; /* to filter out non-existing entropies */
 static const double MinEntropy = -3224.0; /* initiation */
 static const double G2 = 0.0; /* structures w higher G are considered to be unstabile */
-const double ABSOLUTE_ZERO = 273.15;
-const double TEMP_KELVIN = 310.15;
+extern const double ABSOLUTE_ZERO;
+static const double TEMP_KELVIN = 310.15;
 //const int MAX_LOOP = 30; /* the maximum size of loop that can be calculated; for larger loops formula must be implemented */
 //const int MIN_LOOP = 0;
 
@@ -96,7 +99,7 @@ struct tracer /* structure for tracebacku - unimolecular str */ {
 
 /*** END STRUCTs ***/
 
-void caculate_alignment_TM(const unsigned char* align0, const unsigned char* seq1, const unsigned char* seq2, double mv, double dv, double dntp, double dna_conc, double temp, double *tm, double *dG, double *dS, double *dH);
+void caculate_alignment_TM(const unsigned char* align0, const unsigned char* seq1, const unsigned char* seq2, double mv, double dv, double dntp, double dna_conc, double temp, const char *path, double *tm, double *dG, double *dS, double *dH);
 static unsigned char str2int(char c); /* converts DNA sequence to int; 0-A, 1-C, 2-G, 3-T, 4-whatever */
 static int length_unsig_char(const unsigned char * str); /* returns length of unsigned char; to avoid warnings while compiling */
 static double saltCorrectS (double mv, double dv, double dntp); /* part of calculating salt correction
@@ -141,7 +144,7 @@ static int comp4loop(const void*, const void*); /* checks if sequnece consists o
 
 
 /* calculates bulges and internal loops for dimer structures */
-static void calc_bulge_internal(int ii, int jj, int i, int j, double* EntropyEnthalpy, int traceback, int maxLoop, int off1, int off2);
+static void calc_bulge_internal(unsigned char *numSeq1, unsigned char *numSeq2, int ii, int jj, int i, int j, double* EntropyEnthalpy, int traceback, int maxLoop, int off1, int off2);
 
 static double Hd5(int,int); /* returns thermodynamic value (H) for 5' dangling end */
 static double Hd3(int,int); /* returns thermodynamic value (H) for 3' dangling end */

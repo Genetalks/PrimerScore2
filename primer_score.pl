@@ -192,9 +192,9 @@ if(!defined $NoSpecificity){
 	open(B, $fbound) or die $!;
 	while(<B>){
 		chomp;
-		my ($id, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
+		my ($id, $strand, $chr, $pos5, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
 		my $len = length $seq;
-		my $pos5=$strand eq "+"? $pos3-$len+1: $pos3+$len-1;
+		my $pos3=$strand eq "+"? $pos5+$len-1: $pos5-$len+1;
 		push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $seq];
 	}
 	close(B);
