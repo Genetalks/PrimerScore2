@@ -22,27 +22,46 @@ pt::primer_template_db_ptr pt::primer_utils::get_primer_template_from_file(const
     while (std::getline(ifs, line)){
 
 		smatch m;
-		regex_search(line, m, regex("^(\\S+)-([FR])-(\\d+)_(\\d+)_([FR])_(\\d+)\\t(\\S+)"));
-
-        // query tamplate in db
-        const std::string &primer_id = m[0];
-        const std::string &template_id = m[1];
-        const std::string &seq = m[7];
-		int32_t startt = std::stoi(m[3]);
-		int32_t endt = std::stoi(m[4]);
-		int32_t off = std::stoi(m[6]);
-		int32_t len = endt-startt+1-off;
-        int32_t start;
-        int32_t end;
-        bool is_rev;
-		if(m[2] == m[5]){ // +
-			is_rev = 0;
-			end = endt;
-			start = end-len+1;
+		std::string primer_id, template_id, seq;
+		int32_t start, end;
+		bool is_rev;
+//eg:
+//chr10_94988855-U-R-5_32_F_0     GCTCTCTGTGTTTGCTATTTTCAGGAAA    28      62.48   0.393   34.00   NA      NA      3       -8.5    NA      0A3,7T4,15T3
+//chr10_94988855-U-R-5_32_F_2     TCTCTGTGTTTGCTATTTTCAGGAAA      26      59.45   0.346   34.00   NA      NA      3       -8.5    NA      0A3,7T4,15T3
+//chr10_94988855-U-R-5_32_F_4     TCTGTGTTTGCTATTTTCAGGAAA        24      57.29   0.333   34.00   NA      NA      3       -8.5    NA      0A3,7T4,15T3
+//chr10_94988855-U-R-23_50_F_0    TACGCATGAGGAGTAACTGCTCTCTGTG    28      65.89   0.500   46.69   NA      NA      0       -6.7    NA      NA
+		bool is_match = regex_search(line, m, regex("^((\\S+)-([FR])-(\\d+)_(\\d+)_([FR])_(\\d+))\\t(\\S+)"));
+		if(is_match){
+	        // query tamplate in db
+	        primer_id = m[1];
+	        template_id = m[2];
+	        seq = m[8];
+			int32_t startt = std::stoi(m[4]);
+			int32_t endt = std::stoi(m[5]);
+			int32_t off = std::stoi(m[7]);
+			int32_t len = endt-startt+1-off;
+			if(m[3] == m[6]){ // +
+				is_rev = 0;
+				end = endt;
+				start = end-len+1;
+			}else{
+				is_rev = 1;
+				start = startt;
+				end = start+len-1;
+			}
 		}else{
-			is_rev = 1;
-			start = startt;
-			end = start+len-1;
+//eg:
+//Sepci-1-R       GTATATTGTCATGACGGTCCAGGAG
+//Sepci-1-L       TGAAGTTCTCCAGGTGGCTGTTA
+//Sepci-2-L       CCCCCAAAGTTCGTGTGTTAGA
+//Sepci-2-R       ATTAGGAACCCACTCCCAAGATAAC
+			regex_search(line, m, regex("^(\\S+)\\t(\\S+)"));
+			primer_id = m[1];
+			template_id = m[1];
+			seq = m[2];
+			start = 0;
+			end = seq.length() -1;
+			is_rev = 0;
 		}
 		//cout<<primer_id<<","<<template_id<<","<<start<<","<<end<<","<<is_rev<<","<<seq<<endl;
 
