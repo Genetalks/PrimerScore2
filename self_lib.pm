@@ -1,4 +1,5 @@
 
+
 sub get_position_info{
 	my ($id, $atpos)=@_;
 	my ($tid, $tori, $startt, $endt, $pori, $off)=$id=~/^(\S+)-([FR])-(\d+)_(\d+)_([FR])_(\d+)$/; ## primer pos

@@ -20,7 +20,7 @@ pt::primer_template_db_ptr pt::primer_utils::get_primer_template_from_file(const
     std::string line;
 
     while (std::getline(ifs, line)){
-
+		if(line[0]=='#') continue;
 		smatch m;
 		std::string primer_id, template_id, seq;
 		int32_t start, end;

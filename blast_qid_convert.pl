@@ -53,7 +53,6 @@ while(<S>){
 			my ($qid)=$_=~/SN:(\S+)/;
 			my $id = $query{$qid};
 			$_=~s/$qid/$id/;
-			print O $_,"\n";
 
 		}
 		print O $_,"\n";

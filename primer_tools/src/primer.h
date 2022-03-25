@@ -65,32 +65,34 @@ private:
 typedef std::shared_ptr<primer> primer_ptr;
 
 struct primer_interval_t {
-    int32_t ps;
-    int32_t pe;
+  //  int32_t ps;
+  //  int32_t pe;
     int64_t rs; // pos5
     int64_t re;
 	char strand;
     std::string chr;
     std::string pseq;
-    std::string rseq;
+//    std::string rseq;
     std::string astr;
 	double tm;
-	double dG;
-	double dS;
-	double dH;
+//	double dG;
+//	double dS;
+//	double dH;
 	bool is_valid=false;
 
     std::string to_string() const {
         std::ostringstream oss;
 
 		int32_t pos = strand=='+'? rs: re;
+		int l = pseq.length();
+		char end3base = pseq[l-1];
         oss 
             << this->strand << "\t"
             << this->chr << "\t"
             << pos << "\t"
             << this->pseq << "\t"
 			<< this->tm << "\t"
-			<< this->dG << "\t" 
+			<< end3base << "\t" 
             << this->astr;
 
 
@@ -182,8 +184,7 @@ public:
     }
 
     // calcaute one hits
-    bool calculate_primer_interval(std::map<std::string, int> &alignstr_filter_map, const primer_ptr &p, const alignment_info_ptr &template_alignment_info, primer_interval_t &primer_hits_interval, double mv, double dv, double dntp, double dna, double temp, std::string pathstr){
-		int32_t min_bound_tm = 45;
+    bool calculate_primer_interval(std::map<std::string, double> &alignstr_filter_map, const primer_ptr &p, const alignment_info_ptr &template_alignment_info, primer_interval_t &primer_hits_interval, double min_bound_tm, double mv, double dv, double dntp, double dna, double temp, std::string pathstr){
         int32_t ps = p->get_start()+1; //1-based
         int32_t pe = p->get_end()+1;
         int32_t plen = p->get_len();
@@ -320,42 +321,40 @@ public:
 		//std::cout<<prefixp<<","<<sufixp<<";"<<prefixr<<","<<sufixr<<std::endl;
 		//std::cout<<pseq<<"\n"<<astr<<"\n"<<rseq<<std::endl;
 
-		std::map<std::string, int> ::iterator iter;
-		iter = alignstr_filter_map.find(astr);
-		if(iter != alignstr_filter_map.end()){
-			//std::cout<<"filter:"<<chr<<"\t"<<rstart<<"\t"<<strand<<"\t"<<astr<<std::endl;
-			return true;
-		}
-		// caculate tm
 		double tm, dG, dS, dH;
-		const unsigned char *align = (const unsigned char*)astr.c_str();
-		const unsigned char *seq1 = (const unsigned char*)pseq.c_str();
-		const unsigned char *seq2 = (const unsigned char*)rseq.c_str();
-		const char *path = pathstr.c_str();
-		caculate_alignment_TM(align, seq1, seq2, mv, dv, dntp, dna, temp, path, &tm, &dG, &dS, &dH);
-		//std::cout<<chr<<"\t"<<rstart<<"\t"<<strand<<"\t"<<align<<"\t"<<tm<<"\t"<<dG<<"\t"<<dS<<"\t"<<dH<<std::endl;
-
+		std::map<std::string, double> ::iterator iter;
+		iter = alignstr_filter_map.find(astr);
+		if(iter == alignstr_filter_map.end()){
+			// caculate tm
+			const unsigned char *align = (const unsigned char*)astr.c_str();
+			const unsigned char *seq1 = (const unsigned char*)pseq.c_str();
+			const unsigned char *seq2 = (const unsigned char*)rseq.c_str();
+			const char *path = pathstr.c_str();
+			caculate_alignment_TM(align, seq1, seq2, mv, dv, dntp, dna, temp, path, &tm, &dG, &dS, &dH);
+		//	std::cout<<chr<<"\t"<<rstart<<"\t"<<strand<<"\t"<<align<<"\t"<<tm<<"\t"<<dG<<"\t"<<dS<<"\t"<<dH<<std::endl;
+			
+			if(tm < min_bound_tm+5){
+				alignstr_filter_map.insert(std::pair<std::string, double>{astr, tm});
+			}
+		}else{
+			tm = iter->second;
+			//std::cout<<"iter:\t"<<pseq<<"\t"<<astr<<"\t"<<tm<<std::endl;
+		}
+//		std::cout<<chr<<"\t"<<rstart<<"\t"<<strand<<"\t"<<astr<<"\t"<<tm<<std::endl;
 		//
 		if(tm < min_bound_tm){
-			iter = alignstr_filter_map.find(astr);
-			if(iter == alignstr_filter_map.end()){
-				alignstr_filter_map.insert(std::pair<std::string, int32_t>{astr, 1});
-			}
 			return true;
 		}
         primer_hits_interval.chr = chr;
 		primer_hits_interval.rs = rstart;
         primer_hits_interval.re = rend;
-		primer_hits_interval.ps = asp;
-        primer_hits_interval.pe = aep;
+	//	primer_hits_interval.ps = asp;
+     //   primer_hits_interval.pe = aep;
 		primer_hits_interval.strand = strand;
 		primer_hits_interval.pseq = pseq;
 	    primer_hits_interval.astr = astr;
-	    primer_hits_interval.rseq = rseq;
+	    //primer_hits_interval.rseq = rseq;
 	    primer_hits_interval.tm = tm;
-	    primer_hits_interval.dG = dG;
-	    primer_hits_interval.dS = dS;
-	    primer_hits_interval.dH = dH;
 	    primer_hits_interval.is_valid=true;
 		return false;
 	}
@@ -400,18 +399,18 @@ public:
 		reverse(str);
 	}
 
-    void calculate_primer_intervals(double mv, double dv, double dntp, double dna, double temp, std::string path){
+    void calculate_primer_intervals(double min_bound_tm, double mv, double dv, double dntp, double dna, double temp, std::string path){
         this->primers_intervals.resize(this->primers.size());
         tbb::parallel_for(tbb::blocked_range<size_t>(0, this->primers.size()), [&](tbb::blocked_range<size_t> r){
             for (size_t i = r.begin(); i < r.end(); ++i){
                 auto &hits = this->primers_hits[i];
                 auto &intervals =  this->primers_intervals[i];
-				std::map<std::string, int> alignstr_filter_map; 
+				std::map<std::string, double> alignstr_filter_map; 
                 intervals.resize(hits.size());
 				size_t n=0;
 				bool is_filter;
                 for (size_t j = 0; j < hits.size(); ++j){
-                    is_filter = calculate_primer_interval(alignstr_filter_map, this->primers[i], hits[j].value, intervals[n], mv, dv, dntp, dna, temp, path);
+                    is_filter = calculate_primer_interval(alignstr_filter_map, this->primers[i], hits[j].value, intervals[n], min_bound_tm, mv, dv, dntp, dna, temp, path);
 					if(!is_filter){
 						n++;
 					}
@@ -441,7 +440,6 @@ private:
 typedef std::shared_ptr<primer_template> primer_template_ptr;
 
 typedef std::map<std::string, primer_template_ptr> primer_template_db_t;
-//typedef std::map<std::string, int> alignment_filter_map;
 typedef std::shared_ptr<primer_template_db_t> primer_template_db_ptr;
 };
 

@@ -1,3 +1,5 @@
+$blastn = "$Bin/third-party/ncbi-blast-2.12.0+/bin/blastn";
+$makeblastdb = "$Bin/third-party/ncbi-blast-2.12.0+/bin/makeblastdb";
 $BLAT = "$Bin/third-party/blat";
 $SAMTOOLS = "$Bin/third-party/samtools";
 $BWA = "$Bin/third-party/bwa";

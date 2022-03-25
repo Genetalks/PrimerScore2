@@ -11,6 +11,7 @@ require "$Bin/self_lib.pm";
 require "$Bin/snp.pm";
 require "$Bin/product.pm";
 require "$Bin/dimer.pm";
+require "$Bin/io.pm";
 
 my $BEGIN_TIME=time();
 my $version="1.0.0";
@@ -27,7 +28,7 @@ my ($foligo, $fkey,$detail,$outdir);
 my ($Methylation,$NoSpecificity,$NoFilter, $Precise);
 my $min_tm_spec = 45; #when caculate specificity
 my $nohead;
-my $thread = 1;
+my $thread = 10;
 my $fdatabases = $REF_GRCh37;
 my $len_map=20; ##bwa result is the most when 20bp
 my $opt_tm = 60;
@@ -35,6 +36,7 @@ my $opt_tm_probe=70;
 my $opt_size = 100;
 my $Debug;
 my $probe;
+my $ftemplate;
 my ($mv, $dv, $dNTP, $dna, $tp, $sc)=(50, 1.5, 0.6, 50, 1, 1);
 my $olens;
 my $revcom;
@@ -104,9 +106,10 @@ if(defined $Precise){
 	$max_time=defined $max_time? $max_time: 120;
 }
 
-## creat oligo.fa
-if(!defined $NoSpecificity){
-	open(PN, ">$outdir/$fkey.oligo.fa") or die $!;
+## check
+if(!defined $NoSpecificity && !defined $ftemplate){
+	print "Wrong: a template file(-t) is required when not choose --NoSpecificity! \n";
+	exit(-1);
 }
 open(F, ">$outdir/$fkey.filter.list") or die $!;
 open(L, ">$outdir/$fkey.oligo.list") or die $!;
@@ -301,29 +304,6 @@ while (<P>){
 		}
 		$is_all_filter=0;
 	}
-	
-	
-	if(!defined $NoSpecificity && $is_all_filter==0){
-		my $off = (length $oligo_seq0)-$len_map;
-		$off=$off>0? $off: 0;
-		my $mseq = substr($oligo_seq0, $off);
-		print PN ">$id0\n";
-		print PN $mseq,"\n";
-		if(defined $Precise){
-			print PN ">$id0\_rc\n";
-			print PN &revcom($mseq),"\n";
-		}
-		if(defined $revcom){
-			my $mseqL = substr($oligo_seq0, 0, $len_map); ##
-			print PN ">$id0\_L\n";
-			print PN $mseqL,"\n";
-			if(defined $Precise){
-				print PN ">$id0\_L_rc\n";
-				print PN &revcom($mseqL),"\n";
-			}
-		}
-	}
-	
 }
 
 exit(0) if(scalar keys %evalue==0);
@@ -332,231 +312,6 @@ foreach my $id(keys %evalue){
 }
 close(L);
 
-#&SHSHOW_TIME("Specificity analysis:");
-
-my $DB;
-my %bound;
-if(!defined $NoSpecificity){
-	close(PN);
-	if(defined $detail){
-		open (Detail, ">$outdir/$fkey.evaluation.detail") or die $!;
-	}
-	my %db_region;
-	### blast
-	if(!defined $ftemplate){
-		$ftemplate = $foligo;
-	}
-
-
-
-	### bwa
-	my %mapping;
-	my $fa_oligo = "$outdir/$fkey.oligo.fa";
-	my @fdatabase=split /,/, $fdatabases;	
-	my $sum=0;
-	foreach my $fdatabase(@fdatabase){
-		if(!-e "$fdatabase\.ann"){
-			my $fdbname = basename($fdatabase);
-			my $fdatabase_new = "$outdir/$fdbname";
-			if(!-e "$fdatabase_new\.ann"){
-				`ln -s $fdatabase $fdatabase_new`;
-				`$BWA index $fdatabase_new`;
-			}
-			$fdatabase=$fdatabase_new;
-		}
-		my $dname = basename($fdatabase);
-		my $cmd="$BWA mem -D 0 -k 9 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
-		if(defined $Precise){
-			$cmd="$BWA mem -D 0 -k 7 -t $thread -c 1000000000 -y 1000000000 -T 12 -B 1 -L 2,2 -h 200 -a $fdatabase $fa_oligo >$fa_oligo\_$dname.sam 2>$fa_oligo\_$dname.sam.log";
-		}
-		&Run_monitor_timeout($max_time, $cmd);
-		my $ret = `grep -aR Killed $fa_oligo\_$dname.sam.log`;
-		chomp $ret;
-		if($ret eq "Killed"){## time out
-			open(I, $fa_oligo) or die $!;
-			$/=">";
-			while(<I>){
-				chomp;
-				next if(/^$/);
-				my ($id0, $seq)=split /\n/, $_; 
-				next if(!exists $olen_oligo{$id0});	
-				for(my $i=0; $i<@{$olen_oligo{$id0}}; $i++){
-					my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
-					print F join("\t",  $idn, $pseqn, "BwaTimeout", $max_time."s"),"\n";
-				}
-			}
-			close(I);
-			print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
-			exit(0); ## once time out, all primer is filtered with flag "BwaTimeout", and exit!
-			$/="\n";
-		}
-
-		### read in bam
-		open (I, "$SAMTOOLS view $fa_oligo\_$dname.sam|") or die $!;
-		my %record;
-		while (<I>){
-			chomp;
-			my ($id, $flag, $chr, $pos, $score, $cigar, undef, undef, undef, $seq)=split /\s+/,$_;
-			my ($is_unmap, $is_reverse)=&explain_bam_flag_unmap($flag);
-			my ($md)=$_=~/MD:Z:(\S+)/;
-			next if ($is_unmap);
-			if($id=~/_rc$/){
-				$id=~s/_rc$//;
-				$is_reverse=$is_reverse==0? 1: 0;
-				next if(exists $record{$id}{join(",", $is_reverse, $chr, $pos, $cigar, $md)});
-			}
-			$sum++;
-			push @{$mapping{$id}{$dname}},[$is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase];
-			$record{$id}{join(",", $is_reverse, $chr, $pos, $cigar, $md)}=1;
-		}
-		close(I);
-	}
-	### evaluate
-	open(O, ">$outdir/$fkey.bound.info") or die $!;
-	foreach my $id0 (sort {$a cmp $b} keys %olen_oligo){
-		my ($id,undef, undef, $oligo_seq)=@{$olen_oligo{$id0}->[0]};
-		my $len = length($oligo_seq);
-		my $end3_base=substr($oligo_seq, $len-1, 1);
-		my $tm_coe = &tm_estimate_coe($primer3_tm{$oligo_seq}, $oligo_seq);
-		my %lowtm;
-		my $filter_by_bound=0;
-		foreach my $dname(keys %{$mapping{$id0}}){
-			my @id0=($id0);
-			if(defined $revcom){
-				push @id0, $id0."_L";
-			}
-			foreach my $id0t(@id0){
-				my $bound_num = 0;
-				my $map_num = 0;
-				if(exists $mapping{$id0t}{$dname}){
-					$map_num = scalar @{$mapping{$id0t}{$dname}};
-				}
-				for (my $i=0; $i<$map_num; $i++){
-					my ($is_reverse, $flag, $chr, $pos, $score, $cigar, $md, $fdatabase)=@{$mapping{$id0t}{$dname}->[$i]};
-					my ($emis3)=&get_3end1_mismatch($is_reverse, $cigar, $md);
-					next if(!defined $probe && !defined $revcom && ($emis3>=2 || ($emis3==1 && $oligo_seq!~/[CG]$/)));## if not C/G end, then filter mapping with end3 base not mapped exactly
-					#filter lowtm
-#					my $map_form=&map_form_standard($is_reverse, $cigar, $md);
-					my $map_form=join(",", $is_reverse, $cigar, $md);
-					next if(exists $lowtm{$map_form});## filter bound regions whose map info are same with where bound tm too low 
-					my $strand=$is_reverse? "-": "+";
-					if(defined $detail){
-						print Detail "\nOriginal:",join("\t",$id0t, $is_reverse, $flag, $chr, $pos, $score, $cigar, $md),"\n";
-					}
-					######## specificity
-					my $extend = 10;
-					
-					### get seq
-					my $off =$len-$len_map;
-					my ($start, $end);
-					if(($is_reverse==0 && $id0t!~/_L/) || ($is_reverse==1 && $id0t=~/_L/) ){
-						$start=$pos-$off-$extend;
-						$end=$pos+$len_map+$extend;
-					}else{
-						$start=$pos-$extend;
-						$end=$pos+$len_map+$off+$extend;
-					}
-					#print join("\t", $pos, $is_reverse, $start, $end),"\n";
-					$start=$start>1? $start: 1;
-					my $seq_info = `$SAMTOOLS faidx $fdatabase $chr:$start-$end`;
-					my @seq_info = split /\n/, $seq_info;
-					shift @seq_info;
-					my $seq = join("",@seq_info);
-					if($seq!~/[ATCGatcg]+/){ ## seq is NNN...NNN, false mapping, because bwa will convert N to one of ATCG randomly
-				#		print "Warn: extract aligned region sequence failed\n";
-				#		print join("\t", $chr, $start, $end, $fdatabase),"\n";
-						next;
-					}
-					$seq=uc($seq);
-					if($is_reverse){
-						$seq=&revcom($seq);
-					}
-
-					## sw map
-					my $result = `perl $Bin/sw.pl $oligo_seq $seq`;
-					my @line = split /\n/, $result;
-
-					## match visual
-					my ($mvisual, $pos3, $pos5)=&map_visual_from_sw(\@line, $is_reverse, $start, $end);
-#					my $tm=&tm_estimate($mvisual, $oligo_seq, $tm_coe);
-					my $seqrv=&revcom($seq);
-					my $tm;
-					if($emis3>=1){## tm is usually lower when -a END1 
-						$tm=`$ntthal -r -s1 $oligo_seq -s2 $seqrv`; 
-					}else{
-						$tm=`$ntthal -r -a END1 -s1 $oligo_seq -s2 $seqrv`;
-					}
-					chomp $tm;
-					if(defined $detail){
-						print Detail join("\n", $line[0], $line[1], $line[2]),"\n";
-						print Detail "map convert:"; 
-						print Detail join("\t", ($mvisual, $pos3, $pos5, $tm)),"\n";
-					}
-					if($tm<$min_tm_spec){
-						my $end_match5=&end_match_length($mvisual, "End5");
-						if($end_match5 >= (length $oligo_seq) - $len_map || $tm<$min_tm_spec-10){ ## rest end5 bases all mapped
-							$lowtm{$map_form}=1;
-						}
-						next;
-					}
-					if(defined $detail){
-						print Detail "New info:",join("\t",$id, $strand, $chr, $pos, $oligo_seq, $tm, $mvisual),"\n";
-					}
-
-					print O join("\t",$id, $strand, $chr, $pos3, $oligo_seq, $tm, $end3_base.";".$map_form, $mvisual),"\n";
-					$bound{$id}{$strand."/".$chr."/".$pos3.":".$mvisual}=$tm;
-					$bound_num++;
-					if(!defined $NoFilter && $bound_num>$Max_Bound_Num){
-						print F join("\t",  $id, $oligo_seq, "BoundTooMore", $bound_num."+"),"\n";
-						delete $evalue{$id};
-						$filter_by_bound=1;
-						for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
-							my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
-							print F join("\t",  $idn, $pseqn, "BoundTooMore", $bound_num."+"),"\n";
-							delete $evalue{$idn};
-						}
-						last;
-					}
-					## other len's oligos and revcom
-					for(my $i=1; $i<@{$olen_oligo{$id0}}; $i++){
-						my ($idn, $ori, $off, $pseqn)=@{$olen_oligo{$id0}->[$i]};
-						next if(!exists $evalue{$idn});
-						my $end3_basen=substr($pseqn, length($pseqn)-1, 1);
-						my $posn = $pos3;
-						my $seqn=$seqrv;
-						my $strandn=$strand;
-						my $mvisualn=$mvisual;
-						if($ori eq "-"){
-							$mvisualn=reverse($mvisual);
-							$seqn=&revcom($seqrv);
-							$posn = $pos5;
-							$strandn=$strand eq "+"? "-": "+";
-						}
-						my ($mvn) = &map_visual_trim($mvisualn, $off); 
-#						my $tmn=&tm_estimate($mvn, $pseqn, $tm_coe);
-						my $tmn=`$ntthal -r -s1 $pseqn -s2 $seqn`;
-						chomp $tmn;
-						next if($tmn<$min_tm_spec);
-						if(defined $detail){
-							print Detail "New Sam:",join("\t",$idn, $strandn, $chr, $posn, $pseqn, $mvn),"\n";
-						}
-						print O join("\t",$idn, $strandn, $chr, $posn, $pseqn, $tmn,$end3_basen.";".$map_form, $mvn),"\n";
-						$bound{$idn}{$strandn."/".$chr."/".$posn.":".$mvn}=$tmn;
-					}
-				}
-				last if($filter_by_bound==1);
-			}
-		}
-	}
-	close(O);
-	if(defined $detail){
-		close (Detail);
-	}
-}
-
-close(F);
-
-#&SHSHOW_TIME("Output:");
 ### output
 open (O, ">$outdir/$fkey.evaluation.out") or die $!;
 if(!defined $nohead){
@@ -565,23 +320,15 @@ if(!defined $nohead){
 
 foreach my $id (sort {$a cmp $b} keys %evalue){
 	print O join("\t",$id, @{$evalue{$id}});
-	if(!defined $NoSpecificity){
-		## get bounds info of the max tm
-		my $bnum=0;
-		my ($abtms, $abinfos);
-		if(exists $bound{$id}){## when tm too low, not exists
-			($bnum, $abtms, $abinfos)=&get_highest_bound($bound{$id}, 3, "Tm");
-		}
-		my ($btms, $binfos)=("NA", "NA"); ## all bound tm < min_sepc_tm
-		if(defined $abtms){
-			$btms = join(",", @{$abtms});
-			$binfos = join(";", @{$abinfos});
-		}
-		print O "\t", join("\t", $bnum, $btms, $binfos);
-	}
 	print O "\n";
 }
 close(O);
+
+
+### Specificity, get bound info
+if(!defined $NoSpecificity){
+	&Run("perl $Bin/get_bound_info.pl -tm $min_tm_spec -io $outdir/$fkey.evaluation.out -it $ftemplate -id $fdatabases -k $fkey -od $outdir -t $thread");
+}
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 #######################################################################################
@@ -675,6 +422,7 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 Usage:
   Options:
   -p  <file>             Input oligo list file, forced
+  -t  <file>             Input template file to evalue specificity, not required when --NoSpecificity, optional
   -d  <files>            Input database files separated by "," to evalue specificity, [$fdatabases]
   -k  <str>              Key of output file, forced
 
@@ -697,7 +445,7 @@ Usage:
                         0   Schildkraut and Lifson 1965, used by oligo3 up to and including release 1.1.0.
 						1   SantaLucia 1998
 						2   Owczarzy et al., 2004
-  -thread    <int>      thread in bwa, [$thread]
+  -thread    <int>      thread in blast, [$thread]
   -maxtime  <int>       max bwa running time, killed and filtered when time out, [120]
 
   --NoFilter             Not filter any oligos

@@ -47,6 +47,12 @@ static void pt_cmdline(CLI::App &app, int32_t argc, char *argv[], pt::options &o
 	"Maximum non-overlap length between primer and aligned template blocks. Default [1]"
     );
 
+	app.add_option(
+	"-b,--min_bound_tm", 
+	opt.min_bound_tm, 
+	"Minimum tm to bound and amplify non-target template. Default [45]"
+    );
+
     app.add_option(
 	"-m,--monovalent_conc",
 	opt.mv, 
@@ -240,7 +246,7 @@ pt::primer_template_ptr cal_primer_interval_filter::operator()(pt::primer_templa
     if (nullptr == primer_template){
         return nullptr;
     }
-    primer_template->calculate_primer_intervals(this->opt->mv, this->opt->dv, this->opt->dntp, this->opt->dna, this->opt->temp, this->opt->path);
+    primer_template->calculate_primer_intervals(this->opt->min_bound_tm, this->opt->mv, this->opt->dv, this->opt->dntp, this->opt->dna, this->opt->temp, this->opt->path);
     return primer_template;
 }
 

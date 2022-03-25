@@ -183,7 +183,7 @@ while(<I>){
 			my $f="$dir/$fkey.oligo.list_$fn";
 			my $fname = basename($f);
 			my $olens=join(",", $min_len, $max_len, $scale_len); 
-			my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $f -d $fdatabases -thread 1 -stm $stm -k $fname -opttm $opt_tm -olen $olens -od $dir";
+			my $cmd = "perl $Bin/oligo_evaluation.pl --NoSpecificity --nohead -p $f -k $fname -opttm $opt_tm -olen $olens -od $dir";
 			if($fr eq "FR"){
 				$cmd .= " --Revcom";
 			}
@@ -192,9 +192,6 @@ while(<I>){
 			}
 			if(defined $probe){
 				$cmd .= " --Probe -opttmp $opt_tm_probe";
-			}
-			if(defined $NoSpecificity){
-				$cmd .= " --NoSpecificity";
 			}
 			if(defined $NoFilter){
 				$cmd .= " --NoFilter";
@@ -217,19 +214,15 @@ Run("parallel -j $para_num  < $outdir/$fkey.oligo.evalue.sh");
 my @dirs = glob("$outdir/split_*");
 foreach my $dir (@dirs){
 	Run("cat $dir/*.evaluation.out > $dir/evaluation.out");
-	if(!defined $NoSpecificity){
-		Run("cat $dir/*.bound.info > $dir/bound.info");
-	}
 	Run("cat $dir/*.filter.list > $dir/filter.list");
 }
 Run("cat $outdir/*/evaluation.out >$outdir/$fkey.oligo.evaluation.out");
-if(!defined $NoSpecificity){
-	Run("cat $outdir/*/bound.info >$outdir/$fkey.oligo.bound.info");
-}
 Run("cat $outdir/*/filter.list >$outdir/$fkey.oligo.filter.list");
 
-
-
+### Specificity, get bound info
+if(!defined $NoSpecificity){
+	&Run("perl $Bin/get_bound_info.pl -tm $stm -io $outdir/$fkey.oligo.evaluation.out -it $ftem -id $fdatabases -k $fkey.oligo -od $outdir -t $para_num");
+}
 
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";

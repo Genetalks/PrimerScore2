@@ -53,7 +53,7 @@ open(P, $foligo) or die $!;
 while(<P>){
 	chomp;
 	#($id, $seq, $len), ($tm, $gc, $hairpin, $dimert, $dimers, $snp, $poly, $cpgs, $cs), ($bnum, $btm, $binfo);
-	my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info(0, $_, $Methylation, $NoSpecificity);
+	my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info(0, $_, $Methylation, 1);
 	my ($id, $seq, $len)=@{$abase};
 	my $tm=$afeature->[0];
 	## filter

@@ -91,7 +91,9 @@ if(!defined $fbound){
 	if($ftype ne "Common"){
 		die "Wrong file type: must be Common(2column: id seq) when not defined -ib!\n";
 	}
-	my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $foligo -d $fdatabases -thread $thread -stm $min_tm_spec --NoFilter -k $fkey -maxtime 100000000 -od $outdir";
+	my $ftemplate = "$outdir/$fkey.template.fa";
+	`less specific.primer.list|perl -ne '\''{chomp; \@a=split; print \">\$a[0]\\n\$a[1]\\n\";}'\'' >$ftemplate`;
+	my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $foligo -t $ftemplate -d $fdatabases -thread $thread -stm $min_tm_spec --NoFilter -k $fkey -maxtime 100000000 -od $outdir";
 	if(defined $Methylation){
 		$cmd .= " --Methylation";
 	}
@@ -195,7 +197,7 @@ if($ftype eq "Common"){ ## score
 	while(<I>){
 		chomp;
 		next if(/^$/ || /^#/);
-		my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info($idx, $_, $Methylation, $NoSpecificity); #spec: ($bnum,$btm,$binfo)
+		my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info($idx, $_, $Methylation, 1); #spec: ($bnum,$btm,$binfo)
 		my ($id, $seq, $len) =@{$abase}[$idx..($idx+2)];
 		my ($tid,$tp)=$id=~/(\S+)-([12FRP])$/;
 		
@@ -219,7 +221,7 @@ if($ftype eq "Common"){ ## score
 		## product
 		my @prods;
 		if(!defined $NoSpecificity){
-			my $sbd = $aspec->[0]."|".$aspec->[1];
+			my $sbd = scalar @{$aspec}>0? $aspec->[0]."|".$aspec->[1]: "NA";
 			push @prods, $sbd;
 			my ($pnum, $apeff, $apinfos);
 			if($tp ne "P"){

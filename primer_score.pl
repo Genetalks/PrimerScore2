@@ -137,7 +137,7 @@ open(P, $foligo) or die $!;
 while(<P>){
 	chomp;
 	#($id, $seq, $len), ($tm, $gc, $hairpin, $dimertype, $dimersize, $nendA, $enddG, $snp, $poly), ($CpGs, $Cs), ($bnum, $btm, $binfo);
-	my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info(0, $_, $Methylation, $NoSpecificity);
+	my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info(0, $_, $Methylation, 1);
 	my ($id, $seq, $len)=@{$abase};
 	my $tm = $afeature->[0];
 	my ($tid, $dis, $chr, $pos3, $pos5, $strand)=&get_position_info($id, \%tempos);

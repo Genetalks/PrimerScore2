@@ -103,6 +103,9 @@ sub caculate_product{
 						my $eff_dis=&score_single($dis, 1, @rsize);
 						my $eff=$eff1*$eff2*$eff_dis;
 						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1),$p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
+#						if($chr eq "chr2" && $tid1 eq "Sepci-2"){
+							print join("\t", $tid1, $prob, $eff, $eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end),"\n";
+#						}
 						next if($eff<$min_eff);
 						$aprod->{$tid1}{$tid2}{$prob}=$eff;
 					#	print join("\t", $eff, $prob),"\n";
@@ -187,6 +190,7 @@ sub efficiency{
 			$eff_end *= &score_single($mis_pos[$i], 1, @mis_end);
 		}
 	}
+	
 	return ($eff_tm*$eff_end, $eff_tm, $eff_end);
 }
 
