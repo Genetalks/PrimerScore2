@@ -29,8 +29,8 @@ file(GLOB pt_src
 set(PROG ptools)
 add_executable(${PROG} ${pt_src})
 
-add_dependencies(${PROG} CLI11lib deflatelib zlib htslib onetbblib)
+add_dependencies(${PROG} gflagslib gloglib CLI11lib deflatelib zlib htslib onetbblib)
 set_property(TARGET ${PROG} PROPERTY CXX_STANDARD 11)
 set_target_properties(${PROG} PROPERTIES INSTALL_RPATH "./")
 
-target_link_libraries(${PROG} LINK_PUBLIC ${tbb_LIBS} ${htslib_LIBS} pthread )
+target_link_libraries(${PROG} LINK_PUBLIC ${glog_LIBS} ${tbb_LIBS} ${htslib_LIBS} pthread)

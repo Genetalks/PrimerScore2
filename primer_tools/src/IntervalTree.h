@@ -51,6 +51,7 @@ class IntervalTree {
 public:
     typedef Interval<Scalar, Value> interval;
     typedef std::vector<interval> interval_vector;
+    typedef std::vector<Value> value_vector;
 
 
     struct IntervalStartCmp {
@@ -218,6 +219,22 @@ public:
         visit_overlapping(start, stop,
                           [&](const interval& interval) { 
                             result.emplace_back(interval); 
+                          });
+        return result;
+    }
+    
+    value_vector findOverlappingValues(const Scalar& start, const Scalar& stop) const {
+        size_t n = 0;
+        visit_overlapping(start, stop,
+                          [&](const interval& interval) { 
+                            ++n; 
+                          });
+
+        value_vector result;
+        result.reserve(n);
+        visit_overlapping(start, stop,
+                          [&](const interval& interval) { 
+                            result.emplace_back(interval.value); 
                           });
         return result;
     }

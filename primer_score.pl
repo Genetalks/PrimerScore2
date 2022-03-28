@@ -38,6 +38,7 @@ my $PCRsize=1000;
 my $min_eff=0.00001;
 my $max_prodn=50;
 my $min_tm_spec=45;
+my $max_bound_num = 10000;
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -45,6 +46,7 @@ GetOptions(
 				"ib:s"=>\$fbound,
 				"ip:s"=>\$fprobe,
 				"k:s"=>\$fkey,
+				"Probe:s"=>\$fprobe,
 				"Methylation:s"=>\$Methylation,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"NoFilter:s"=>\$NoFilter,
@@ -184,21 +186,40 @@ while(<P>){
 }
 close(P);
 close(O);
-close(F);
 
 my %bound;
 if(!defined $NoSpecificity){
 	&SHOW_TIME("#Read in Bound file");
 	open(B, $fbound) or die $!;
+	my $n=0;
+	my $last_id = "NA";
 	while(<B>){
 		chomp;
 		my ($id, $strand, $chr, $pos5, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
+		if(!defined $NoFilter){
+			if($id ne $last_id){
+				if($n>$max_bound_num){
+					print F join("\t", "BoundsTooMore", $id, $n),"\n";
+					delete $bound{$last_id};
+					delete $oligo_info{$last_id};
+				}
+				$last_id = $id;
+				$n=0;
+			}
+			$n++;
+		}
 		my $len = length $seq;
 		my $pos3=$strand eq "+"? $pos5+$len-1: $pos5-$len+1;
 		push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $seq];
 	}
 	close(B);
+	if($n>$max_bound_num){
+		print F join("\t", "BoundsTooMore", $last_id, $n),"\n";
+		delete $bound{$last_id};
+		delete $oligo_info{$last_id};
+	}
 }
+close(F);
 	
 my %probe;
 if(defined $fprobe){
@@ -286,6 +307,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		my %pos_pair;
 		my %probe_final;
 		foreach my $p1(@primer1){
+			next if(!exists $oligo_info{$p1});
 			my ($chr, $pos3, $pos5, $strand, $dis_tg, $seq, $len, $tm)=@{$oligo_info{$p1}};
 			my ($score, $score_info)=@{$oligo_score{$p1}};
 			#score for pos
@@ -311,6 +333,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			
 			my @primer2=&get_candidate(\@condv2, $oligo_pos{$tid});
 			foreach my $p2(@primer2){
+				next if(!exists $oligo_info{$p1});
 				my ($chr, $pos32, $pos52, $strand2, $dis_tg2, $seq2, $len2, $tm2)=@{$oligo_info{$p2}};
 				my ($score2, $score_info2)=@{$oligo_score{$p2}};
 				# score for tm diff 

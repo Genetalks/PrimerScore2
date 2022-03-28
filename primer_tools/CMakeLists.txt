@@ -16,7 +16,7 @@ add_compile_options("-fPIC")
 #add_compile_options("-mavx512vl")
 # add_compile_options("-fprefetch-loop-arrays")
 # add_compile_options("-mprefetchwt1")
-# add_compile_options("-static-libgcc")
+add_compile_options("-static-libgcc")
 add_compile_options("-static-libstdc++")
 
 
@@ -45,6 +45,7 @@ if (${USE_VMP_PROTECT})
     ADD_DEFINITIONS(-DUSE_VMP)
 endif()
 
+include("cmake/googlemiscs.cmake")
 include("cmake/onetbb.cmake")
 include("cmake/htslib.cmake")
 include("cmake/CLI11.cmake")

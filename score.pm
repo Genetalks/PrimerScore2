@@ -399,7 +399,7 @@ sub score_growth_curve{
 		$s = $score;
 	}else{
 		if($maxl-$maxb==0){
-			print join("\t", ($v, $score, $minb, $maxb, $min, $max, $minl, $maxl)),"\n";
+			print "Wrong: The value exceeds the upper limit $maxl, ", join(",", ($v, $score, $minb, $maxb, $min, $max, $minl, $maxl)),"\n";
 			die;
 		}
 		#down curve2

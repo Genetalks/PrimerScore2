@@ -95,16 +95,19 @@ sub caculate_product{
 							($eff2, $eff2_tm, $eff2_end)=&efficiency($tm2, $mvisual2, $opt_tm, $min_tm, $end3_base2);
 							@{$aeff->{$b2}}=($eff2, $eff2_tm, $eff2_end);
 						}
-						my $dis=$pos2-$pos;
-						if($sd eq "-"){
-							$dis=$dis*(-1);
+						my $dis;
+						if($sd eq "+"){
+							$dis = $ixpos==0? $pos2-$pos: $pos2-$pos+1;
+						}else{
+							$dis = $ixpos==0? $pos-$pos2: $pos-$pos2+1;
 						}
+			
 						my @rsize=($mind,$maxd, $dmin, $dmax);
 						my $eff_dis=&score_single($dis, 1, @rsize);
 						my $eff=$eff1*$eff2*$eff_dis;
-						my $prob=$dis."/".join(",", $chr, $p1, $sd.$pos, $mvisual1,sprintf("%.2f",$tm1),$p2, $sd2.$pos2,$mvisual2,sprintf("%.2f",$tm2));
+						my $prob=$dis."/".join(",", $chr, $p1, $sd.$bds[$i][1], $mvisual1,sprintf("%.2f",$tm1),$p2, $sd2.$bds2[$j][1],$mvisual2,sprintf("%.2f",$tm2));
 #						if($chr eq "chr2" && $tid1 eq "Sepci-2"){
-							print join("\t", $tid1, $prob, $eff, $eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end),"\n";
+#							print join("\t", $tid1, $prob, $eff, $eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end),"\n";
 #						}
 						next if($eff<$min_eff);
 						$aprod->{$tid1}{$tid2}{$prob}=$eff;

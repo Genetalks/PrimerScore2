@@ -207,7 +207,7 @@ while(<I>){
 }
 close(PT);
 close (SH);
-
+&SHOW_TIME("Basic Evaluation:");
 Run("parallel -j $para_num  < $outdir/$fkey.oligo.evalue.sh");
 
 ##cat
@@ -220,6 +220,7 @@ Run("cat $outdir/*/evaluation.out >$outdir/$fkey.oligo.evaluation.out");
 Run("cat $outdir/*/filter.list >$outdir/$fkey.oligo.filter.list");
 
 ### Specificity, get bound info
+&SHOW_TIME("Bounds Evaluation:");
 if(!defined $NoSpecificity){
 	&Run("perl $Bin/get_bound_info.pl -tm $stm -io $outdir/$fkey.oligo.evaluation.out -it $ftem -id $fdatabases -k $fkey.oligo -od $outdir -t $para_num");
 }
