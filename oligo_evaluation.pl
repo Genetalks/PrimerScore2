@@ -325,9 +325,9 @@ foreach my $id (sort {$a cmp $b} keys %evalue){
 close(O);
 
 
-### Specificity, get bound info
+### Specificity, get bound info; usually used by evalue pre-designed oligos
 if(!defined $NoSpecificity){
-	&Run("perl $Bin/get_bound_info.pl -tm $min_tm_spec -io $outdir/$fkey.evaluation.out -it $ftemplate -id $fdatabases -k $fkey -od $outdir -t $thread");
+	&Run("perl $Bin/get_bound_info.pl -mn=-1 -tm $min_tm_spec -io $outdir/$fkey.evaluation.out -it $ftemplate -id $fdatabases -k $fkey -od $outdir -t $thread");
 }
 #######################################################################################
 print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";

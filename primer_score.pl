@@ -333,7 +333,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			
 			my @primer2=&get_candidate(\@condv2, $oligo_pos{$tid});
 			foreach my $p2(@primer2){
-				next if(!exists $oligo_info{$p1});
+				next if(!exists $oligo_info{$p2});
 				my ($chr, $pos32, $pos52, $strand2, $dis_tg2, $seq2, $len2, $tm2)=@{$oligo_info{$p2}};
 				my ($score2, $score_info2)=@{$oligo_score{$p2}};
 				# score for tm diff 
