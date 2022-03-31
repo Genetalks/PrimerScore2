@@ -73,16 +73,20 @@ $outdir||="./";
 $outdir=AbsolutePath("dir",$outdir);
 my $min_cpgs=1;
 my $min_cs=3;
-my $max_best_dis_primer_probe=3;
-my $max_dis_primer_probe=30;
+my $max_best_dis_primer_probe=0;
+my $max_dis_primer_probe=15;
 my $end_len=10;
 my @mis_end=(10,100,0,100); #end: 0-10 => score: 0-fulls
 my @lendif=(0,4,0,8); ## tm diff between F and R primer
 my @tmdif=(0,3,0,6); ## tm diff between F and R primer
 #my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(25,25,10,10,30);
 my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(20,30,10,10,30);
+if(defined $fprobe){
+	($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(40,20,10,10,20);
+}
 my @rdis=split /,/, $range_dis;
 my @rpos;
+
 if(defined $range_pos){
 	@rpos=split /,/, $range_pos;
 }
@@ -264,10 +268,15 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		my %recordp;
 		foreach my $id (sort {$probec{$b}->[0]<=>$probec{$a}->[0]} keys %probec){
 			my ($subid)=$id=~/(\S+)_\d+$/;
-			next if(exists $recordp{$subid}); ## more probes with the same position will only keep one
-			$recordp{$subid}=1;
-
 			my ($chr,$pos3, $pos5, $strand)=@{$oligo_info{$id}};
+			next if(exists $recordp{3}{$chr.",".$pos3} || exists $recordp{5}{$chr.",".$pos5}); ## more probes with the same position will only keep one
+
+			$recordp{3}{$chr.",".$pos3}=1;
+			$recordp{3}{$chr.",".($pos3+1)}=1;
+			$recordp{3}{$chr.",".($pos3-1)}=1;
+			$recordp{5}{$chr.",".$pos5}=1;
+			$recordp{5}{$chr.",".($pos5+1)}=1;
+			$recordp{5}{$chr.",".($pos5-1)}=1;
 			my ($pos3_min, $pos3_max, $pos3_bmin, $pos3_bmax);
 			if($strand eq "+"){
 				$pos3_bmin = $pos5-$max_best_dis_primer_probe;
@@ -307,7 +316,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		my %pos_pair;
 		my %probe_final;
 		foreach my $p1(@primer1){
-			next if(!exists $oligo_info{$p1});
+			next if(!defined $NoSpecificity && !exists $bound{$p1});
 			my ($chr, $pos3, $pos5, $strand, $dis_tg, $seq, $len, $tm)=@{$oligo_info{$p1}};
 			my ($score, $score_info)=@{$oligo_score{$p1}};
 			#score for pos
@@ -333,7 +342,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 			
 			my @primer2=&get_candidate(\@condv2, $oligo_pos{$tid});
 			foreach my $p2(@primer2){
-				next if(!exists $oligo_info{$p2});
+				next if(!defined $NoSpecificity && !exists $bound{$p2});
 				my ($chr, $pos32, $pos52, $strand2, $dis_tg2, $seq2, $len2, $tm2)=@{$oligo_info{$p2}};
 				my ($score2, $score_info2)=@{$oligo_score{$p2}};
 				# score for tm diff 
@@ -356,11 +365,6 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my $sprod=$fulls_prod;
 				my %prod;
 				if(!defined $NoSpecificity){
-					if(!exists $bound{$p1} || !exists $bound{$p2}){
-						print "Warn: $p1 or $p2 No bound info!\n";
-						next;
-					}
-	
 					&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
 					$record{"pro"}{$p1}{$p2}=1;
 					&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
@@ -435,7 +439,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 		}
 	
 		##output
-		my @mk=("A","B","C","D","E","F","G","H","I","J","K","L","M","N");
+		my @mk=("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z");
 		my $n=0;
 		foreach my $pair (@final){
 			my ($size, $aprod)=@{$pair_info{$pair}};

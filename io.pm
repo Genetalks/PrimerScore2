@@ -1,5 +1,5 @@
-my $score_des_probe= "scores of Tm, GC, self-complementary, CG content diff, 5endG, SNPs, polys, bounds.";
-my $score_des_probe_meth= "scores of Tm, GC, self-complementary, CG content diff, 5endG, SNPs, polys, bounds, CpGs, Cs.";
+my $score_des_probe= "scores of Tm, GC, self-complementary, CG content diff, dupGNum, 5endG, SNPs, polys, bounds.";
+my $score_des_probe_meth= "scores of Tm, GC, self-complementary, CG content diff, dupGNum, 5endG, SNPs, polys, bounds, CpGs, Cs.";
 my $score_des_pair_primer= "scores of primer1 3'end to target(Probe 5'end), distance between pair, length diff, Tm diff, specificity of primer pair.";
 my $score_des_pair_probe= "score of probe bounds.";
 my $score_des_primer= "scores of Tm, GC, self-complementary, end3 A num, end3 stability, SNPs, polys, bounds.";

@@ -189,16 +189,32 @@ sub G_content{
 	my @unit = split //, $seq;
 	my $is_G5 = $unit[0] eq "G"? 1: 0;
 	my ($n, $nc, $ng)=(0,0,0);
-
+	my $gdup=0;
+	my $max_gdup=0;
+	my $is_g = 0;
 	for(my $i=0; $i<@unit; $i++){
 		$n++;
 		if($unit[$i] eq "C"){
 			$nc++;
 		}elsif($unit[$i] eq "G"){
+			$is_g=1;
+			if($i-1>=0 && $unit[$i-1] eq "G"){
+				$gdup++;
+			}else{
+				if($gdup>$max_gdup){
+					$max_gdup=$gdup;
+				}
+				$gdup=0;
+			}	
 			$ng++;
 		}
 	}
-	return($is_G5, ($nc-$ng)/$n);
+	if($gdup>$max_gdup){
+		$max_gdup=$gdup;
+	}
+	
+	$max_gdup += $is_g;
+	return($is_G5, ($nc-$ng)/$n, $max_gdup);
 }
 
 

@@ -92,7 +92,7 @@ if(!defined $fbound){
 		die "Wrong file type: must be Common(2column: id seq) when not defined -ib!\n";
 	}
 	my $ftemplate = "$outdir/$fkey.template.fa";
-	`less specific.primer.list|perl -ne '\''{chomp; \@a=split; print \">\$a[0]\\n\$a[1]\\n\";}'\'' >$ftemplate`;
+	`less $foligo|perl -ne '\''{chomp; \@a=split; print \">\$a[0]\\n\$a[1]\\n\";}'\'' >$ftemplate`;
 	my $cmd = "perl $Bin/oligo_evaluation.pl --nohead -p $foligo -t $ftemplate -d $fdatabases -thread $thread -stm $min_tm_spec --NoFilter -k $fkey -maxtime 100000000 -od $outdir";
 	if(defined $Methylation){
 		$cmd .= " --Methylation";

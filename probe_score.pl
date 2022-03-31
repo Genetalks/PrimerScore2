@@ -61,13 +61,13 @@ while(<P>){
 		print F "TM\t$_\n";
 		next;
 	}
-	my ($is_G5, $CGd) = &G_content($seq);
+	my ($is_G5, $CGd, $Gnum) = &G_content($seq);
 	if(!defined $NoFilter && $is_G5){
 		print F "5endG\t$_\n";
 		next;
 	}
-	if(!defined $NoFilter && $CGd<=0){
-		print F "C<G\t$_\n";
+	if(!defined $NoFilter && $Gnum>=3){
+		print F "dupGnum\t$_\n";
 		next;
 	}
 #	if($bnum>$max_bound_num){
@@ -77,9 +77,9 @@ while(<P>){
 	## score
 	my ($sadd, $score_info);
 	if(!defined $Methylation){
-		($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, @{$afeature}, @{$ameth}, $bnumtm, $is_G5, $CGd);
+		($sadd, $score_info)=&probe_oligo_score($opt_tm, $len, @{$afeature}, @{$ameth}, $bnumtm, $is_G5, $CGd, $Gnum);
 	}else{
-		($sadd, $score_info)=&probe_meth_score($opt_tm, $len, @{$afeature}, @{$ameth}, $bnumtm, $is_G5, $CGd);
+		($sadd, $score_info)=&probe_meth_score($opt_tm, $len, @{$afeature}, @{$ameth}, $bnumtm, $is_G5, $CGd, $Gnum);
 	}
 	
 	my @out=(@{$abase}, $sadd, $score_info, @{$afeature}, @{$ameth}, @{$aspec});

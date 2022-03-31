@@ -158,6 +158,9 @@ void pt::tm_calculator::alignment_tm(const std::string &align0, const std::strin
 	t = ((H) / (S + (N * saltCorrection) + RC)) - ABSOLUTE_ZERO;
 	G = (H) - ((ABSOLUTE_ZERO + 37) * (S + (N * saltCorrection)));
 	S = S + (N * saltCorrection);
+	if(H>0){
+		t = -100;
+	}
 
 	// printf("dS=%f, dH=%f, dG=%f, t=%f\n", S, H, G, t);
 	*dS = S;
