@@ -88,7 +88,7 @@ sub primer_meth_score{
 	my $fulls = 10;
 	my @nendA = (1, 1, -1, 3, -1, 8);
 	my @enddG = (-9,-7,-12,-6.2,-14,-5);
-	my @gc = (0.52, 0.6, 0.42, 0.7, 0.32, 0.8);
+	my @gc = (0.52, 0.6, 0.4, 0.7, 0.3, 0.8);
 	my @tm = ($opt_tm, $opt_tm+1, $opt_tm-2, $opt_tm+6, $opt_tm-4, $opt_tm+11);
 	my @self = (-50, 47, -50, 52, -50, 57); ## self tm
 	my @cpg=(4,100,2,100,0,100);

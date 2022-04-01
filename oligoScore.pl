@@ -237,10 +237,16 @@ if($step==1){
 
 my $fmark;
 if(defined $Methylation){
-	&Run("perl $Bin/bisulfite_modify.pl -i $ftemplate -isnp $ftemplate_snp -k $fkey -od $outdir", $sh);
+	my $cmd = "perl $Bin/bisulfite_modify.pl -i $ftemplate -k $fkey -od $outdir";
+	if(defined $ftemplate_snp){
+		$cmd .= " -isnp $ftemplate_snp";
+	}
+	&Run($cmd, $sh);
 	$ftemplate = "$outdir/$fkey.bisulfite.fasta";
 	$fmark = "$outdir/$fkey.bisulfite.mark.fasta";
-	$ftemplate_snp = "$outdir/$fkey.bisulfite_snp.fasta";
+	if(defined $ftemplate_snp){
+		$ftemplate_snp = "$outdir/$fkey.bisulfite_snp.fasta";
+	}
 }
 
 ### oligo design

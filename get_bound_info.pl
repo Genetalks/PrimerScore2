@@ -88,7 +88,7 @@ print STDOUT "\nDone. Total elapsed time : ",time()-$BEGIN_TIME,"s\n";
 # sub function
 # ------------------------------------------------------------------
 sub max_template_len{
-	my ($fa)=$_;
+	my ($fa)=@_;
 	open(I, "$fa") or die $!;
 	$/=">";
 	my $max_len = 0;

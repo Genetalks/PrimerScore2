@@ -33,7 +33,7 @@ my $range_pos;
 my $ptype = "face-to-face";
 my $ctype = "Single";
 my $onum = 3;
-my $max_probe_num=6;
+my $max_probe_num;
 my $PCRsize=1000;
 my $min_eff=0.00001;
 my $max_prodn=50;
@@ -90,6 +90,10 @@ my @rpos;
 if(defined $range_pos){
 	@rpos=split /,/, $range_pos;
 }
+if(!defined $max_probe_num){
+	$max_probe_num = defined $Methylation? 26: 6;
+}
+
 my $ftype;
 my $min_end_match=-1;
 my %tlength;
@@ -432,7 +436,8 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				push @final, $pair_sort[$i];
 				$recordt{$d1.",".$d2}=1;
 				$num++;
-				last if($num==$onum || defined $fprobe); ## probe: only one pair for one probe
+#				last if($num==$onum || defined $fprobe); ## probe: only one pair for one probe
+				last if($num==$onum); ## probe: only one pair for one probe
 			}
 		}else{
 			@final = &average($dis, $rfloat, \%pos_pair,\%score_pair,"UP"); ##my ($len, $dis, $rfloat, $apos, $ascore,$select)
