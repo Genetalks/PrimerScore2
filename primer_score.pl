@@ -204,21 +204,24 @@ if(!defined $NoSpecificity){
 	while(<B>){
 		chomp;
 		my ($id, $strand, $chr, $pos5, $seq, $tm, $end_match, $mvisual)=split /\t/, $_;
-		if(!defined $NoFilter){
+        #if(!defined $NoFilter){
 			if($id ne $last_id){
+		        if(!defined $NoFilter){
 				if($n>$max_bound_num){
 					print F join("\t", "BoundsTooMore", $id, $n),"\n";
 					delete $bound{$last_id};
 					delete $oligo_info{$last_id};
 				}
+                }
 				$last_id = $id;
 				$n=0;
 			}
-			$n++;
-		}
+        #}
 		my $len = length $seq;
 		my $pos3=$strand eq "+"? $pos5+$len-1: $pos5-$len+1;
-		push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end_match, $mvisual, $seq];
+		push @{$bound{$id}}, [$chr, $strand, $pos3, $pos5, $tm, $end_match, $mvisual, $seq, undef, $n, undef, undef, undef];
+		#                                                                                   p1/p2, index, eff,  ef_tm, ef_end
+		$n++;
 	}
 	close(B);
 	if($n>$max_bound_num){
@@ -228,7 +231,7 @@ if(!defined $NoSpecificity){
 	}
 }
 close(F);
-	
+
 my %probe;
 if(defined $fprobe){
 	&SHOW_TIME("#Read in Probe file");
@@ -341,7 +344,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				$pform="Pos5";
 				$pos=$pos5;
 			}
-			my ($sd, $pmin, $pmax)=&primer2_scope($ptype, $strand, $pos, $rdis[-2], $rdis[-1]);
+			my ($sd, $pmin, $pmax)=&primer2_scope(\$ptype, $strand, $pos, $rdis[-2], $rdis[-1]);
 			my @condv2=($sd, $pform, $pmin.",".$pmax);
 			
 			my @primer2=&get_candidate(\@condv2, $oligo_pos{$tid});
@@ -369,12 +372,12 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my $sprod=$fulls_prod;
 				my %prod;
 				if(!defined $NoSpecificity){
-					&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn); ## 1<-->2
-					$record{"pro"}{$p1}{$p2}=1;
-					&caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
-					$record{"pro"}{$p1}{$p1}=1;
-					&caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
-					$record{"pro"}{$p2}{$p2}=1;
+					&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, 3*$max_prodn); ## 1<-->2
+					# $record{"pro"}{$p1}{$p2}=1;
+					# &caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
+					# $record{"pro"}{$p1}{$p1}=1;
+					# &caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
+					# $record{"pro"}{$p2}{$p2}=1;
 					my @effs = sort{$b<=>$a} values %{$prod{$tid}{$tid}};
 					my $pnum=scalar @effs;
 					$sprod = &bound_score($pnum, join(",",@effs), $fulls_prod, "Eff");
@@ -532,14 +535,9 @@ close(O);
 open(B, ">$outdir/$fkey.final.bound.info") or die $!;
 foreach my $idn(sort {$a cmp $b} keys %output){
 	my $id=$output{$idn};
-	foreach my $chr(sort {$a cmp $b} keys %{$bound{$id}}){
-		foreach my $strand (sort {$a cmp $b} keys %{$bound{$id}{$chr}}){
-			my @info = @{$bound{$id}{$chr}{$strand}};
-			for(my $i=0; $i<@info; $i++){
-				my ($pos3, $pos5, $tm, $end_match, $mvisual, $seq)=@{$info[$i]};
-				print B join("\t", $idn, $strand, $chr, $pos3, $seq, $tm, $end_match, $mvisual),"\n";
-			}
-		}
+
+	foreach (sort {$a->[0] cmp $b->[0] or $a->[1] cmp $b->[1]} @{$bound{$id}}){
+		print B join("\t", $idn, $_->[1], $_->[0], $_->[2], $_->[7], $_->[4], $_->[5], $_->[6]),"\n";	
 	}
 }
 close(B);

@@ -32,105 +32,293 @@ sub probe_bounds_on_products{
 	return $n;
 }
 
-#push @{$bound{$id}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end3_base, $mvisual];
+#push @{$bound{$id}{$chr}{$strand}}, [$chr, $strand, $pos3, $pos5, $tm, $end3_base, $mvisual, $seq, p1_p2, index, ef1, ef_tm, ef_end];
 sub caculate_product{
 	my ($tid1, $p1, $tid2, $p2, $abound1, $abound2, $ptype, $aprod, $arecord, $PCRsize, $opt_tm, $min_tm, $mind, $maxd, $min_eff, $Max_prodn)=@_;
-	my %bdp1=%{$abound1};
-	my %bdp2=%{$abound2};
+	my $bdp1=$abound1; # an array of alignment pos
+	my $bdp2=$abound2;
 	my $prodn=0;
-	foreach my $chr(keys %bdp1){
-		foreach my $sd(keys %{$bdp1{$chr}}){
-			my @bds=@{$bdp1{$chr}{$sd}};
-			for(my $i=0; $i<@bds; $i++){
-				my ($tm1, $end3_base1, $mvisual1)=@{$bds[$i]}[2..4];
-##                Nested		 face-to-face         back-to-back
+
+    for (@$bdp1){
+        $_->[8] = 0;
+    }    
+    for (@$bdp2){
+        $_->[8] = 1;
+    }
+
+	my @all_align_info = (@$bdp1, @$bdp2); #all alignment info of p1 and p2
+
+	##                Nested		 face-to-face         back-to-back
 ##P1			 	  -->| 		   |-->                    |-->
 ##P2min		  -->|...      		    <--|             <--|...  
 ##P2max			      -->| 		       ...<--|                 ...<--|   
-				my ($ixpos, $dmin, $dmax);
-				if($ptype eq "Nested"){
-					$ixpos=0; #pos3
-					#Nested: P1 --->|   x        distance range: 5,30 (mind>0)
-					#          P2 --->| x
+	my ($ixpos, $dmin, $dmax);
+	if($ptype eq "Nested"){
+		$ixpos=2; #pos3
+		#Nested: P1 --->|   x        distance range: 5,30 (mind>0)
+		#          P2 --->| x
 
-					#Nested: P2 --->|   x        distance range: -30,-5 (mind<0)
-					#          P1 --->| x
-					if($mind>0){
-						$dmin=0;
-						$dmax=$PCRsize;
-					}else{
-						$dmin=-1*$PCRsize;
-						$dmax=0;
-					}
-				}elsif($ptype eq "back-to-back"){
-					$ixpos=1; #pos5
-					$dmin=-1*$PCRsize+2*20; #20: primer min len
-					$dmax=$PCRsize;
-				}else{ ##face-to-face
-					$ixpos=1; #pos5
-					$dmin=30;
-					$dmax=$PCRsize;
-				}
-				my $pos=$bds[$i][$ixpos];
-				my ($sd2, $pmin, $pmax)=&primer2_scope($ptype,$sd,$pos,$dmin,$dmax);
-				next if(!exists $bdp2{$chr}{$sd2});
-				my @bds2=@{$bdp2{$chr}{$sd2}};
-				for(my $j=0; $j<@bds2; $j++){
-					my ($tm2, $end3_base2, $mvisual2)=@{$bds2[$j]}[2..4];
-					my $pos2 = $bds2[$j][$ixpos];
-					if($pos2>=$pmin && $pos2<=$pmax){
-						##
-						my ($eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end);
-						my $b1=join(",",$chr, $sd, $bds[$i][0], $mvisual1);
-						if(exists $arecord->{"eff"}->{$b1}){
-							($eff1, $eff1_tm, $eff1_end)=@{$arecord->{"eff"}->{$b1}};
-						}else{
-							($eff1, $eff1_tm, $eff1_end)=&efficiency($tm1, $mvisual1, $opt_tm, $min_tm, $end3_base1);
-							@{$arecord->{"eff"}->{$b1}}=($eff1, $eff1_tm, $eff1_end);
-						}
-						my $b2=join(",", $chr, $sd2, $bds2[$j][0], $mvisual2);
-						if(exists $arecord->{"eff"}->{$b2}){
-							($eff2, $eff2_tm, $eff2_end)=@{$arecord->{"eff"}->{$b2}};
-						}else{
-							($eff2, $eff2_tm, $eff2_end)=&efficiency($tm2, $mvisual2, $opt_tm, $min_tm, $end3_base2);
-							@{$aeff->{$b2}}=($eff2, $eff2_tm, $eff2_end);
-						}
-						my $dis;
-						if($sd eq "+"){
-							$dis = $ixpos==0? $pos2-$pos: $pos2-$pos+1;
-						}else{
-							$dis = $ixpos==0? $pos-$pos2: $pos-$pos2+1;
-						}
-			
-						my @rsize=($mind,$maxd, $dmin, $dmax);
-						my $eff_dis=&score_single($dis, 1, @rsize);
-						my $eff=$eff1*$eff2*$eff_dis;
-						my $prob=$dis."/".join(",", $chr, $p1, $sd.$bds[$i][1], $mvisual1,sprintf("%.2f",$tm1),$p2, $sd2.$bds2[$j][1],$mvisual2,sprintf("%.2f",$tm2));
-#						if($chr eq "chr2" && $tid1 eq "Sepci-2"){
-#							print join("\t", $tid1, $prob, $eff, $eff1, $eff1_tm, $eff1_end, $eff2, $eff2_tm, $eff2_end),"\n";
-#						}
-						next if($eff<$min_eff);
-						$aprod->{$tid1}{$tid2}{$prob}=$eff;
-					#	print join("\t", $eff, $prob),"\n";
-					#	print Dumper %{$aprod};
-						$prodn++;
-						if($prodn==$Max_prodn){
-							$aprod->{$tid1}{$tid2}{"Max"}=1; ## mark:reach max production num
-							return $prodn;
-						}
-					}
-				}
+		#Nested: P2 --->|   x        distance range: -30,-5 (mind<0)
+		#          P1 --->| x
+		if($mind>0){
+			$dmin=0;
+			$dmax=$PCRsize;
+		}else{
+			$dmin=-1*$PCRsize;
+			$dmax=0;
+		}
+	}elsif($ptype eq "back-to-back"){
+			$ixpos=3; #pos5
+			$dmin=-1*$PCRsize+2*20; #20: primer min len
+			$dmax=$PCRsize;
+	}else{ ##face-to-face
+			$ixpos=3; #pos5
+			$dmin=30;
+			$dmax=$PCRsize;
+	}
+
+    my $is_nested_mode = $ptype eq "Nested";
+
+	#sort according to chr and pos
+	@all_align_info = sort { $a->[0] cmp $b->[0] or $a->[$ixpos] <=> $b->[$ixpos]} @all_align_info;
+
+	# iter all alignments and found effective products
+	for (my $i = 0; $i < @all_align_info; ++$i){  # O(n+m) 
+		my $a = $all_align_info[$i];
+        my $sd = $a->[1];
+        my $pos = $a->[$ixpos];
+        my $sd2 = $sd;
+        my $is_rev = $sd eq "-";
+        if (!$is_nested_mode){
+            $sd2 = ("+", "-")[1-$is_rev];
+        }
+        my $pmin = $is_rev ? $pos - $dmax : $pos + $dmin;;
+        my $pmax = $is_rev ? $pos - $dmin : $pos + $dmax;
+        #my ($sd2, $pmin, $pmax)=&primer2_scope(\$ptype, $a->[1], $a->[$ixpos], $dmin, $dmax);
+        for (my $j = $i + 1; ; $j++){ # look forward
+			last if ($j >= @all_align_info); # no more alignments
+			my $b = $all_align_info[$j];
+			last if ($b->[$ixpos] > $pmax);  # exceed valid dist range
+			last if ($b->[0] ne $a->[0]);  # diff chr
+			next if ($b->[1] ne $sd2); # not valid strand
+			# $a and $b create effective product
+			my $dis;
+			if($a->[1] eq "+"){
+				$dis = $ixpos==2? $b->[$ixpos]-$a->[$ixpos]: $b->[$ixpos]-$a->[$ixpos]+1;
+			}else{
+				$dis = $ixpos==2? $a->[$ixpos]-$b->[$ixpos]: $a->[$ixpos]-$b->[$ixpos]+1;
+			}
+
+            my $eff_dis = &score_single($dis, 1, $mind,$maxd, $dmin, $dmax);
+		    if (!defined $a->[10]){
+                ($a->[10], $a->[11], $a->[12]) = &efficiency($a->[4], $a->[6], $opt_tm, $min_tm, $a->[5]);
+            }
+		    if (!defined $b->[10]){
+                ($b->[10], $b->[11], $b->[12]) = &efficiency($b->[4], $b->[6], $opt_tm, $min_tm, $b->[5]);
+            }
+			my $eff=$a->[10]*$b->[10]*$eff_dis;
+			next if($eff<$min_eff);
+			$prodn++;
+			#my $prob=$dis."/".join(",", $a->[8], $b->[8], $a->[9], $b->[9]);
+			my $prob=$dis."/".join(",", $a->[0], $a->[8] ? $p2 : $p1, $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $b->[8] ? $p2 : $p1, $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
+			$aprod->{$tid1}{$tid2}{$prob}=$eff;
+			if($prodn==$Max_prodn){ # p1_p2, p1_p1, p2_p2
+				$aprod->{$tid1}{$tid2}{"Max"}=1; ## mark:reach max production num
+				return $prodn;
 			}
 		}
+		for (my $j = $i - 1; ; $j--){ # look backward
+			last if ($j < 0);
+			my $b = $all_align_info[$j];
+			last if ($b->[$ixpos] < $pmin);  # exceed valid dist range
+			last if ($b->[0] ne $a->[0]);
+			next if ($b->[1] ne $sd2);
+
+			# $a and $b create effective product
+			my $dis = 0;
+			if($a->[1] eq "+"){
+				$dis = $ixpos==2? $b->[$ixpos]-$a->[$ixpos]: $b->[$ixpos]-$a->[$ixpos]+1;
+			}else{
+				$dis = $ixpos==2? $a->[$ixpos]-$b->[$ixpos]: $a->[$ixpos]-$b->[$ixpos]+1;
+			}
+
+			my $eff_dis=&score_single($dis, 1, $mind,$maxd, $dmin, $dmax);
+		    if (!defined $a->[10]){
+                ($a->[10], $a->[11], $a->[12]) = &efficiency($a->[4], $a->[6], $opt_tm, $min_tm, $a->[5]);
+            }
+		    if (!defined $b->[10]){
+                ($b->[10], $b->[11], $b->[12]) = &efficiency($b->[4], $b->[6], $opt_tm, $min_tm, $b->[5]);
+            }
+            my $eff=$a->[10]*$b->[10]*$eff_dis;
+			next if($eff<$min_eff);
+			$prodn++;
+			#my $prob=$dis."/".join(",", $a->[8], $b->[8], $a->[9], $b->[9]);
+			my $prob=$dis."/".join(",", $a->[0], $a->[8] ? $p2 : $p1, $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $b->[8] ? $p2 : $p1, $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
+			$aprod->{$tid1}{$tid2}{$prob}=$eff;
+			if($prodn==$Max_prodn){ # p1_p2, p1_p1, p2_p2
+				$aprod->{$tid1}{$tid2}{"Max"}=1; ## mark:reach max production num
+				return $prodn;
+			}
+
+		}
 	}
+	
 	return ($prodn);
 }
+
+# [$chr, $strand, $pos3, $pos5, $tm, $end3_base, $mvisual, $tid, $type, undef, undef, undef, undef]
+sub caculate_product_evaluation{
+	my ($all_align_info, $ptype, $aprod, $arecord, $PCRsize, $opt_tm, $min_tm, $mind, $maxd, $min_eff, $Max_prodn, $etype, $eval_all, $tp0)=@_;	
+	my $prodn=0;
+
+	##                Nested		 face-to-face         back-to-back
+##P1			 	  -->| 		   |-->                    |-->
+##P2min		  -->|...      		    <--|             <--|...  
+##P2max			      -->| 		       ...<--|                 ...<--|   
+	my ($ixpos, $dmin, $dmax);
+	if($ptype eq "Nested"){
+		$ixpos=2; #pos3
+		#Nested: P1 --->|   x        distance range: 5,30 (mind>0)
+		#          P2 --->| x
+
+		#Nested: P2 --->|   x        distance range: -30,-5 (mind<0)
+		#          P1 --->| x
+		if($mind>0){
+			$dmin=0;
+			$dmax=$PCRsize;
+		}else{
+			$dmin=-1*$PCRsize;
+			$dmax=0;
+		}
+	}elsif($ptype eq "back-to-back"){
+			$ixpos=3; #pos5
+			$dmin=-1*$PCRsize+2*20; #20: primer min len
+			$dmax=$PCRsize;
+	}else{ ##face-to-face
+			$ixpos=3; #pos5
+			$dmin=30;
+			$dmax=$PCRsize;
+	}
+
+    my $is_nested_mode = $ptype eq "Nested";
+
+	#sort according to chr and pos
+	@$all_align_info = sort { $a->[0] cmp $b->[0] or $a->[$ixpos] <=> $b->[$ixpos]} @$all_align_info;
+
+	# iter all alignments and found effective products
+	for (my $i = 0; $i < @$all_align_info; ++$i){  # O(n+m) 
+		my $a = $all_align_info->[$i];
+		next if($a->[8] eq "P");
+		next if($etype eq "SinglePlex" && !defined $eval_all && $a->[8] ne $tp0); ## only evalue one type 
+		my $tid1 = $a->[7];
+        my $sd = $a->[1];
+        my $pos = $a->[$ixpos];
+        my $sd2 = $sd;
+        my $is_rev = $sd eq "-";
+        if (!$is_nested_mode){
+            $sd2 = ("+", "-")[1-$is_rev];
+        }
+        my $pmin = $is_rev ? $pos - $dmax : $pos + $dmin;;
+        my $pmax = $is_rev ? $pos - $dmin : $pos + $dmax;
+        #my ($sd2, $pmin, $pmax)=&primer2_scope(\$ptype, $a->[1], $a->[$ixpos], $dmin, $dmax);
+        for (my $j = $i + 1; ; $j++){ # look forward
+			last if ($j >= @$all_align_info); # no more alignments
+			my $b = $all_align_info->[$j];
+			last if ($b->[$ixpos] > $pmax);  # exceed valid dist range
+			last if ($b->[0] ne $a->[0]);  # diff chr
+			next if($b->[8] eq "P");
+			next if ($b->[1] ne $sd2); # not valid strand
+			next if(!defined $eval_all && $a->[8] eq $b->[8]);
+
+			my $tid2 = $b->[7];
+			next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
+			# $a and $b create effective product
+			my $dis;
+			if($a->[1] eq "+"){
+				$dis = $ixpos==2? $b->[$ixpos]-$a->[$ixpos]: $b->[$ixpos]-$a->[$ixpos]+1;
+			}else{
+				$dis = $ixpos==2? $a->[$ixpos]-$b->[$ixpos]: $a->[$ixpos]-$b->[$ixpos]+1;
+			}
+
+            my $eff_dis = &score_single($dis, 1, $mind,$maxd, $dmin, $dmax);
+		    if (!defined $a->[10]){
+                ($a->[10], $a->[11], $a->[12]) = &efficiency($a->[4], $a->[6], $opt_tm, $min_tm, $a->[5]);
+            }
+		    if (!defined $b->[10]){
+                ($b->[10], $b->[11], $b->[12]) = &efficiency($b->[4], $b->[6], $opt_tm, $min_tm, $b->[5]);
+            }
+			my $eff=$a->[10]*$b->[10]*$eff_dis;
+			next if($eff<$min_eff);
+			$prodn++;
+			
+			if ($tid1 lt $tid2){
+				my $prob=$dis."/".join(",", $a->[0], $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
+				$aprod->{$tid1}{$tid2}{$prob}=$eff;
+			}else{
+				my $prob=$dis."/".join(",", $b->[0], $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]), $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]));
+				$aprod->{$tid2}{$tid1}{$prob}=$eff;
+			}
+			
+			if($prodn==$Max_prodn){ # p1_p2, p1_p1, p2_p2
+				$aprod->{$tid1}{$tid2}{"Max"}=1; ## mark:reach max production num
+				return $prodn;
+			}
+		}
+		for (my $j = $i - 1; ; $j--){ # look backward
+			last if ($j < 0);
+			my $b = $all_align_info->[$j];
+			last if ($b->[$ixpos] < $pmin);  # exceed valid dist range
+			last if ($b->[0] ne $a->[0]);
+			next if($b->[8] eq "P");
+			next if ($b->[1] ne $sd2); # not valid strand
+			next if(!defined $eval_all && $a->[8] eq $b->[8]);
+			my $tid2 = $b->[7];
+			next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
+
+			# $a and $b create effective product
+			my $dis = 0;
+			if($a->[1] eq "+"){
+				$dis = $ixpos==2? $b->[$ixpos]-$a->[$ixpos]: $b->[$ixpos]-$a->[$ixpos]+1;
+			}else{
+				$dis = $ixpos==2? $a->[$ixpos]-$b->[$ixpos]: $a->[$ixpos]-$b->[$ixpos]+1;
+			}
+
+			my $eff_dis=&score_single($dis, 1, $mind,$maxd, $dmin, $dmax);
+		    if (!defined $a->[10]){
+                ($a->[10], $a->[11], $a->[12]) = &efficiency($a->[4], $a->[6], $opt_tm, $min_tm, $a->[5]);
+            }
+		    if (!defined $b->[10]){
+                ($b->[10], $b->[11], $b->[12]) = &efficiency($b->[4], $b->[6], $opt_tm, $min_tm, $b->[5]);
+            }
+            my $eff=$a->[10]*$b->[10]*$eff_dis;
+			next if($eff<$min_eff);
+			$prodn++;
+			
+			if ($tid1 lt $tid2){
+				my $prob=$dis."/".join(",", $a->[0], $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
+				$aprod->{$tid1}{$tid2}{$prob}=$eff;
+			}else{
+				my $prob=$dis."/".join(",", $b->[0], $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]), $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]));
+				$aprod->{$tid2}{$tid1}{$prob}=$eff;
+			}
+			
+			if($prodn==$Max_prodn){ # p1_p2, p1_p1, p2_p2
+				$aprod->{$tid1}{$tid2}{"Max"}=1; ## mark:reach max production num
+				return $prodn;
+			}
+
+		}
+	}
+	
+	return ($prodn);
+}
+
 
 #my ($sd, $pmin, $pmax)=&primer2_scope($type, $strand,$pos, $dis_min, $dis_max);
 sub primer2_scope{
 	my ($type, $strand, $pos, $dis_min, $dis_max)=@_;
 	my ($sd, $pmin, $pmax);
-	if($type ne "Nested"){ ## strand: opposite; Dis: from pos5
+	if($$type ne "Nested"){ ## strand: opposite; Dis: from pos5
 		if($strand eq "+"){
 			$sd="-";
 			$pmin=$pos+$dis_min;

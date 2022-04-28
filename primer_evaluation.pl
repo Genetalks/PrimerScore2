@@ -129,6 +129,7 @@ close(I);
 my %bound;
 my %product;
 my %productp;
+my @all_alignments = ();
 if(!defined $NoSpecificity){
 	my %boundm;
 	&SHOW_TIME("#Read in Bound file");
@@ -142,9 +143,13 @@ if(!defined $NoSpecificity){
 		if(!defined $tid || !defined $type){
 			die "Wrong oligo ID $id: Primer ID must end by -F/R/1/2, eg. xxx-F, xxx-R, xxx-1, xxx-2; Probe ID must end by -P, eg. xxx-P!\n";
 		}
+
 		my $len = length $seq;
 		my $pos3=$strand eq "+"? $pos5+$len-1: $pos5-$len+1;
-		push @{$bound{$type}{$tid}{$chr}{$strand}}, [$pos3, $pos5, $tm, $end3_base, $mvisual, $tid];
+		my $a = [$chr, $strand, $pos3, $pos5, $tm, $end3_base, $mvisual, $tid, $type, undef, undef, undef, undef];
+		#                                                                             no-use  eff    eff_tm	 eff_end       
+		push @{$bound{$type}{$tid}}, $a;
+		push @all_alignments, $a;
 	}
 	close(B);
 	foreach my $id(keys %record){
@@ -153,26 +158,9 @@ if(!defined $NoSpecificity){
 		}
 	}
 	
-	my %record;
 	my @tps = sort {$a cmp $b} keys %bound;
 	&SHOW_TIME("#Evalue");
-	foreach my $tp1(@tps){
-		next if($tp1 eq "P"); 
-		## AllEvalue: F<->R F<->F R<->R
-		next if($etype eq "SinglePlex" && !defined $AllEvalue && $tp1 ne $tps[0]); ## only evalue one type 
-		foreach my $tid1 (sort {$a cmp $b} keys %{$bound{$tp1}}){
-			foreach my $tp2(@tps){
-				next if($tp2 eq "P");
-				next if(!defined $AllEvalue && $tp2 eq $tp1); ## Only evalue product between pairs with different types, F<-->R; 1<-->2
-				foreach my $tid2(keys %{$bound{$tp2}}){
-					next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
-					next if(exists $record{"pro"}{$tid2."-".$tp2}{$tid1."-".$tp1});
-					&caculate_product($tid1, $tid1."-".$tp1, $tid2, $tid2."-".$tp2, $bound{$tp1}{$tid1}, $bound{$tp2}{$tid2}, $ptype,\%product, \%record, $PCRsize, $opt_tm, $min_tm_spec, $mind, $maxd, $min_eff, $max_prodn);
-					$record{"pro"}{$tid1."-".$tp1}{$tid2."-".$tp2}=1;
-				}
-			}
-		}
-	}
+	&caculate_product_evaluation(\@all_alignments, $ptype, \%product, \%record, $PCRsize, $opt_tm, $min_tm_spec, $mind, $maxd, $min_eff, @all_alignments*@all_alignments, $etype, $AllEvalue, $tps[0]);
 	
 	if($is_probe==1){#Probe
 		foreach my $tid(keys %{$bound{"P"}}){
@@ -270,8 +258,8 @@ if($ftype eq "Common"){ ## score
 ## output cross product
 if($etype eq "MultiPlex" && !defined $NoSpecificity){
 	open(C, ">$outdir/$fkey.final.cross.product") or die $!;
-	foreach my $tid1(keys %product){
-		foreach my $tid2(keys %{$product{$tid1}}){
+	foreach my $tid1(sort {$a cmp $b} keys %product){
+		foreach my $tid2(sort {$a cmp $b} keys %{$product{$tid1}}){
 			my ($tid1_t)=$tid1=~/(\S+)-[UDP]-/;
 			my ($tid2_t)=$tid2=~/(\S+)-[UDP]-/;
 			$tid1_t = defined $tid1_t? $tid1_t: $tid1;
