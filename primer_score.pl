@@ -46,7 +46,6 @@ GetOptions(
 				"ib:s"=>\$fbound,
 				"ip:s"=>\$fprobe,
 				"k:s"=>\$fkey,
-				"Probe:s"=>\$fprobe,
 				"Methylation:s"=>\$Methylation,
 				"NoSpecificity:s"=>\$NoSpecificity,
 				"NoFilter:s"=>\$NoFilter,
@@ -81,8 +80,10 @@ my @lendif=(0,4,0,8); ## tm diff between F and R primer
 my @tmdif=(0,3,0,6); ## tm diff between F and R primer
 #my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(25,25,10,10,30);
 my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(20,30,10,10,30);
+my ($w1, $w2, $wr, $wp)=(0.3, 0.3, 0.4, 0);
 if(defined $fprobe){
 	($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(40,20,10,10,20);
+	($w1, $w2, $wr, $wp)=(0.25, 0.25, 0.25, 0.25);
 }
 my @rdis=split /,/, $range_dis;
 my @rpos;
@@ -384,7 +385,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				}
 					
 				# score pair
-				my $stotal=$score+$score2;
+				my $stotal=0;
 				if(defined $fprobe){#Probe
 					# probe num on products
 					my %pdr;
@@ -396,10 +397,12 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 						$spdr = &bound_score($pdnum, join(",", @pdeffs), $fulls_prod, "Eff"); ## probe specificity
 						$sprod=($sprod*1+$spdr*2)/3; ## specificity weight is primer:probe=1:2
 					}
-					$stotal+=$probe{$tid}{$pb}->[0];
+					$stotal+=$probe{$tid}{$pb}->[0] * $wp;
 					@{$probe_final{$p1.",".$p2}}=($spdr, $pdr{$pb});
 				}
-				$stotal +=$spos+$slend+$stmd+$sdis+$sprod;
+				my $srel=$spos+$slend+$stmd+$sdis+$sprod;
+				$stotal = $score*$w1 + $score2*$w2 + $srel*$wr;
+				$stotal = sprintf("%.1f", $stotal);
 
 				$score_pair{$p1.",".$p2}=$stotal;
 				@{$score_pair_info{$p1.",".$p2}}=($spos, $sdis, $slend, $stmd, $sprod);

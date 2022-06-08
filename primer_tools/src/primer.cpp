@@ -413,7 +413,7 @@ namespace pt
             // caculate tm
             tm_calc->alignment_tm(astr, pseq, rseq, &tm, &dG, &dS, &dH);
 #ifdef DEBUG
-            std::cout << chr << "\t" << rstart << "\t" << strand << "\t" << align << "\t" << tm << "\t" << dG << "\t" << dS << "\t" << dH << std::endl;
+            std::cout << chr << "\t" << rstart << "\t" << strand << "\t" << astr << "\t" << tm << "\t" << dG << "\t" << dS << "\t" << dH << std::endl;
 #endif
             if(tm < min_bound_tm+5){
 				alignstr_filter_map.insert(std::pair<std::string, double>{astr, tm});

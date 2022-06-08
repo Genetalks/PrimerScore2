@@ -45,6 +45,10 @@ if (${USE_VMP_PROTECT})
     ADD_DEFINITIONS(-DUSE_VMP)
 endif()
 
+if (${PRINT_DEBUG_INFO})
+	ADD_DEFINITIONS(-DDEBUG)
+endif()
+
 include("cmake/googlemiscs.cmake")
 include("cmake/onetbb.cmake")
 include("cmake/htslib.cmake")

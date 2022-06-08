@@ -255,7 +255,13 @@ sub caculate_product_evaluation{
 				my $prob=$dis."/".join(",", $a->[0], $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
 				$aprod->{$tid1}{$tid2}{$prob}=$eff;
 			}else{
-				my $prob=$dis."/".join(",", $b->[0], $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]), $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]));
+				my $prob;
+				if($a->[8] lt $b->[8]){
+					$prob=$dis."/".join(",", $a->[0], $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
+
+				}else{
+					$prob=$dis."/".join(",", $b->[0], $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]), $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]));
+				}
 				$aprod->{$tid2}{$tid1}{$prob}=$eff;
 			}
 			
@@ -264,50 +270,50 @@ sub caculate_product_evaluation{
 				return $prodn;
 			}
 		}
-		for (my $j = $i - 1; ; $j--){ # look backward
-			last if ($j < 0);
-			my $b = $all_align_info->[$j];
-			last if ($b->[$ixpos] < $pmin);  # exceed valid dist range
-			last if ($b->[0] ne $a->[0]);
-			next if($b->[8] eq "P");
-			next if ($b->[1] ne $sd2); # not valid strand
-			next if(!defined $eval_all && $a->[8] eq $b->[8]);
-			my $tid2 = $b->[7];
-			next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
-
-			# $a and $b create effective product
-			my $dis = 0;
-			if($a->[1] eq "+"){
-				$dis = $ixpos==2? $b->[$ixpos]-$a->[$ixpos]: $b->[$ixpos]-$a->[$ixpos]+1;
-			}else{
-				$dis = $ixpos==2? $a->[$ixpos]-$b->[$ixpos]: $a->[$ixpos]-$b->[$ixpos]+1;
-			}
-
-			my $eff_dis=&score_single($dis, 1, $mind,$maxd, $dmin, $dmax);
-		    if (!defined $a->[10]){
-                ($a->[10], $a->[11], $a->[12]) = &efficiency($a->[4], $a->[6], $opt_tm, $min_tm, $a->[5]);
-            }
-		    if (!defined $b->[10]){
-                ($b->[10], $b->[11], $b->[12]) = &efficiency($b->[4], $b->[6], $opt_tm, $min_tm, $b->[5]);
-            }
-            my $eff=$a->[10]*$b->[10]*$eff_dis;
-			next if($eff<$min_eff);
-			$prodn++;
-			
-			if ($tid1 lt $tid2){
-				my $prob=$dis."/".join(",", $a->[0], $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
-				$aprod->{$tid1}{$tid2}{$prob}=$eff;
-			}else{
-				my $prob=$dis."/".join(",", $b->[0], $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]), $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]));
-				$aprod->{$tid2}{$tid1}{$prob}=$eff;
-			}
-			
-			if($prodn==$Max_prodn){ # p1_p2, p1_p1, p2_p2
-				$aprod->{$tid1}{$tid2}{"Max"}=1; ## mark:reach max production num
-				return $prodn;
-			}
-
-		}
+#		for (my $j = $i - 1; ; $j--){ # look backward
+#			last if ($j < 0);
+#			my $b = $all_align_info->[$j];
+#			last if ($b->[$ixpos] < $pmin);  # exceed valid dist range
+#			last if ($b->[0] ne $a->[0]);
+#			next if($b->[8] eq "P");
+#			next if ($b->[1] ne $sd2); # not valid strand
+#			next if(!defined $eval_all && $a->[8] eq $b->[8]);
+#			my $tid2 = $b->[7];
+#			next if($etype eq "SinglePlex" && $tid2 ne $tid1); ## SinglePlex: not evalue product between different tid
+#
+#			# $a and $b create effective product
+#			my $dis = 0;
+#			if($a->[1] eq "+"){
+#				$dis = $ixpos==2? $b->[$ixpos]-$a->[$ixpos]: $b->[$ixpos]-$a->[$ixpos]+1;
+#			}else{
+#				$dis = $ixpos==2? $a->[$ixpos]-$b->[$ixpos]: $a->[$ixpos]-$b->[$ixpos]+1;
+#			}
+#
+#			my $eff_dis=&score_single($dis, 1, $mind,$maxd, $dmin, $dmax);
+#		    if (!defined $a->[10]){
+#                ($a->[10], $a->[11], $a->[12]) = &efficiency($a->[4], $a->[6], $opt_tm, $min_tm, $a->[5]);
+#            }
+#		    if (!defined $b->[10]){
+#                ($b->[10], $b->[11], $b->[12]) = &efficiency($b->[4], $b->[6], $opt_tm, $min_tm, $b->[5]);
+#            }
+#            my $eff=$a->[10]*$b->[10]*$eff_dis;
+#			next if($eff<$min_eff);
+#			$prodn++;
+#			
+#			if ($tid1 lt $tid2){
+#				my $prob=$dis."/".join(",", $a->[0], $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]), $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]));
+#				$aprod->{$tid1}{$tid2}{$prob}=$eff;
+#			}else{
+#				my $prob=$dis."/".join(",", $b->[0], $tid2."-".$b->[8], $b->[1].$b->[3], $b->[6], sprintf("%.2f", $b->[4]), $tid1."-".$a->[8], $a->[1].$a->[3], $a->[6], sprintf("%.2f", $a->[4]));
+#				$aprod->{$tid2}{$tid1}{$prob}=$eff;
+#			}
+#			
+#			if($prodn==$Max_prodn){ # p1_p2, p1_p1, p2_p2
+#				$aprod->{$tid1}{$tid2}{"Max"}=1; ## mark:reach max production num
+#				return $prodn;
+#			}
+#
+#		}
 	}
 	
 	return ($prodn);

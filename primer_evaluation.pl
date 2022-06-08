@@ -28,10 +28,10 @@ my $min_tm_spec=45;
 my $opt_tm = 60;
 my $opt_tm_probe = 70;
 my $max_prodn=50;
-my $range;
 my $thread = 10;
 my $etype="SinglePlex";
 my ($AllEvalue, $OutAllProduct, $Methylation, $NoSpecificity);
+my $range = "120,160,80,200";
 GetOptions(
 				"help|?" =>\&USAGE,
 				"io:s"=>\$foligo,
@@ -59,17 +59,13 @@ $outdir||="./";
 `mkdir $outdir`	unless (-d $outdir);
 $outdir=AbsolutePath("dir",$outdir);
 
-if($ptype eq "face-to-face"){
-	$range=defined $range? $range:"80,200";
-}elsif($ptype eq "Nested"){
-	$range=defined $range? $range:"-30,-5";
-}elsif($ptype eq "back-to-back"){
-	$range=defined $range? $range:"-15,0";
-}else{
-	die "Wrong primer type! Must be face-to-face, back-to-back or Nested!\n";
-}
-my ($mind, $maxd)=split /,/, $range;
+my @lendif=(0,4,0,8); ## tm diff between F and R primer
+my @tmdif=(0,3,0,6); ## tm diff between F and R primer
+my @rdis=split /,/, $range;
+my ($mind, $maxd)=($rdis[2], $rdis[3]);
 
+my ($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(20,30,10,10,30);
+my ($w1, $w2, $wr, $wp)=(0.3, 0.3, 0.4, 0);
 
 my $fevalue;
 my $ftype;
@@ -125,6 +121,10 @@ while(<I>){
 }
 close(I);
 
+if($is_probe){
+	($fulls_pos, $fulls_dis, $fulls_lend, $fulls_tmd, $fulls_prod)=(40,20,10,10,20);
+	($w1, $w2, $wr, $wp)=(0.25, 0.25, 0.25, 0.25);
+}
 ### evalue combination oligos
 my %bound;
 my %product;
@@ -173,6 +173,21 @@ if(!defined $NoSpecificity){
 ### output final.result
 if($ftype eq "Common"){ ## score
 	open(I, $fevalue) or die $!;
+	my @ids;
+	my %info;
+	while(<I>){
+		chomp;
+		next if(/^$/ || /^#/);
+		my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info($idx, $_, $Methylation, 1); #spec: ($bnum,$btm,$binfo)
+		my ($id, $seq, $len) =@{$abase}[$idx..($idx+2)];
+		my ($tid,$tp)=$id=~/(\S+)-([12FRP])$/;
+		$tp=~s/F/1/;
+		$tp=~s/R/2/;
+		@{$info{$tid}{$tp}}=($abase, $afeature, $ameth, $aspec, $bnumtm);
+		push @ids, $id;
+	}
+	close(I);
+
 	if(defined $OutAllProduct){
 		open(P, ">$outdir/$fkey.final.pair.product") or die $!;
 	}
@@ -182,41 +197,45 @@ if($ftype eq "Common"){ ## score
 		print O "##ScoreOligo(Probe) : total score | ". &score_des("Probe", $Methylation)."\n";
 	}
 	print O &final_evalue_head($Methylation, $NoSpecificity)."\n";
-	while(<I>){
-		chomp;
-		next if(/^$/ || /^#/);
-		my ($abase, $afeature, $ameth, $aspec, $bnumtm)=&read_evaluation_info($idx, $_, $Methylation, 1); #spec: ($bnum,$btm,$binfo)
-		my ($id, $seq, $len) =@{$abase}[$idx..($idx+2)];
-		my ($tid,$tp)=$id=~/(\S+)-([12FRP])$/;
-		
-		## score
-		my ($sadd, $score_info);
-		if($tp ne "P"){
-			if(defined $Methylation){
-				($sadd, $score_info)=&primer_meth_score($opt_tm, $len, @{$afeature}, @{$ameth}, $bnumtm);
-			}else{
-				($sadd, $score_info)=&primer_oligo_score($opt_tm, $len, @{$afeature}, $bnumtm);
-			}
+
+	#### score
+	my %score_rel;
+	my %score_info;
+	my %prod_info;
+	foreach my $tid(sort {$a cmp $b} keys %info){
+		my ($abase1, $afeature1, $ameth1, $aspec1, $bnumtm1) = @{$info{$tid}{1}};	
+		my ($abase2, $afeature2, $ameth2, $aspec2, $bnumtm2) = @{$info{$tid}{2}};	
+		my ($id1, $seq1, $len1) =@{$abase1}[$idx..($idx+2)];
+		my ($id2, $seq2, $len2) =@{$abase2}[$idx..($idx+2)];
+		## score oligo
+		my ($tid,$tp1)=$id1=~/(\S+)-([12FRP])$/;
+		my ($s1, $s2, $score_info1, $score_info2);
+		if(defined $Methylation){
+			($s1, $score_info1)=&primer_meth_score($opt_tm, $len1, @{$afeature1}, @{$ameth1}, $bnumtm1);
+			($s2, $score_info2)=&primer_meth_score($opt_tm, $len2, @{$afeature2}, @{$ameth2}, $bnumtm2);
 		}else{
+			($s1, $score_info1)=&primer_oligo_score($opt_tm, $len1, @{$afeature1}, $bnumtm1);
+			($s2, $score_info2)=&primer_oligo_score($opt_tm, $len2, @{$afeature2}, $bnumtm2);
+		}
+		@{$score_info{$id1}}=($s1, $score_info1);
+		@{$score_info{$id2}}=($s2, $score_info2);
+
+		## score for relation
+		my ($sp, $score_infop)=(0, "");
+		my $spos = $fulls_pos;
+		if(exists $info{$tid}{"P"}){
+			my ($abase, $afeature, $ameth, $aspec, $bnumtm) = @{$info{$tid}{"P"}};
+			my ($id, $seq, $len) =@{$abase}[$idx..($idx+2)];
 			my ($is_G5, $CGd) = &G_content($seq);
 			if(defined $Methylation){
-				($sadd, $score_info)=&probe_meth_score($opt_tm_probe, $len, @{$afeature}, @{$ameth}, $bnumtm, $is_G5, $CGd);
+				($sp, $score_infop)=&probe_meth_score($opt_tm_probe, $len, @{$afeature}, @{$ameth}, $bnumtm, $is_G5, $CGd);
 			}else{
-				($sadd, $score_info)=&probe_oligo_score($opt_tm_probe, $len, @{$afeature}, $bnumtm, $is_G5, $CGd);
+				($sp, $score_infop)=&probe_oligo_score($opt_tm_probe, $len, @{$afeature}, $bnumtm, $is_G5, $CGd);
 			}
-		}
-		
-		## product
-		my @prods;
-		if(!defined $NoSpecificity){
-			my $sbd = scalar @{$aspec}>0? $aspec->[0]."|".$aspec->[1]: "NA";
-			push @prods, $sbd;
-			my ($pnum, $apeff, $apinfos);
-			if($tp ne "P"){
-				($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000, "Eff");
-			}else{
-				($pnum, $apeff, $apinfos)=&get_highest_bound($productp{$id}, 1000000, "Eff");
-			}
+			@{$score_info{$id}}=($sp, $score_infop);
+			my ($pnum, $apeff, $apinfos)=&get_highest_bound($productp{$id}, 1000000, "Eff");
+			my $pos=$apinfos->[0]=~/^(\S+)\//;
+			$spos=int(&score_single($pos, $fulls_pos, (1, 5, 0, 10))+0.5);
 			my ($peffs, $pinfos);
 			if($pnum!~/\+/ && $pnum<=3){
 				$peffs = join(",", @{$apeff});
@@ -225,26 +244,75 @@ if($ftype eq "Common"){ ## score
 				$peffs = join(",", @{$apeff}[0..2]);
 				$pinfos = join(";", @{$apinfos}[0..2]);
 			}
-			push @prods, ($pnum, $peffs, $pinfos);
-
+			@prod_info{$id}=($pnum, $peffs, $pinfos);
 			if(defined $OutAllProduct){
-				if($tp!~/[2R]/){
-					if($tp eq "P"){
-						print P ">$id\t$pnum\n";
-					}else{
-						print P ">$tid\t$pnum\n";
-					}
-					my @peff=@{$apeff};
-					my @pinfo=@{$apinfos};
-					for(my $i=0; $i<@{$apeff}; $i++){
-						print P join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
-					}
+				print P ">$id\t$pnum\n";
+				my @peff=@{$apeff};
+				my @pinfo=@{$apinfos};
+				for(my $i=0; $i<@{$apeff}; $i++){
+					print P join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
 				}
 			}
 
 		}
-	
-		print O join("\t", @{$abase}, $sadd, $score_info, @{$afeature}, @{$ameth},@prods),"\n";
+
+		# score for tm diff 
+		my $tmdif=abs($afeature1->[0] - $afeature2->[0]);
+		#print "tmdif:\t", join("\t", $tmdif, $fulls_tmd, @tmdif),"\n";
+		my $stmd=int(&score_single($tmdif, $fulls_tmd, @tmdif)+0.5);
+		# score for len diff 
+		my $lendif=abs($len2-$len1);
+		#print "lendif:\t", join("\t", $lendif, $fulls_lend, @lendif),"\n";
+		my $slend=int(&score_single($lendif, $fulls_lend, @lendif)+0.5);
+
+		## product
+		my $sprod=$fulls_prod;
+		my $dis;
+		if(!defined $NoSpecificity){
+			my ($pnum, $apeff, $apinfos);
+			($pnum, $apeff, $apinfos)=&get_highest_bound($product{$tid}{$tid}, 1000000, "Eff");
+			my ($peffs, $pinfos);
+			if($pnum!~/\+/ && $pnum<=3){
+				$peffs = join(",", @{$apeff});
+				$pinfos = join(";", @{$apinfos});
+			}else{
+				$peffs = join(",", @{$apeff}[0..2]);
+				$pinfos = join(";", @{$apinfos}[0..2]);
+			}
+			@{$prod_info{$tid}}=($pnum, $peffs, $pinfos);
+		#	print "prod:\t", join("\t", $pnum, $peffs, $pinfos),"\n";
+			$sprod = &bound_score($pnum, $peffs, $fulls_prod, "Eff");
+			($dis) = $apinfos->[0]=~/^(\S+)\//;
+
+			if(defined $OutAllProduct){
+				print P ">$tid\t$pnum\n";
+				my @peff=@{$apeff};
+				my @pinfo=@{$apinfos};
+				for(my $i=0; $i<@{$apeff}; $i++){
+					print P join("\t", $apinfos->[$i], $apeff->[$i]),"\n";
+				}
+				
+			}
+		}
+		# score for dis
+		#print "dis:\t", join("\t", $dis, $fulls_dis, @rdis),"\n";
+		my $sdis=int(&score_single($dis, $fulls_dis, @rdis)+0.5);
+		my $srel=$spos+$slend+$stmd+$sdis+$sprod;
+		my $stotal = $s1*$w1 + $s2*$w2 + $srel*$wr + $sp*$wp;
+		$stotal = sprintf("%.1f", $stotal);
+		@{$score_info{$tid}}=($stotal, join(",", $spos, $sdis, $slend, $stmd, $sprod));
+	}
+
+	foreach my $id(@ids){
+		my ($tid,$tp)=$id=~/(\S+)-([12FRP])$/;
+		$tp=~s/F/1/;
+		$tp=~s/R/2/;
+		my ($abase, $afeature, $ameth, $aspec, $bnumtm) = @{$info{$tid}{$tp}};
+		my @prods = @{$prod_info{$tid}};
+		if($tp eq "P"){
+			@prods=@{$prod_info{$id}};
+		}
+		print O join("\t", @{$abase}, @{$score_info{$tid}}, join("|",@{$score_info{$id}}), @{$afeature}, @{$ameth},@prods),"\n";
 		
 	}
 	close(I);
@@ -305,23 +373,25 @@ Contact:zeng huaping<huaping.zeng\@genetalks.com>
 		chr1    100379124       -       rs113994132-B1-1        TTTTTCTGTTCCACTCATCATATGAGA     27      0       162     286     25,11,10,20,30  41|3,10,0,7,10,-5,5,0   58.90   0.333   55.89   7.91    20.73   1       -6.7    0D1:TTTTTCTGTTCCACTCATCATATGAGE 22T5    10|58.84,49.32,48.69    1       1.00    162/chr1,P1,-100379124,|||||||||||||||||||||||||||,58.84,P2,+100378962,|||||||||||||||||||||||||||||,59.58
 		chr1    100379097       -       rs113994132-B1-P        CCTTTATAGCCTTTCCTGAAAAATGACATAAGACATGGTA        40      40      0       286     30      63.5|1,3,10,5,10,10,3,7 66.39   0.350   30.67   -18.20  -6.10   2       0       NA      17A5,26T3,35T3  15|65.97,50.26,49.55    1       0.86    27/chr1,-100379097,||||||||||||||||||||||||||||||||||||||||,65.97:chr1,P1,-100379124,|||||||||||||||||||||||||||,58.84,P2,+100378962,|||||||||||||||||||||||||||||,59.58
 
+-rd: distance range of pair primers, (best_min, best_max, min, max) separted by ",", example:
+      face-to-face: |---> P1 x            dis_range: 120,160,80,200
+         (SNP)               x  P2 <---|  
 
-	-rd: distance range between primer pair(P2-P1)
+      face-to-face: P1 |--->        x     dis_range:120,160,80,200
+        (Region)     x        <---| P2    
+                     ________________
 
-      face-to-face: |---> P1             distance range: 70,200
-                          P2 <---|  
+      back-to-back:  x <---| P2           dis_range:5,10,0,15
+                      P1 |---> x          (Overlap between p1 and p2: dis > 0)
+                     __________
 
-      back-to-back:  x <---| P2          distance range(>0): 0,15 
-                      P1 |---> x           
+      back-to-back:  x <---| P2           dis_range:-50,-40,-60,-30
+                           P1 |---> x     (No overlap between p1 and p2: dis < 0)
+                     _______________
 
-      back-to-back:  x <---| P2         distance range(<0): -40,-10
-                           P1 |---> x          
+            Nested: P2 --->|   x          dis_range(P2-P1):-15,-10,-30,-3
+                      P1 --->| x                   (dis < 0)
 
-            Nested: P1 --->|   x        distance range: 5,30
-                      P2 --->| x                
-
-            Nested: P2 --->|   x        distance range: -30,-5
-                      P1 --->| x                
 
 Usage:
   Options:
@@ -345,11 +415,7 @@ Usage:
   -sz        <int>    max PCR fragment size, [$PCRsize]
   -tm        <int>    optimal tm of primer, [$opt_tm]
   -tmb       <int>    optimal tm of probe, [$opt_tm_probe]
-  -rd      <int,int>  distance range between primer pair, optional
-                      default:
-                      when -tp is "face-to-face", [80,200]
-                                  "back-to-back", [-15,0]
-                                  "Nested",       [-30,-5]
+  -rd        <str>    distance range of pair primers, (best_min, best_max, min, max) separted by ",", [$range]
   -stm      <int>     min tm to amplify when caculate specifity, [$min_tm_spec]
   -me       <float>   min efficiency to consider a product, [$min_eff]
 

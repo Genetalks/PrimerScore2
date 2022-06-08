@@ -36,7 +36,6 @@ my $pcr_size=1000;
 my $min_eff=0.00001;
 my $max_prodn=50;
 my $pnum = 20; ## position num for one oligo, its candidate oligos num is roughly: pnum*(maxl-minl)/scalel.
-my $choose_num = 10; ## for a primer, at least $choose_num primers can be selected as its pair with the best dis.
 my $rfloat = 0.2;
 my $dis_aver = 500;
 my $dis_range="120,160,80,200"; ##distance between oligos range(best_min, best_max, min, max), that is product size range when face-to-face
@@ -459,7 +458,6 @@ sub caculate_rregion{
 	my @region; ##  two-dimensional array, @{region[1]} is regions of revcom template sequence
 	my $alen = int(($minl+$maxl)/2);
 	my ($min, $max);
-	my $step0 = int(($bmaxd-$bmind)/$choose_num+0.5); ## max step for distance range $dis_range
 	if($ftype eq "SNP"){
 		my ($bminp, $bmaxp, $minp, $maxp)=split /,/, $pos_range;
 		my $step=int(($maxp-$minp)/$pnum+0.5);
@@ -488,15 +486,14 @@ sub caculate_rregion{
 		$step=int(($max-$min)/$pnum+0.5);
 		$step=$step>=1? $step: 1;
 		push @region, ($min, $max, $step, $ori);
-		if($step > $step0*2){ ## check step is small enough to keep $choose_num primers to be selected as its pairs for one primer
-			print "Warn: Step size $step is too big to choose primers as its pairs within optimal distance $bmind-$bmaxd! You can narrow -rpos $pos_range, or magnify -rdis $dis_range!\n";
-		}
 	}else{
+		my $step0 = int(($maxd-$mind)/$pnum+0.5); ## max step for distance range $dis_range
+		$step0=$step0>0? $step0: 1;
 		if($ctype eq "Single"){## usually is generic:Region
 			$pnum*=2; ## 2 primers of face-to-face:region are designed in one region
 			$min = 1;
 			$max = $min+$step0*$pnum; ## some FR primers are limited by distance
-			my $max0=int($bmind*1.5+0.5);
+			my $max0=int($bmaxd*1.5+0.5);
 			if($max<$max0){
 				$max=$max0;
 				$step0=int(($max-$min)/$pnum+0.5);

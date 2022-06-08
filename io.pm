@@ -17,8 +17,8 @@ my @bound_score = ("Bounds");
 
 my $base_head = "#ID\tSeq\tLen";
 my $base_head_final = "#Chr\tStart\tStrand\tID\tSeq\tLen";
-my $score_head = "Score\tScoreInfo";
-my $score_head_final = "ScoreTotal\tScorePair\tScoreOligo";
+my $score_head = "Score\tScoreRel\tScoreInfo";
+my $score_head_final = "Score\tScoreRel\tScoreOligo";
 
 sub score_des{
 	my ($type, $Methylation)=@_;
