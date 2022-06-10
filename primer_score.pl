@@ -242,11 +242,7 @@ if(defined $fprobe){
 		next if(/^#/);
 		my ($id, $seq, $len, $score, $score_info)=split /\t/, $_;
 		my $tid;
-		if($id=~/-[UD]-/){
-			($tid)=$id=~/^(\S+)-[UD]-/;
-		}else{
-			($tid)=$id=~/^(\S+)-[FR]/;
-		}
+		($tid)=$id=~/^(\S+)-[FR]/;
 		@{$probe{$tid}{$id}}=($score, $score_info);
 	}
 	close(B);
@@ -271,6 +267,11 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 	#primer conditions
 	my @condv;
 	if(defined $fprobe){
+		if(!defined $probe{$tid}){
+			print $tid,"\n";
+			print Dumper %probe;
+			die;
+		}
 		my %probec=%{$probe{$tid}};
 		my $n=0;
 		my %recordp;
@@ -373,12 +374,7 @@ foreach my $tid(sort {$a cmp $b} keys %{$target{"tem"}}){
 				my $sprod=$fulls_prod;
 				my %prod;
 				if(!defined $NoSpecificity){
-					&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, 3*$max_prodn); ## 1<-->2
-					# $record{"pro"}{$p1}{$p2}=1;
-					# &caculate_product($tid, "P1", $tid, "P1", $bound{$p1}, $bound{$p1}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 1<-->1
-					# $record{"pro"}{$p1}{$p1}=1;
-					# &caculate_product($tid, "P2", $tid, "P2", $bound{$p2}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, $max_prodn);## 2<-->2
-					# $record{"pro"}{$p2}{$p2}=1;
+					&caculate_product($tid, "P1", $tid, "P2", $bound{$p1}, $bound{$p2}, $ptype, \%prod, \%record, $PCRsize, $opt_tm, $min_tm_spec, $rdis[-2], $rdis[-1], $min_eff, 3*$max_prodn); 
 					my @effs = sort{$b<=>$a} values %{$prod{$tid}{$tid}};
 					my $pnum=scalar @effs;
 					$sprod = &bound_score($pnum, join(",",@effs), $fulls_prod, "Eff");

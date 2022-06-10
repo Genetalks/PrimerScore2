@@ -468,7 +468,26 @@ sub map_visual_from_ntthal{
 	return ($mv, $pos3, $pos5);
 }
 
-
+## get query length and ref length from map visualation
+sub length_from_mvisual{
+	my ($mv)=@_;
+	my @unit = split //, $mv;
+	my $qlen = 0;
+	my $rlen = 0;
+	for(my $i=0; $i<@unit; $i++){
+		if($unit[$i] eq "|" || $unit[$i] eq "*"){
+			$qlen++;
+			$rlen++;
+		}elsif($unit[$i] eq "#"){
+			$qlen++;
+		}elsif($unit[$i] eq "-"){
+			$rlen++;
+		}elsif($unit[$i] eq "^"){
+			$qlen++;
+		}
+	}
+	return($rlen, $qlen);
+}
 
 
 #1S5M1D4M3I13M   3G0T0^G17       =>      #|||**-||||^^^|||||||||||||
