@@ -331,6 +331,14 @@ if($step==3){
 		$cmd .= " -on $onum";
 	}
 	&Run($cmd, $sh);
+
+	## select probe and primers finally
+	if(defined $probe){
+		$cmd = "perl $Bin/primer_probe_select.pl -i $outdir/$fkey.final.result -k $fkey -od $outdir";
+		&Run($cmd, $sh);
+		`mv $outdir/$fkey.final.result $outdir/$fkey.final.result0`;
+		`mv $outdir/$fkey.final.select $outdir/$fkey.final.result`;
+	}
 	$step++;
 }
 
